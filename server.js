@@ -1017,24 +1017,15 @@ const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
         callbackPrefix: process.env.VIPPS_CALLBACK_URL,
         fallBack: `${process.env.VIPPS_FALLBACK_URL || 'https://lalmtreningssenter.no/takk'}?orderId=${orderId}`
       },
-let transactionText = selected.text + prorationLabel;
-
-if (SIGNUP_FEE > 0) {
-  transactionText += ' + innmeldingsavgift 199,-';
-} else {
-  transactionText += ' (uten innmeldingsavgift)';
-}
-
-const paymentBody = {
-  customerInfo: { ... },
-  merchantInfo: { ... },
-  transaction: {
-    amount: finalAmount,
-    orderId,
-    transactionText
-  }
-};
-
+      transaction: {
+        amount: finalAmount, // i øre – proratert + innmeldingsavgift
+        orderId,
+        transactionText:
+          selected.text +
+          prorationLabel +
+          ' + innmeldingsavgift 199,-'
+      }
+    };
 
     const checkoutRes = await axios.post(
       `${apiBase}/ecomm/v2/payments`,
