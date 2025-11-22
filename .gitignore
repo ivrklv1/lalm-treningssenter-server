@@ -1,0 +1,13 @@
+# Ikke ta med miljøvariabler
+.env
+
+# Ikke ta med installerte pakker
+node_modules/
+
+# Diverse
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+.DS_Store
