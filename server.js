@@ -926,7 +926,7 @@ app.post('/vipps/checkout', async (req, res) => {
         prorate: true
       },
       STANDARD_UBIND: {
-        amount: 49900,
+        amount: 54900,
         text: 'Standard – uten binding',
         prorate: true
       },
@@ -1064,21 +1064,7 @@ const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
     });
 
     // Send nyttig info tilbake til appen også
-    res.json({
-      url: redirectUrl,
-      orderId,
-      chargedAmount: finalAmount,
-      fullMonthAmount: selected.amount,
-      signupFee: SIGNUP_FEE,
-      firstMonthTrainingAmount,
-      currency: 'NOK',
-      daysInMonth,
-      remainingDays,
-      fraction
-    });
-
-    // Send nyttig info tilbake til appen også
-    res.json({
+    return res.json({
       url: redirectUrl,
       orderId,
       chargedAmount: finalAmount,
@@ -1092,9 +1078,14 @@ const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
     });
   } catch (err) {
     console.error('Vipps Checkout error:', err.response?.data || err.message || err);
-    res.status(500).json({ error: 'Vipps Checkout failed' });
+
+    // Ikke prøv å sende nytt svar hvis vi allerede har svart
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Vipps Checkout failed' });
+    }
   }
 });
+
 
 // ----------------------------
 // Vipps callback – blir kalt av Vipps etter betaling
