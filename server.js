@@ -1086,11 +1086,10 @@ const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
   }
 });
 
-
 // ----------------------------
 // Vipps callback – blir kalt av Vipps etter betaling
 // ----------------------------
-app.post('/vipps/callback/:orderId', async (req, res) => {
+app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
   const { orderId } = req.params || {};
   const ts = new Date().toISOString();
 
