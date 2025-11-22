@@ -887,7 +887,7 @@ app.post('/vipps/checkout', async (req, res) => {
   console.log('MOTTOK /vipps/checkout', req.body);
 
   try {
-    const { membershipKey, phone } = req.body;
+    const { membershipKey, phone, name, email } = req.body;
 
     if (!membershipKey || !phone) {
       return res.status(400).json({
@@ -1058,10 +1058,13 @@ const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
       });
     }
         // 🔹 LAGRE ORDREN LOKALT SLIK AT CALLBACK KAN KNYTTE DEN TIL MEDLEM
-    vippsOrders.set(orderId, {
-      membershipKey,
-      phone: cleanPhone, // 8 siffer
-    });
+vippsOrders.set(orderId, {
+  membershipKey,
+  phone: cleanPhone,        // 8 siffer
+  name: name || '',
+  email: (email || '').toLowerCase(),
+});
+
 
     // Send nyttig info tilbake til appen også
     return res.json({
@@ -1104,7 +1107,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     `[${ts}] VIPPS_CALLBACK orderId=${orderId} body=${JSON.stringify(body)}\n`
   );
 
-  // Hent info vi lagret da vi startet betalingen
+  // Hent info vi lagret da /checkout ble kjørt
   const meta = vippsOrders.get(orderId);
 
   try {
@@ -1114,20 +1117,20 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       `[${new Date().toISOString()}] VIPPS_STATUS orderId=${orderId} status=${status}\n`
     );
 
-    // Hvis betalt (RESERVED/SALE/CAPTURED) → aktiver medlem
+    // Hvis betalt/reservert → aktiver eller opprett medlem
     if (
       meta &&
       ['SALE', 'CAPTURED', 'RESERVED', 'RESERVE'].includes(status)
     ) {
       const members = getMembers();
       const phoneDigits = String(meta.phone || '').replace(/\D/g, '');
-
       let updated = false;
 
+      // 1) Prøv å finne medlem
       for (const m of members) {
         if (!m.phone) continue;
-        const memberPhoneDigits = normalizePhone(m.phone).replace(/\D/g, '');
 
+        const memberPhoneDigits = normalizePhone(m.phone).replace(/\D/g, '');
         if (memberPhoneDigits && memberPhoneDigits.endsWith(phoneDigits)) {
           m.active = true;
           m.plan = meta.membershipKey || m.plan || null;
@@ -1136,12 +1139,36 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           try {
             await tellAddUser(m.phone, m.name || m.email);
           } catch (e) {
-            console.error(
-              'TELL sync fra Vipps callback feilet:',
-              e?.response?.data || e.message
-            );
+            console.error('TELL sync feilet:', e?.response?.data || e.message);
           }
         }
+      }
+
+      // 2) Opprett nytt hvis ingen match
+      if (!updated && meta.email) {
+        const newMember = {
+          email: meta.email,
+          name: meta.name || meta.email,
+          phone: normalizePhone(meta.phone),
+          active: true,
+          plan: meta.membershipKey || null,
+          clubMember: false,
+        };
+
+        members.push(newMember);
+        updated = true;
+
+        try {
+          if (newMember.phone) {
+            await tellAddUser(newMember.phone, newMember.name || newMember.email);
+          }
+        } catch (e) {
+          console.error('TELL sync (nytt medlem) feilet:', e?.response?.data || e.message);
+        }
+
+        appendAccessLog(
+          `[${new Date().toISOString()}] VIPPS_CREATED_MEMBER orderId=${orderId} email=${newMember.email}\n`
+        );
       }
 
       if (updated) {
@@ -1156,24 +1183,17 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       }
     }
 
-    // Vipps forventer bare 200 OK
-    if (!res.headersSent) {
-      return res.status(200).send('OK');
-    }
-  } catch (e) {
-    console.error(
-      'Vipps callback error:',
-      e?.response?.data || e.message || e
-    );
+    // Vipps forventer alltid 200 OK
+    if (!res.headersSent) return res.status(200).send('OK');
+
+  } catch (err) {
+    console.error('Vipps callback error:', err?.response?.data || err.message || err);
     appendAccessLog(
-      `[${new Date().toISOString()}] VIPPS_CALLBACK_ERROR orderId=${orderId} error=${e.message}\n`
+      `[${new Date().toISOString()}] VIPPS_CALLBACK_ERROR orderId=${orderId} err=${err.message}\n`
     );
-    if (!res.headersSent) {
-      return res.status(200).send('OK');
-    }
+    if (!res.headersSent) return res.status(200).send('OK');
   }
 });
-
 
 // ----------------------------
 // Start server
