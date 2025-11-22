@@ -1093,69 +1093,31 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
   const { orderId } = req.params || {};
   const ts = new Date().toISOString();
 
-  console.log('MOTTOK Vipps callback for orderId:', orderId);
+  const body = req.body || {};
+  const callbackStatus =
+    (body.transactionInfo && body.transactionInfo.status) ||
+    (body.transactionSummary && body.transactionSummary.transactionStatus) ||
+    '';
+
+  console.log('MOTTOK Vipps callback for orderId:', orderId, 'status:', callbackStatus);
   appendAccessLog(
-    `[${ts}] VIPPS_CALLBACK orderId=${orderId} body=${JSON.stringify(req.body)}\n`
+    `[${ts}] VIPPS_CALLBACK orderId=${orderId} body=${JSON.stringify(body)}\n`
   );
 
   // Hent info vi lagret da vi startet betalingen
   const meta = vippsOrders.get(orderId);
 
   try {
-    const apiBase =
-      process.env.VIPPS_ENV === 'test'
-        ? 'https://apitest.vipps.no'
-        : 'https://api.vipps.no';
-
-    // 1. Hent nytt access token
-    const tokenRes = await axios.post(
-      `${apiBase}/accesstoken/get`,
-      {},
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          client_id: process.env.VIPPS_CLIENT_ID,
-          client_secret: process.env.VIPPS_CLIENT_SECRET,
-          'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY,
-          'Merchant-Serial-Number': process.env.VIPPS_MSN,
-        },
-      }
-    );
-
-    const accessToken = tokenRes.data.access_token;
-    if (!accessToken) {
-      throw new Error('Mangler access_token fra Vipps (callback)');
-    }
-
-    // 2. Hent detaljer om betalingen
-    const detailsRes = await axios.get(
-      `${apiBase}/ecomm/v2/payments/${orderId}/details`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY,
-          'Merchant-Serial-Number': process.env.VIPPS_MSN,
-        },
-      }
-    );
-
-    const details = detailsRes.data || {};
-    const status =
-      details?.transactionSummary?.transactionStatus ||
-      details?.transactionInfo?.status ||
-      '';
+    const status = String(callbackStatus || '').toUpperCase();
 
     appendAccessLog(
       `[${new Date().toISOString()}] VIPPS_STATUS orderId=${orderId} status=${status}\n`
     );
 
-    // 3. Hvis betalt → prøv å aktivere medlem
+    // Hvis betalt (RESERVED/SALE/CAPTURED) → aktiver medlem
     if (
       meta &&
-      typeof status === 'string' &&
-      ['SALE', 'CAPTURED', 'RESERVED', 'RESERVE'].includes(
-        status.toUpperCase()
-      )
+      ['SALE', 'CAPTURED', 'RESERVED', 'RESERVE'].includes(status)
     ) {
       const members = getMembers();
       const phoneDigits = String(meta.phone || '').replace(/\D/g, '');
@@ -1164,20 +1126,14 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
 
       for (const m of members) {
         if (!m.phone) continue;
-        const memberPhoneDigits = normalizePhone(m.phone)
-          .replace(/\D/g, '');
+        const memberPhoneDigits = normalizePhone(m.phone).replace(/\D/g, '');
 
-        if (
-          memberPhoneDigits &&
-          memberPhoneDigits.endsWith(phoneDigits)
-        ) {
+        if (memberPhoneDigits && memberPhoneDigits.endsWith(phoneDigits)) {
           m.active = true;
-          // Lagre hvilken plan som ble valgt – enkelt: bruk membershipKey
           m.plan = meta.membershipKey || m.plan || null;
           updated = true;
 
           try {
-            // Synkroniser til TELL hvis mulig
             await tellAddUser(m.phone, m.name || m.email);
           } catch (e) {
             console.error(
@@ -1200,8 +1156,10 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       }
     }
 
-    // Vipps krever bare 200 OK tilbake
-    res.status(200).send('OK');
+    // Vipps forventer bare 200 OK
+    if (!res.headersSent) {
+      return res.status(200).send('OK');
+    }
   } catch (e) {
     console.error(
       'Vipps callback error:',
@@ -1210,8 +1168,9 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     appendAccessLog(
       `[${new Date().toISOString()}] VIPPS_CALLBACK_ERROR orderId=${orderId} error=${e.message}\n`
     );
-    // Svar 200 likevel for å unngå at Vipps spammer callbacken
-    res.status(200).send('OK');
+    if (!res.headersSent) {
+      return res.status(200).send('OK');
+    }
   }
 });
 
