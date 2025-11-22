@@ -910,6 +910,14 @@ app.post('/vipps/checkout', async (req, res) => {
         text: 'Hyttemedlemskap – 12 mnd binding',
         prorate: true
       },
+
+      // 🧪 TESTMEDLEMSKAP 1 kr
+      TEST_1KR: {
+        amount: 100, // 1 kr i øre
+        text: 'TEST – 1 kr (ingen innmeldingsavgift)',
+        prorate: false
+      },
+
       LALM_IL_UBIND: {
         amount: 44900,
         text: 'Lalm IL-medlem – uten binding',
@@ -963,8 +971,15 @@ app.post('/vipps/checkout', async (req, res) => {
     // ----------------------------
     // Innmeldingsavgift 199,-
     // ----------------------------
-    const SIGNUP_FEE = 19900; // 199 kr i øre
-    const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
+// Innmeldingsavgift 199,- (men ikke for testmedlemskap)
+let SIGNUP_FEE = 19900;
+
+if (membershipKey === 'TEST_1KR') {
+  SIGNUP_FEE = 0;
+}
+
+const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
+
 
     const apiBase =
       process.env.VIPPS_ENV === 'test'
@@ -1002,15 +1017,24 @@ app.post('/vipps/checkout', async (req, res) => {
         callbackPrefix: process.env.VIPPS_CALLBACK_URL,
         fallBack: `${process.env.VIPPS_FALLBACK_URL || 'https://lalmtreningssenter.no/takk'}?orderId=${orderId}`
       },
-      transaction: {
-        amount: finalAmount, // i øre – proratert + innmeldingsavgift
-        orderId,
-        transactionText:
-          selected.text +
-          prorationLabel +
-          ' + innmeldingsavgift 199,-'
-      }
-    };
+let transactionText = selected.text + prorationLabel;
+
+if (SIGNUP_FEE > 0) {
+  transactionText += ' + innmeldingsavgift 199,-';
+} else {
+  transactionText += ' (uten innmeldingsavgift)';
+}
+
+const paymentBody = {
+  customerInfo: { ... },
+  merchantInfo: { ... },
+  transaction: {
+    amount: finalAmount,
+    orderId,
+    transactionText
+  }
+};
+
 
     const checkoutRes = await axios.post(
       `${apiBase}/ecomm/v2/payments`,
