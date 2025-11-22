@@ -24,6 +24,8 @@ const PORT = Number(process.env.PORT || 3000);
 // ----------------------------
 const activeDropins = []; // { token, validUntil, email, mobile, name, createdAt, price }
 const loginCodes = new Map(); // phoneNormalized -> { code, codeExpiresAt, lastSentAt }
+// Vipps: husk hvilket medlemskap/telefon som hører til en orderId
+const vippsOrders = new Map(); // orderId -> { membershipKey, phone }
 
 // ----------------------------
 // Middleware
@@ -1017,6 +1019,7 @@ const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
         callbackPrefix: process.env.VIPPS_CALLBACK_URL,
         fallBack: `${process.env.VIPPS_FALLBACK_URL || 'https://lalmtreningssenter.no/takk'}?orderId=${orderId}`
       },
+      
       transaction: {
         amount: finalAmount, // i øre – proratert + innmeldingsavgift
         orderId,
@@ -1054,6 +1057,25 @@ const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
         error: 'Mangler redirect-url fra Vipps'
       });
     }
+        // 🔹 LAGRE ORDREN LOKALT SLIK AT CALLBACK KAN KNYTTE DEN TIL MEDLEM
+    vippsOrders.set(orderId, {
+      membershipKey,
+      phone: cleanPhone, // 8 siffer
+    });
+
+    // Send nyttig info tilbake til appen også
+    res.json({
+      url: redirectUrl,
+      orderId,
+      chargedAmount: finalAmount,
+      fullMonthAmount: selected.amount,
+      signupFee: SIGNUP_FEE,
+      firstMonthTrainingAmount,
+      currency: 'NOK',
+      daysInMonth,
+      remainingDays,
+      fraction
+    });
 
     // Send nyttig info tilbake til appen også
     res.json({
@@ -1074,6 +1096,134 @@ const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
   }
 });
 
+// ----------------------------
+// Vipps callback – blir kalt av Vipps etter betaling
+// ----------------------------
+app.post('/vipps/callback/:orderId', async (req, res) => {
+  const { orderId } = req.params || {};
+  const ts = new Date().toISOString();
+
+  console.log('MOTTOK Vipps callback for orderId:', orderId);
+  appendAccessLog(
+    `[${ts}] VIPPS_CALLBACK orderId=${orderId} body=${JSON.stringify(req.body)}\n`
+  );
+
+  // Hent info vi lagret da vi startet betalingen
+  const meta = vippsOrders.get(orderId);
+
+  try {
+    const apiBase =
+      process.env.VIPPS_ENV === 'test'
+        ? 'https://apitest.vipps.no'
+        : 'https://api.vipps.no';
+
+    // 1. Hent nytt access token
+    const tokenRes = await axios.post(
+      `${apiBase}/accesstoken/get`,
+      {},
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          client_id: process.env.VIPPS_CLIENT_ID,
+          client_secret: process.env.VIPPS_CLIENT_SECRET,
+          'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY,
+          'Merchant-Serial-Number': process.env.VIPPS_MSN,
+        },
+      }
+    );
+
+    const accessToken = tokenRes.data.access_token;
+    if (!accessToken) {
+      throw new Error('Mangler access_token fra Vipps (callback)');
+    }
+
+    // 2. Hent detaljer om betalingen
+    const detailsRes = await axios.get(
+      `${apiBase}/ecomm/v2/payments/${orderId}/details`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY,
+          'Merchant-Serial-Number': process.env.VIPPS_MSN,
+        },
+      }
+    );
+
+    const details = detailsRes.data || {};
+    const status =
+      details?.transactionSummary?.transactionStatus ||
+      details?.transactionInfo?.status ||
+      '';
+
+    appendAccessLog(
+      `[${new Date().toISOString()}] VIPPS_STATUS orderId=${orderId} status=${status}\n`
+    );
+
+    // 3. Hvis betalt → prøv å aktivere medlem
+    if (
+      meta &&
+      typeof status === 'string' &&
+      ['SALE', 'CAPTURED', 'RESERVED', 'RESERVE'].includes(
+        status.toUpperCase()
+      )
+    ) {
+      const members = getMembers();
+      const phoneDigits = String(meta.phone || '').replace(/\D/g, '');
+
+      let updated = false;
+
+      for (const m of members) {
+        if (!m.phone) continue;
+        const memberPhoneDigits = normalizePhone(m.phone)
+          .replace(/\D/g, '');
+
+        if (
+          memberPhoneDigits &&
+          memberPhoneDigits.endsWith(phoneDigits)
+        ) {
+          m.active = true;
+          // Lagre hvilken plan som ble valgt – enkelt: bruk membershipKey
+          m.plan = meta.membershipKey || m.plan || null;
+          updated = true;
+
+          try {
+            // Synkroniser til TELL hvis mulig
+            await tellAddUser(m.phone, m.name || m.email);
+          } catch (e) {
+            console.error(
+              'TELL sync fra Vipps callback feilet:',
+              e?.response?.data || e.message
+            );
+          }
+        }
+      }
+
+      if (updated) {
+        saveMembers(members);
+        appendAccessLog(
+          `[${new Date().toISOString()}] VIPPS_ACTIVATED orderId=${orderId} phone=${phoneDigits}\n`
+        );
+      } else {
+        appendAccessLog(
+          `[${new Date().toISOString()}] VIPPS_NO_MATCH orderId=${orderId} phone=${phoneDigits}\n`
+        );
+      }
+    }
+
+    // Vipps krever bare 200 OK tilbake
+    res.status(200).send('OK');
+  } catch (e) {
+    console.error(
+      'Vipps callback error:',
+      e?.response?.data || e.message || e
+    );
+    appendAccessLog(
+      `[${new Date().toISOString()}] VIPPS_CALLBACK_ERROR orderId=${orderId} error=${e.message}\n`
+    );
+    // Svar 200 likevel for å unngå at Vipps spammer callbacken
+    res.status(200).send('OK');
+  }
+});
 
 
 // ----------------------------
