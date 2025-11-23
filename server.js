@@ -1284,7 +1284,9 @@ app.post('/vipps/checkout', async (req, res) => {
       merchantInfo: {
         merchantSerialNumber: process.env.VIPPS_MSN,
         callbackPrefix: process.env.VIPPS_CALLBACK_URL,
-        fallBack: `${process.env.VIPPS_FALLBACK_URL || 'https://lalmtreningssenter.no/takk'}?orderId=${orderId}`
+        // Vipps åpner denne URL-en etter betaling (fullført / avbrutt)
+        // Her peker vi til backend, som igjen redirecter videre inn i appen via deeplink.
+        fallBack: returnUrl
       },
       transaction: {
         amount: finalAmount, // i øre – proratert + innmeldingsavgift
