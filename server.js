@@ -245,29 +245,63 @@ async function tellAddUser(phone, name) {
     return;
   }
 
+  // TELL liker ofte rene sifre (ingen + eller mellomrom)
+  const phoneDigits = phoneNormalized.replace(/\D/g, '');
+  if (!phoneDigits) {
+    console.warn('[TELL] tellAddUser: klarte ikke å hente siffer fra telefon:', phone);
+    return;
+  }
+
   try {
     const headers = tellHeaders();
-    const data = { hwid: TELL.hwid, appId: TELL.appId, phone: phoneNormalized, name };
+    const data = {
+      hwid: TELL.hwid,
+      appId: TELL.appId,
+      phone: phoneDigits,
+      name: name || phoneDigits,
+    };
+    console.log('[TELL] adduser payload:', data);
+
     const r = await axios.post(`${TELL.base}/gc/adduser`, data, { headers });
-    console.log(`✅ [TELL] La til ${name} (${phoneNormalized})`);
+    console.log(`✅ [TELL] La til ${name} (${phoneDigits})`, r.data);
     fs.appendFileSync(
       ACCESS_LOG,
-      `[${new Date().toISOString()}] [TELL SYNC] La til bruker ${name} ${phoneNormalized}\n`
+      `[${new Date().toISOString()}] [TELL SYNC] La til bruker ${name} ${phoneDigits}\n`
     );
     return r.data;
   } catch (e) {
     console.error(
-      `❌ [TELL] Feil ved legg til ${phoneNormalized}:`,
+      `❌ [TELL] Feil ved legg til ${phoneDigits}:`,
       e?.response?.data || e.message
     );
     fs.appendFileSync(
       ACCESS_LOG,
-      `[${new Date().toISOString()}] [TELL SYNC ERROR] Klarte ikke legge til ${name} ${phoneNormalized}: ${
-        e?.response?.data?.message || e.message
+      `[${new Date().toISOString()}] [TELL SYNC ERROR] Klarte ikke legge til ${name} ${phoneDigits}: ${
+        JSON.stringify(e?.response?.data || e.message)
       }\n`
     );
   }
 }
+
+// Test-endepunkt for TELL: sjekk at API-nøkkel, hwid og appId fungerer
+app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
+  try {
+    const headers = tellHeaders();
+    const data = { hwid: TELL.hwid, appId: TELL.appId, gateIndex: 1 };
+
+    const r = await axios.post(`${TELL.base}/gc/open`, data, { headers });
+    console.log('[TELL TEST] gc/open result:', r.data);
+
+    return res.json({ ok: true, response: r.data });
+  } catch (e) {
+    console.error('[TELL TEST] error:', e?.response?.data || e.message);
+    return res.status(500).json({
+      ok: false,
+      error: e?.response?.data || e.message,
+    });
+  }
+});
+
 
 // Fjern bruker i TELL
 async function tellRemoveUser(phone) {
