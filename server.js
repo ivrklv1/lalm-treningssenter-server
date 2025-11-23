@@ -22,6 +22,23 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
 // ----------------------------
+// Filbasert lagring → persistent /data på Render
+// ----------------------------
+const DATA_DIR = process.env.DATA_DIR || '/data';
+
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    console.log('Opprettet DATA_DIR:', DATA_DIR);
+  }
+} catch (e) {
+  console.error('Kunne ikke opprette DATA_DIR:', e.message);
+}
+
+const MEMBERS_FILE = path.join(DATA_DIR, 'members.json');
+const ORDERS_FILE  = path.join(DATA_DIR, 'orders.json');
+
+// ----------------------------
 // Global state
 // ----------------------------
 const activeDropins = []; // { token, validUntil, email, mobile, name, createdAt, price }
@@ -51,14 +68,17 @@ function appendAccessLog(line) {
 }
 
 // ----------------------------
-// Hjelpefunksjoner for members.json
+// Hjelpefunksjoner for members.json (persistent /data)
 // ----------------------------
 function getMembers() {
   try {
-    const raw = fs.readFileSync(path.join(__dirname, 'members.json'), 'utf-8');
+    if (!fs.existsSync(MEMBERS_FILE)) {
+      return [];
+    }
+    const raw = fs.readFileSync(MEMBERS_FILE, 'utf-8');
     return JSON.parse(raw);
   } catch (e) {
-    console.error('Kunne ikke lese members.json, returnerer tom array:', e.message);
+    console.error('Kunne ikke lese members.json fra', MEMBERS_FILE, '- returnerer tom array:', e.message);
     return [];
   }
 }
@@ -66,24 +86,27 @@ function getMembers() {
 function saveMembers(members) {
   try {
     fs.writeFileSync(
-      path.join(__dirname, 'members.json'),
+      MEMBERS_FILE,
       JSON.stringify(members, null, 2),
       'utf-8',
     );
   } catch (e) {
-    console.error('Kunne ikke skrive members.json:', e.message);
+    console.error('Kunne ikke skrive members.json til', MEMBERS_FILE, e.message);
   }
 }
 
 // ----------------------------
-// Hjelpefunksjoner for orders.json (Vipps-ordrer)
+// Hjelpefunksjoner for orders.json (Vipps-ordrer) – persistent /data
 // ----------------------------
 function getOrders() {
   try {
-    const raw = fs.readFileSync(path.join(__dirname, 'orders.json'), 'utf-8');
+    if (!fs.existsSync(ORDERS_FILE)) {
+      return [];
+    }
+    const raw = fs.readFileSync(ORDERS_FILE, 'utf-8');
     return JSON.parse(raw);
   } catch (e) {
-    console.error('Kunne ikke lese orders.json, returnerer tom array:', e.message);
+    console.error('Kunne ikke lese orders.json fra', ORDERS_FILE, '- returnerer tom array:', e.message);
     return [];
   }
 }
@@ -91,12 +114,12 @@ function getOrders() {
 function saveOrders(orders) {
   try {
     fs.writeFileSync(
-      path.join(__dirname, 'orders.json'),
+      ORDERS_FILE,
       JSON.stringify(orders, null, 2),
       'utf-8',
     );
   } catch (e) {
-    console.error('Kunne ikke skrive orders.json:', e.message);
+    console.error('Kunne ikke skrive orders.json til', ORDERS_FILE, e.message);
   }
 }
 
