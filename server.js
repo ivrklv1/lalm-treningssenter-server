@@ -1120,6 +1120,19 @@ app.post('/auth/verify-code', async (req, res) => {
   }
 });
 
+// ===============================
+// Vipps RETURN -> redirect til app
+// ===============================
+app.get('/vipps/return', (req, res) => {
+  const { orderId } = req.query;
+
+  // Deeplink inn i appen
+  const deepLink = `lalmtreningssenter://payment-result?orderId=${orderId}`;
+
+  return res.redirect(deepLink);
+});
+
+
 // =====================================================
 // Vipps Checkout / eCom payment – NY modell m/orders.json
 // =====================================================
@@ -1137,6 +1150,12 @@ app.post('/vipps/checkout', async (req, res) => {
         error: 'membershipKey_phone_email_required'
       });
     }
+
+    // 1) Lag orderId
+    const orderId = 'ORDER-' + Date.now();
+
+    // 2) ⭐ NY LINJE: returnUrl som peker til backend -> /vipps/return
+    const returnUrl = `${process.env.SERVER_URL}/vipps/return?orderId=${orderId}`
 
     // Medlemskap og full månedspris (i øre)
     const membershipMap = {
@@ -1257,8 +1276,6 @@ app.post('/vipps/checkout', async (req, res) => {
     if (!accessToken) {
       throw new Error('Mangler access_token fra Vipps');
     }
-
-    const orderId = `LALM-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
     const paymentBody = {
       customerInfo: {
