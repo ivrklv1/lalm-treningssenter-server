@@ -2,8 +2,10 @@
 // ======================================================
 // Treningssenter adgangsserver (Express + TELL Gate Control)
 // - Medlemsregister (members.json)
-// - Admin-API
+// - Vipps Checkout + orders.json (idempotent callback)
+// - Admin-API (NIF-import, TELL-synk, logging)
 // - Drop-in token til kl. 23:59 samme dag
+// - SMS-innlogging via Eurobate
 // - /door/open med TELL-modul (token-baserte medlemmer + drop-in)
 // - /access (gammel epost-basert variant, beholdes for kompatibilitet)
 // ======================================================
@@ -13,13 +15,43 @@ const fs = require('fs');
 const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT || 3000);
 
 // ----------------------------
-// Les inn medlemmer fra JSON-fil
+// Global state
+// ----------------------------
+const activeDropins = []; // { token, validUntil, email, mobile, name, createdAt, price }
+const loginCodes = new Map(); // phoneNormalized -> { code, codeExpiresAt, lastSentAt }
+const dropinTokens = new Map(); // tokenString -> { phone, expiresAt }
+
+// Rate limiting for legacy /access
+const openAttempts = {}; // key: email/phone, val: { lastAttempt, count }
+
+// ----------------------------
+// Konstanter for IL-rabatt
+// ----------------------------
+const IL_DISCOUNT_PLANS = [
+  'medlem_m_binding', // Treningsavgift medlem m/binding (349/mnd)
+];
+
+// ----------------------------
+// Logging til access.log
+// ----------------------------
+const ACCESS_LOG = path.join(__dirname, 'access.log');
+function appendAccessLog(line) {
+  try {
+    fs.appendFileSync(ACCESS_LOG, line, 'utf-8');
+  } catch (e) {
+    console.error('Kunne ikke skrive til access.log:', e.message);
+  }
+}
+
+// ----------------------------
+// Hjelpefunksjoner for members.json
 // ----------------------------
 function getMembers() {
   try {
@@ -42,7 +74,6 @@ function saveMembers(members) {
     console.error('Kunne ikke skrive members.json:', e.message);
   }
 }
-
 
 // ----------------------------
 // Hjelpefunksjoner for orders.json (Vipps-ordrer)
@@ -122,24 +153,6 @@ function basicAuth(req, res, next) {
 }
 
 // ----------------------------
-// Data for drop-in tokens i minnet (ikke persistent)
-// ----------------------------
-const dropinTokens = new Map(); // tokenString -> { phone, expiresAt }
-
-// ----------------------------
-// Loggfil for debugging / sporing
-// ----------------------------
-const ACCESS_LOG = path.join(__dirname, 'access.log');
-
-function appendAccessLog(line) {
-  try {
-    fs.appendFileSync(ACCESS_LOG, line, 'utf-8');
-  } catch (e) {
-    console.error('Kunne ikke skrive til access.log:', e.message);
-  }
-}
-
-// ----------------------------
 // Hjelpefunksjoner for navn, telefon, epost
 // ----------------------------
 function normalizeEmail(email) {
@@ -161,25 +174,23 @@ function normalizePhone(raw) {
   // Fjern mellomrom, bindestrek og parenteser
   p = p.replace(/[\s\-()]/g, '');
 
-  // Fjern eventuelle ledende nuller
-  p = p.replace(/^00/, '+');
-
-  // Hvis det står 8 siffer: anta norsk nummer
-  if (/^\d{8}$/.test(p)) {
-    return '+47' + p;
+  // 00xx → +xx (f.eks. 0047 → +47)
+  if (p.startsWith('00')) {
+    p = '+' + p.slice(2);
   }
 
-  // Hvis det allerede starter med +, behold
-  if (p.startsWith('+')) {
-    return p;
+  // Hvis ikke + i starten, prøv å tolke som norsk nummer
+  if (!p.startsWith('+')) {
+    // 8 siffer → norsk nummer → legg til +47
+    if (p.length === 8 && /^\d{8}$/.test(p)) {
+      p = '+47' + p;
+    }
+    // 47 + 8 siffer → lag +47 + 8 siffer
+    else if (p.length === 10 && p.startsWith('47') && /^\d+$/.test(p)) {
+      p = '+' + p;
+    }
   }
 
-  // Hvis det starter med 47 og har 10 siffer, gjør om til +47
-  if (/^47\d{8}$/.test(p)) {
-    return '+'.concat(p);
-  }
-
-  // Som fallback, returner opprinnelig
   return p;
 }
 
@@ -200,16 +211,22 @@ function parseCookies(cookieHeader) {
 }
 
 // ----------------------------
+// Door-allowlist & mapping
+// ----------------------------
+const doorConfig = {
+  styrkerom: { gateIndex: 1, description: 'Hovedinngang treningssenter' },
+};
+
+// ----------------------------
 // TELL-konfig
 // ----------------------------
 const TELL = {
   base: 'https://api.tell.hu',
   apiKey: process.env.TELL_API_KEY,
-  hwid: process.env.TELL_HWID,            // Hardware ID
-  appId: process.env.TELL_APP_ID,         // App-ID / Channel ID
+  hwid: process.env.TELL_HWID, // Hardware ID
+  appId: process.env.TELL_APP_ID, // App-ID / Channel ID
 };
 
-// Hjelpefunksjon: lage auth-headere
 function tellHeaders() {
   if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
     console.warn('TELL-konfig ikke komplett, mangler env-variabler.');
@@ -220,9 +237,7 @@ function tellHeaders() {
   };
 }
 
-// ----------------------------
-// Legg til bruker i TELL (adgang)
-// ----------------------------
+// Legg til bruker i TELL
 async function tellAddUser(phone, name) {
   const phoneNormalized = normalizePhone(phone);
   if (!phoneNormalized) {
@@ -236,7 +251,7 @@ async function tellAddUser(phone, name) {
     const r = await axios.post(`${TELL.base}/gc/adduser`, data, { headers });
     console.log(`✅ [TELL] La til ${name} (${phoneNormalized})`);
     fs.appendFileSync(
-      'access.log',
+      ACCESS_LOG,
       `[${new Date().toISOString()}] [TELL SYNC] La til bruker ${name} ${phoneNormalized}\n`
     );
     return r.data;
@@ -246,12 +261,101 @@ async function tellAddUser(phone, name) {
       e?.response?.data || e.message
     );
     fs.appendFileSync(
-      'access.log',
+      ACCESS_LOG,
       `[${new Date().toISOString()}] [TELL SYNC ERROR] Klarte ikke legge til ${name} ${phoneNormalized}: ${
         e?.response?.data?.message || e.message
       }\n`
     );
   }
+}
+
+// Fjern bruker i TELL
+async function tellRemoveUser(phone) {
+  const phoneNormalized = normalizePhone(phone);
+  if (!phoneNormalized) return;
+
+  try {
+    const headers = tellHeaders();
+    const data = { hwid: TELL.hwid, appId: TELL.appId, phone: phoneNormalized };
+    await axios.post(`${TELL.base}/gc/removeuser`, data, { headers });
+    console.log(`🗑️ [TELL] Fjernet ${phoneNormalized}`);
+  } catch (e) {
+    console.error(
+      `❌ [TELL] Feil ved remove ${phoneNormalized}:`,
+      e?.response?.data || e.message
+    );
+  }
+}
+
+// Åpne dør via TELL
+async function gcOpen(gateIndex) {
+  const headers = tellHeaders();
+  const data = { hwid: TELL.hwid, appId: TELL.appId, gateIndex };
+  const r = await axios.post(`${TELL.base}/gc/open`, data, { headers });
+  return r.data;
+}
+
+// Synk alle aktive medlemmer til TELL
+async function tellSyncAll() {
+  const members = getMembers();
+  for (const m of members) {
+    if (!m.phone) continue;
+    try {
+      if (m.active) {
+        await tellAddUser(m.phone, m.name || m.email);
+      } else {
+        await tellRemoveUser(m.phone);
+      }
+    } catch (e) {
+      console.error('[TELL SYNC ALL] Feil for', m.email, e?.response?.data || e.message);
+    }
+  }
+}
+
+// ----------------------------
+// Eurobate SMS-konfig
+// ----------------------------
+const EUROBATE_API_URL = 'https://api.eurobate.com/json_api.php';
+
+const eurobateConfig = {
+  user: process.env.EUROBATE_USER,
+  password: process.env.EUROBATE_PASSWORD,
+  originator: process.env.EUROBATE_ORIGINATOR || 'LalmTrening',
+  simulate: process.env.EUROBATE_SIMULATE === '1' ? 1 : 0,
+};
+
+async function sendSmsLoginCode(phone, code) {
+  const phoneNormalized = normalizePhone(phone);
+  if (!phoneNormalized) {
+    throw new Error('Ugyldig telefonnummer');
+  }
+
+  const msisdn = Number(phoneNormalized.replace('+', ''));
+  if (!Number.isFinite(msisdn)) {
+    throw new Error('Ugyldig msisdn etter normalisering');
+  }
+
+  const message = `Lalm Treningssenter: Din kode er ${code}.\n#${code}`;
+
+  const payload = {
+    user: eurobateConfig.user,
+    password: eurobateConfig.password,
+    simulate: eurobateConfig.simulate,
+    messages: [
+      {
+        originator: eurobateConfig.originator,
+        msisdn,
+        message,
+      },
+    ],
+  };
+
+  const res = await axios.post(EUROBATE_API_URL, payload, {
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  console.log('Eurobate-respons:', res.data);
+  return res.data;
 }
 
 // ----------------------------
@@ -261,21 +365,58 @@ app.use(cors());
 app.use(express.json());
 
 // ----------------------------
-// Statisk servering
+// Statisk servering (admin.html ligger i /public)
 // ----------------------------
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ----------------------------
-// Hent alle medlemmer (admin)
-// ----------------------------
+// =====================================================
+// OFFENTLIGE MEDLEMS-ENDPOINTS
+// =====================================================
+
+app.get('/membership', (req, res) => {
+  const email = (req.query.email || '').toLowerCase();
+  const members = getMembers();
+  const member = members.find(m => (m.email || '').toLowerCase() === email);
+  res.json({ email, exists: !!member, active: member?.active || false });
+});
+
+app.post('/membership/signup', (req, res) => {
+  const { name, email, phone } = req.body || {};
+  if (!name || !email || !phone) {
+    return res.status(400).json({ ok: false, error: 'name_email_phone_required' });
+  }
+
+  const members = getMembers();
+  if (members.find(m => (m.email || '').toLowerCase() === email.toLowerCase())) {
+    return res.status(400).json({ ok: false, error: 'user_already_exists' });
+  }
+
+  const phoneNormalized = normalizePhone(phone);
+
+  members.push({
+    name,
+    email: email.toLowerCase(),
+    phone: phoneNormalized,
+    active: false,
+    plan: null, // settes i admin når dere bestemmer abonnement
+    clubMember: false, // settes via NIF-import eller manuelt
+  });
+
+  saveMembers(members);
+  return res.json({ ok: true, message: 'Registrert! Venter på godkjenning.' });
+});
+
+// =====================================================
+// ADMIN-API (NYTT) – brukt av admin.html
+// =====================================================
+
+// Hent alle medlemmer (nytt admin-UI)
 app.get('/admin/members', basicAuth, (req, res) => {
   const members = getMembers();
   res.json(members);
 });
 
-// ----------------------------
-// Legg til/oppdater medlem (admin)
-// ----------------------------
+// Legg til/oppdater medlem (nytt admin-UI)
 app.post('/admin/members', basicAuth, (req, res) => {
   const body = req.body || {};
   const members = getMembers();
@@ -297,9 +438,7 @@ app.post('/admin/members', basicAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ----------------------------
-// Enkelt medlemsoppslag (admin)
-// ----------------------------
+// Søk medlem (nytt admin-UI)
 app.get('/admin/members/search', basicAuth, (req, res) => {
   const email = normalizeEmail(req.query.email);
   const phone = normalizePhone(req.query.phone);
@@ -321,68 +460,399 @@ app.get('/admin/members/search', basicAuth, (req, res) => {
   res.json({ matches });
 });
 
-// ----------------------------
-// Enkel innlogging (for testing)
-// ----------------------------
-app.post('/login', (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) {
-    return res.status(400).json({ ok: false, error: 'email_and_password_required' });
+// =====================================================
+// ADMIN-API (GAMMELT) – brukt av tidligere admin-verktøy
+// =====================================================
+
+app.get('/api/admin/members', basicAuth, (req, res) => {
+  res.json(getMembers());
+});
+
+app.post('/api/admin/members', basicAuth, async (req, res) => {
+  const { email, active = true, name = '', phone = '', plan = null } = req.body || {};
+  if (!email) {
+    return res.status(400).json({ error: 'email_required' });
   }
 
   const members = getMembers();
-  const user = members.find(
-    m => (m.email || '').toLowerCase() === email.toLowerCase() && m.password === password,
-  );
+  if (members.some(m => (m.email || '').toLowerCase() === email.toLowerCase())) {
+    return res.status(400).json({ error: 'member_exists' });
+  }
 
-  if (!user) return res.status(401).json({ ok: false, error: 'invalid_credentials' });
-  if (!user.active) return res.status(403).json({ ok: false, error: 'inactive_member' });
+  const phoneNormalized = normalizePhone(phone);
 
-  return res.json({ token: `token-${user.email}`, name: user.name || user.email });
+  const member = {
+    email: email.toLowerCase(),
+    active: !!active,
+    name,
+    phone: phoneNormalized,
+    plan: plan || null,
+    clubMember: false, // settes via NIF-import eller manuelt
+  };
+
+  members.push(member);
+  saveMembers(members);
+
+  try {
+    if (member.active && member.phone) {
+      await tellAddUser(member.phone, member.name || member.email);
+    }
+  } catch (e) {
+    console.error('tellAddUser error:', e?.response?.data || e.message);
+  }
+
+  res.json({ ok: true, member });
 });
 
-// ----------------------------
-// DROP-IN: Opprett token for dagsbruk
-// ----------------------------
+app.post('/api/admin/members/toggle', basicAuth, async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ error: 'email_required' });
+
+  const members = getMembers();
+  const idx = members.findIndex(m => (m.email || '').toLowerCase() === email.toLowerCase());
+  if (idx === -1) return res.status(404).json({ error: 'not_found' });
+
+  members[idx].active = !members[idx].active;
+  saveMembers(members);
+
+  try {
+    const { phone, name, active } = members[idx];
+    if (phone) {
+      active
+        ? await tellAddUser(phone, name || email.toLowerCase())
+        : await tellRemoveUser(phone);
+    }
+  } catch (e) {
+    console.error('TELL toggle sync error:', e?.response?.data || e.message);
+  }
+
+  res.json({ ok: true, active: members[idx].active });
+});
+
+app.delete('/api/admin/members', basicAuth, async (req, res) => {
+  const email = (req.query.email || '').toLowerCase();
+  if (!email) return res.status(400).json({ error: 'email_required' });
+
+  const members = getMembers();
+  const victim = members.find(m => (m.email || '').toLowerCase() === email);
+  const filtered = members.filter(m => (m.email || '').toLowerCase() !== email);
+  if (filtered.length === members.length) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+
+  try {
+    if (victim?.phone) await tellRemoveUser(victim.phone);
+  } catch (e) {
+    console.error('tellRemoveUser error:', e?.response?.data || e.message);
+  }
+
+  saveMembers(filtered);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/tell-sync', basicAuth, async (req, res) => {
+  try {
+    await tellSyncAll();
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('tellSyncAll error:', e?.response?.data || e.message);
+    res.status(500).json({ ok: false, error: 'tell_sync_failed' });
+  }
+});
+
+app.post('/api/admin/nif-import', basicAuth, (req, res) => {
+  const { csv } = req.body || {};
+  if (!csv || typeof csv !== 'string') {
+    return res.status(400).json({ ok: false, error: 'csv_required' });
+  }
+
+  let members = getMembers();
+
+  // Bygg opp indekser for raskt oppslag
+  const byEmail = {};
+  const byPhone = {};
+  const byName = {};
+
+  for (const m of members) {
+    const email = (m.email || '').toLowerCase().trim();
+    if (email) byEmail[email] = m;
+
+    if (m.phone) {
+      const p = normalizePhone ? normalizePhone(m.phone) : String(m.phone).trim();
+      if (p) byPhone[p] = m;
+    }
+
+    const fullName = normalizeName(m.name || '');
+    if (fullName) {
+      if (!byName[fullName]) byName[fullName] = [];
+      byName[fullName].push(m);
+    }
+
+    // Nullstill tidligere NIF-flagg før vi importerer nytt
+    if (m.clubMemberSource === 'nif') {
+      m.clubMember = false;
+      m.clubMemberSource = undefined;
+      m.clubMemberSyncedAt = undefined;
+    }
+  }
+
+  let matched = 0;
+  let unmatched = 0;
+  let totalRows = 0;
+  const ambiguous = [];
+
+  const lines = csv.split(/\r?\n/).filter(l => l.trim().length > 0);
+
+  for (const line of lines) {
+    // hopp over header-rad
+    if (line.toLowerCase().includes('fornavn') &&
+        line.toLowerCase().includes('medlemsstatus')) {
+      continue;
+    }
+
+    const parts = line.split(/[;]/).map(p => p.trim());
+    if (parts.length < 6) continue;
+
+    totalRows++;
+
+    const fornavn = parts[0];
+    const etternavn = parts[1];
+    const emailRaw = parts[2];
+    const phoneRaw = parts[3];
+    const medlemsstatus = parts[5];
+
+    // Vi bryr oss kun om "Aktiv" i NIF-lista
+    if (medlemsstatus.toLowerCase() !== 'aktiv') continue;
+
+    const email = (emailRaw || '').toLowerCase().trim();
+    const phone = normalizePhone ? normalizePhone(phoneRaw) : String(phoneRaw || '').trim();
+    const fullName = normalizeName(`${fornavn} ${etternavn}`);
+
+    let candidate = null;
+
+    // 1) e-post
+    if (email && byEmail[email]) {
+      candidate = byEmail[email];
+    }
+    // 2) telefon
+    else if (phone && byPhone[phone]) {
+      candidate = byPhone[phone];
+    }
+    // 3) navn (unik)
+    else if (fullName && byName[fullName] && byName[fullName].length === 1) {
+      candidate = byName[fullName][0];
+    }
+    // Flere med samme navn → logg, men ikke auto-match
+    else if (fullName && byName[fullName] && byName[fullName].length > 1) {
+      ambiguous.push({ fullName, count: byName[fullName].length });
+      unmatched++;
+      continue;
+    }
+
+    if (!candidate) {
+      unmatched++;
+      continue;
+    }
+
+    // Sjekk at denne faktisk har en IL-rabatt-plan
+    if (!candidate.plan || !IL_DISCOUNT_PLANS.includes(candidate.plan)) {
+      unmatched++;
+      continue;
+    }
+
+    candidate.clubMember = true;
+    candidate.clubMemberSource = 'nif';
+    candidate.clubMemberSyncedAt = new Date().toISOString();
+    matched++;
+  }
+
+  saveMembers(members);
+
+  return res.json({
+    ok: true,
+    totalRows,
+    matched,
+    unmatched,
+    ambiguous,
+  });
+});
+
+app.get('/api/admin/logs', basicAuth, (req, res) => {
+  try {
+    if (!fs.existsSync(ACCESS_LOG)) {
+      return res.json({ ok: true, lines: [] });
+    }
+    const raw = fs.readFileSync(ACCESS_LOG, 'utf-8');
+    const lines = raw.split('\n').filter(Boolean).slice(-500);
+    res.json({ ok: true, lines });
+  } catch (e) {
+    console.error('Kunne ikke lese access.log:', e.message);
+    res.status(500).json({ ok: false, error: 'log_read_failed' });
+  }
+});
+
+// =====================================================
+// Legacy /access (epost-basert åpning)
+// =====================================================
+app.post('/access', async (req, res) => {
+  try {
+    const { email, doorId = 'styrkerom' } = req.body || {};
+    if (!email) {
+      return res.status(400).json({
+        status: 'denied',
+        ok: false,
+        error: 'email_required',
+      });
+    }
+
+    if (!doorConfig[doorId]) {
+      return res.status(400).json({
+        status: 'denied',
+        ok: false,
+        error: 'invalid_doorId',
+      });
+    }
+
+    const members = getMembers();
+    const member = members.find(m => (m.email || '').toLowerCase() === email.toLowerCase());
+    if (!member) {
+      return res.status(403).json({
+        status: 'denied',
+        ok: false,
+        error: 'not_member',
+      });
+    }
+
+    if (!member.active) {
+      return res.status(403).json({
+        status: 'denied',
+        ok: false,
+        error: 'inactive_member',
+      });
+    }
+
+    const now = Date.now();
+    const key = `legacy:${email}`;
+    const info = openAttempts[key] || { lastAttempt: 0, count: 0 };
+    if (now - info.lastAttempt < 5000) {
+      info.count += 1;
+    } else {
+      info.count = 1;
+    }
+    info.lastAttempt = now;
+    openAttempts[key] = info;
+
+    if (info.count > 5) {
+      appendAccessLog(
+        `${new Date().toLocaleString('nb-NO', { timeZone: 'Europe/Oslo' })} email=${email} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=DENY reason=rate_limit\n`,
+      );
+      return res.status(429).json({
+        status: 'denied',
+        ok: false,
+        error: 'too_many_requests',
+      });
+    }
+
+    if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
+      console.warn('TELL-konfig ikke komplett – avviser /access');
+      return res.status(503).json({
+        status: 'error',
+        ok: false,
+        error: 'tell_not_ready',
+      });
+    }
+
+    await gcOpen(doorConfig[doorId].gateIndex);
+
+    const ts = new Date().toLocaleString('nb-NO', { timeZone: 'Europe/Oslo' });
+    appendAccessLog(`${ts} email=${email} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=OPEN_LEGACY\n`);
+    console.log(`🚪 (legacy /access) Dør åpnet for ${email} (${member.name || ''}) kl ${ts}`);
+
+    return res.json({
+      status: 'granted',
+      ok: true,
+      doorId,
+      gateIndex: doorConfig[doorId].gateIndex,
+      member: {
+        email: member.email,
+        name: member.name || '',
+      },
+    });
+  } catch (e) {
+    console.error('ACCESS error:', e?.response?.data || e.message);
+    appendAccessLog(
+      `${new Date().toLocaleString('nb-NO', { timeZone: 'Europe/Oslo' })} email=${req.body?.email || '-'} door=${req.body?.doorId || '-'} action=DENY reason=open_failed\n`,
+    );
+    return res.status(502).json({
+      status: 'error',
+      ok: false,
+      error: 'open_failed',
+      detail: e?.response?.data || e.message,
+    });
+  }
+});
+
+// =====================================================
+// Drop-in og token-basert adgang / ny variant
+// =====================================================
+function generateToken() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+// Kombinert dropin/create – støtter både ny (phone,name) og gammel (email,mobile,name,price)
 app.post('/dropin/create', async (req, res) => {
   try {
-    const { phone, name } = req.body || {};
-    if (!phone) {
+    const { phone, name, email, mobile, price } = req.body || {};
+
+    let usedPhone = phone || mobile;
+    let usedEmail = email || '';
+    let usedPrice = price || 0;
+    const personName = name || '';
+
+    if (!usedPhone) {
       return res.status(400).json({ ok: false, error: 'phone_required' });
     }
 
-    const normalizedPhone = normalizePhone(phone);
-    const token = `DROPIN-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const phoneNormalized = normalizePhone(usedPhone);
+    const token = generateToken();
 
+    // Gyldig til 23:59 samme dag
     const now = new Date();
-    const expiresAt = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      23,
-      59,
-      59,
-    );
+    const validUntil = new Date(now);
+    validUntil.setHours(23, 59, 59, 999);
 
+    // Nytt system: lagre i dropinTokens (for /dropin/verify)
     dropinTokens.set(token, {
-      phone: normalizedPhone,
-      expiresAt: expiresAt.toISOString(),
+      phone: phoneNormalized,
+      expiresAt: validUntil.toISOString(),
+    });
+
+    // Gammelt system: activeDropins brukes av /door/open (for kompatibilitet)
+    activeDropins.push({
+      token,
+      email: usedEmail,
+      mobile: phoneNormalized,
+      name: personName,
+      price: usedPrice,
+      createdAt: now.toISOString(),
+      validUntil: validUntil.toISOString(),
     });
 
     try {
-      await tellAddUser(normalizedPhone, name || normalizedPhone);
+      await tellAddUser(phoneNormalized, personName || phoneNormalized);
     } catch (e) {
       console.error('Feil ved sync mot TELL for drop-in:', e?.message);
     }
 
     appendAccessLog(
-      `[${new Date().toISOString()}] DROPIN_CREATE phone=${normalizedPhone} token=${token} expiresAt=${expiresAt.toISOString()}\n`,
+      `[${new Date().toISOString()}] DROPIN_CREATE phone=${phoneNormalized} token=${token} validUntil=${validUntil.toISOString()}\n`,
     );
 
     return res.json({
       ok: true,
       token,
-      expiresAt: expiresAt.toISOString(),
+      expiresAt: validUntil.toISOString(),
+      validUntil: validUntil.toISOString(),
     });
   } catch (err) {
     console.error('Feil i /dropin/create:', err);
@@ -390,9 +860,7 @@ app.post('/dropin/create', async (req, res) => {
   }
 });
 
-// ----------------------------
-// DROP-IN: Verifiser token
-// ----------------------------
+// Ny: Verifiser token (bruker dropinTokens)
 app.post('/dropin/verify', (req, res) => {
   const { token } = req.body || {};
   if (!token) {
@@ -414,10 +882,159 @@ app.post('/dropin/verify', (req, res) => {
   return res.json({ ok: true, phone: entry.phone, expiresAt: entry.expiresAt });
 });
 
-// ----------------------------
-// Vipps Checkout / eCom payment
-// Dag-proratering + innmeldingsavgift 199,-
-// ----------------------------
+// Åpne dør via token (app) – bruker activeDropins
+app.post('/door/open', async (req, res) => {
+  try {
+    const { token, email, doorId = 'styrkerom' } = req.body || {};
+
+    if (!doorConfig[doorId]) {
+      return res.status(400).json({ ok: false, error: 'invalid_doorId' });
+    }
+
+    const member = getMembers().find(
+      m => (m.email || '').toLowerCase() === (email || '').toLowerCase() && m.active,
+    );
+
+    const now = new Date();
+    const dropin = activeDropins.find(
+      d => d.token === token && new Date(d.validUntil) >= now,
+    );
+
+    if (!member && !dropin) {
+      return res.status(403).json({ ok: false, error: 'no_access' });
+    }
+
+    if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
+      console.warn('TELL-konfig ikke komplett – kan ikke åpne dør via /door/open');
+      return res.status(503).json({ ok: false, error: 'tell_not_ready' });
+    }
+
+    await gcOpen(doorConfig[doorId].gateIndex);
+
+    const source = member ? 'MEMBER' : 'DROPIN';
+    const who = member ? member.email : `${dropin.email} (dropin)`;
+    const ts = new Date().toLocaleString('nb-NO', { timeZone: 'Europe/Oslo' });
+    appendAccessLog(`${ts} email=${who} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=OPEN_${source}\n`);
+
+    return res.json({ ok: true, source });
+  } catch (e) {
+    console.error('door/open error:', e?.response?.data || e.message);
+    return res.status(500).json({ ok: false, error: 'internal_error' });
+  }
+});
+
+// =====================================================
+// Enkel innlogging (gammel epost/passord – beholdes)
+// =====================================================
+app.post('/login', (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ ok: false, error: 'email_and_password_required' });
+  }
+
+  const members = getMembers();
+  const user = members.find(
+    m => (m.email || '').toLowerCase() === email.toLowerCase() && m.password === password,
+  );
+
+  if (!user) return res.status(401).json({ ok: false, error: 'invalid_credentials' });
+  if (!user.active) return res.status(403).json({ ok: false, error: 'inactive_member' });
+
+  return res.json({ token: `token-${user.email}`, name: user.name || user.email });
+});
+
+// =====================================================
+// SMS-innlogging (telefon + engangskode)
+// =====================================================
+app.post('/auth/send-code', async (req, res) => {
+  try {
+    const { phone } = req.body || {};
+    if (!phone) {
+      return res.status(400).json({ ok: false, error: 'phone_required' });
+    }
+
+    const phoneNormalized = normalizePhone(phone);
+    if (!phoneNormalized) {
+      return res.status(400).json({ ok: false, error: 'invalid_phone' });
+    }
+
+    const existing = loginCodes.get(phoneNormalized) || {};
+    const now = Date.now();
+    if (existing.lastSentAt && now - existing.lastSentAt < 60000) {
+      return res.status(429).json({ ok: false, error: 'too_many_requests' });
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const codeExpiresAt = now + 5 * 60 * 1000;
+
+    await sendSmsLoginCode(phoneNormalized, code);
+
+    loginCodes.set(phoneNormalized, { code, codeExpiresAt, lastSentAt: now });
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('auth/send-code error:', e.message);
+    return res.status(500).json({ ok: false, error: 'internal_error' });
+  }
+});
+
+app.post('/auth/verify-code', async (req, res) => {
+  try {
+    const { phone, code } = req.body || {};
+    if (!phone || !code) {
+      return res
+        .status(400)
+        .json({ ok: false, error: 'phone_and_code_required' });
+    }
+
+    const phoneNormalized = normalizePhone(phone);
+    if (!phoneNormalized) {
+      return res.status(400).json({ ok: false, error: 'invalid_phone' });
+    }
+
+    const entry = loginCodes.get(phoneNormalized);
+    if (!entry || entry.code !== code) {
+      return res.status(401).json({ ok: false, error: 'invalid_code' });
+    }
+
+    if (Date.now() > entry.codeExpiresAt) {
+      loginCodes.delete(phoneNormalized);
+      return res.status(401).json({ ok: false, error: 'code_expired' });
+    }
+
+    loginCodes.delete(phoneNormalized);
+
+    const members = getMembers();
+    const member = members.find(
+      m => normalizePhone(m.phone) === phoneNormalized && m.active,
+    );
+
+    if (member) {
+      return res.json({
+        ok: true,
+        isMember: true,
+        member: {
+          email: member.email,
+          name: member.name || '',
+          phone: phoneNormalized,
+        },
+      });
+    }
+
+    return res.json({
+      ok: true,
+      isMember: false,
+      member: null,
+    });
+  } catch (e) {
+    console.error('auth/verify-code error:', e.message);
+    return res.status(500).json({ ok: false, error: 'internal_error' });
+  }
+});
+
+// =====================================================
+// Vipps Checkout / eCom payment – NY modell m/orders.json
+// =====================================================
 app.post('/vipps/checkout', async (req, res) => {
   const ts = new Date().toISOString();
   console.log('MOTTOK /vipps/checkout', req.body);
@@ -480,11 +1097,8 @@ app.post('/vipps/checkout', async (req, res) => {
       });
     }
 
-    // ----------------------------
     // Telefon-normalisering
-    // ----------------------------
-    // full versjon til members/TELL
-    const phoneFull = normalizePhone(phone);      // f.eks. +4790000000
+    const phoneFull = normalizePhone(phone); // f.eks. +4790000000
     if (!phoneFull) {
       return res.status(400).json({ ok: false, error: 'invalid_phone' });
     }
@@ -504,20 +1118,18 @@ app.post('/vipps/checkout', async (req, res) => {
 
     const cleanPhone = digits; // 8 siffer
 
-    // ----------------------------
     // Dag-proratering første måned
-    // ----------------------------
     const now = new Date();
     const year = now.getFullYear();
-    const month = now.getMonth();      // 0-11
-    const day = now.getDate();         // 1-31
+    const month = now.getMonth();
+    const day = now.getDate();
 
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const remainingDays = daysInMonth - day + 1; // inkl. innmeldingsdagen
 
     let fraction = 1;
     let prorationLabel = '';
-    let firstMonthTrainingAmount = selected.amount; // bare trening, uten innmeldingsavgift
+    let firstMonthTrainingAmount = selected.amount;
 
     if (selected.prorate) {
       fraction = remainingDays / daysInMonth;
@@ -525,9 +1137,7 @@ app.post('/vipps/checkout', async (req, res) => {
       prorationLabel = ` – første måned: ${remainingDays} av ${daysInMonth} dager`;
     }
 
-    // ----------------------------
     // Innmeldingsavgift 199,-
-    // ----------------------------
     let SIGNUP_FEE = 19900;
     if (membershipKey === 'TEST_1KR') {
       SIGNUP_FEE = 0;
@@ -613,7 +1223,7 @@ app.post('/vipps/checkout', async (req, res) => {
       });
     }
 
-    // 🔹 LAGRE ORDREN I orders.json SLIK AT CALLBACK KAN KNYTTE DEN TIL MEDLEM
+    // Lagre ordren i orders.json
     const nowIso = new Date().toISOString();
     upsertOrder({
       orderId,
@@ -640,7 +1250,6 @@ app.post('/vipps/checkout', async (req, res) => {
       updatedAt: nowIso
     });
 
-    // Send nyttig info tilbake til appen også
     return res.json({
       ok: true,
       url: redirectUrl,
@@ -666,9 +1275,9 @@ app.post('/vipps/checkout', async (req, res) => {
   }
 });
 
-// ----------------------------
-// Vipps callback – blir kalt av Vipps etter betaling (idempotent)
-// ----------------------------
+// =====================================================
+// Vipps callback – idempotent
+// =====================================================
 app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
   const { orderId } = req.params || {};
   const ts = new Date().toISOString();
@@ -693,13 +1302,11 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       appendAccessLog(
         `[${new Date().toISOString()}] VIPPS_CALLBACK_NO_ORDER orderId=${orderId}\n`
       );
-      // Vipps forventer alltid 200 OK
       if (!res.headersSent) return res.status(200).send('OK');
       return;
     }
 
-    // 2) Idempotens:
-    // Hvis ordren allerede er i en endelig betalt-tilstand, gjør INGENTING.
+    // 2) Idempotens
     if (['RESERVED', 'SALE', 'CAPTURED'].includes(existingOrder.status)) {
       appendAccessLog(
         `[${new Date().toISOString()}] VIPPS_CALLBACK_IDEMPOTENT orderId=${orderId} alreadyStatus=${existingOrder.status}\n`
@@ -708,7 +1315,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       return;
     }
 
-    // 3) Oppdater ordrestatus basert på Vipps-status
+    // 3) Oppdater ordrestatus
     let newStatus = existingOrder.status;
     if (['SALE', 'CAPTURED', 'RESERVED', 'RESERVE'].includes(status)) {
       newStatus = status === 'RESERVE' ? 'RESERVED' : status;
@@ -732,14 +1339,14 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       `[${new Date().toISOString()}] VIPPS_STATUS orderId=${orderId} status=${status} mapped=${newStatus}\n`
     );
 
-    // 4) Bare hvis ordren nå er "betalt"/reservasjon OK → aktiver medlem
+    // 4) Ved betalt → aktiver medlem
     if (['RESERVED', 'SALE', 'CAPTURED'].includes(newStatus)) {
       const members = getMembers();
       const phoneDigits = String(updatedOrder.phone || '').replace(/\D/g, '');
       let membersChanged = false;
       let memberId = updatedOrder.memberId || null;
 
-      // 4.1) Hvis vi ikke allerede har en memberId, prøv å finne via telefon
+      // 4.1) Finn ved telefon
       if (!memberId) {
         for (const m of members) {
           if (!m.phone) continue;
@@ -760,7 +1367,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         }
       }
 
-      // 4.2) Hvis fortsatt ingen match, opprett nytt medlem
+      // 4.2) Opprett nytt medlem hvis ingen match
       if (!memberId && updatedOrder.email) {
         const newMemberId = `mem_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
         const newMember = {
@@ -792,7 +1399,6 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         );
       }
 
-      // 4.3) Lagre members.json hvis vi gjorde endringer
       if (membersChanged) {
         saveMembers(members);
         appendAccessLog(
@@ -804,7 +1410,6 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         );
       }
 
-      // 4.4) Marker at ordren er behandlet (første gang) – idempotent
       if (!updatedOrder.processedAt) {
         updateOrderStatus(orderId, newStatus, {
           memberId: memberId || updatedOrder.memberId || null,
@@ -813,14 +1418,13 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       }
     }
 
-    // Vipps forventer alltid 200 OK
     if (!res.headersSent) return res.status(200).send('OK');
   } catch (err) {
     console.error('Vipps callback error:', err?.response?.data || err.message || err);
     appendAccessLog(
       `[${new Date().toISOString()}] VIPPS_CALLBACK_ERROR orderId=${orderId} err=${err.message}\n`
     );
-    if (!res.headersSent) return res.status(200).send('OK'); // fortsatt 200 til Vipps
+    if (!res.headersSent) return res.status(200).send('OK');
   }
 });
 
