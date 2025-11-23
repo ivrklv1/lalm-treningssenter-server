@@ -1,723 +1,866 @@
 <!DOCTYPE html>
-<html lang="no">
+<html lang="nb">
 <head>
   <meta charset="UTF-8" />
-  <title>Lalm Treningssenter – Medlemsadministrasjon</title>
+  <title>Lalm Treningssenter – Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0b1120;
-      color: #e5e7eb;
+    :root {
+      --bg: #050814;
+      --bg-alt: #0d1020;
+      --card: #171b2f;
+      --accent: #ff7a1a;
+      --accent-soft: rgba(255, 122, 26, 0.1);
+      --text: #f9fafb;
+      --muted: #9ca3af;
+      --border: #262b40;
+      --danger: #f97373;
+      --success: #22c55e;
+      --radius: 18px;
+    }
+    * {
+      box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
-
-    header {
-      background: #020617;
-      padding: 16px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid #1f2937;
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #111827 0, #020617 45%, #000 100%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
     }
-
-    header h1 {
-      font-size: 20px;
-      margin: 0;
-    }
-
-    header span {
-      font-size: 13px;
-      color: #9ca3af;
-    }
-
-    main {
-      padding: 16px 24px 40px;
-      max-width: 1100px;
+    .page {
+      max-width: 1280px;
       margin: 0 auto;
     }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 2fr 1fr;
-      gap: 16px;
-      align-items: flex-start;
-    }
-
-    .card {
-      background: #020617;
-      border-radius: 12px;
-      padding: 16px 18px;
-      border: 1px solid #1f2937;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
-    }
-
-    .card h2 {
-      margin: 0 0 8px;
-      font-size: 16px;
-    }
-
-    .card p.desc {
-      margin: 0 0 12px;
-      font-size: 13px;
-      color: #9ca3af;
-    }
-
-    .stats {
+    header {
       display: flex;
-      gap: 16px;
-      font-size: 13px;
-      margin-bottom: 8px;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
     }
-
+    header h1 {
+      font-size: 1.6rem;
+      letter-spacing: 0.03em;
+    }
+    header p {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
     .badge {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
+      gap: 6px;
+      padding: 4px 10px;
       border-radius: 999px;
-      font-size: 11px;
-      background: #111827;
-      border: 1px solid #374151;
-      color: #e5e7eb;
+      font-size: 0.8rem;
+      background: #022c22;
+      color: #6ee7b7;
     }
-
-    .badge.dot::before {
-      content: "";
+    .badge-dot {
       width: 8px;
       height: 8px;
+      border-radius: 50%;
+      background: #6ee7b7;
+    }
+    .badge.badge-error {
+      background: #450a0a;
+      color: #fecaca;
+    }
+    .badge.badge-error .badge-dot {
+      background: #fecaca;
+    }
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr);
+      gap: 24px;
+    }
+    @media (max-width: 900px) {
+      body { padding: 16px; }
+      main { grid-template-columns: minmax(0, 1fr); }
+    }
+    .card {
+      background: radial-gradient(circle at top left, #1f2937 0, #020617 50%);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 18px 18px 14px 18px;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.85);
+    }
+    .card-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+    .card-subtitle {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.9);
       border-radius: 999px;
-      background: #22c55e;
+      border: 1px solid var(--border);
+      padding: 3px 10px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .chip span {
+      font-size: 0.85rem;
+      color: var(--text);
     }
 
+    .pill-row {
+      display: inline-flex;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      font-size: 0.75rem;
+      margin-top: 4px;
+    }
+    .pill {
+      padding: 4px 10px;
+      color: var(--muted);
+      background: transparent;
+    }
+    .pill.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .table-wrapper {
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      background: rgba(15, 23, 42, 0.6);
+      max-height: 340px;
+      display: flex;
+      flex-direction: column;
+    }
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 13px;
-      margin-top: 8px;
+      font-size: 0.8rem;
     }
-
+    thead {
+      background: rgba(15, 23, 42, 0.95);
+    }
     th, td {
-      padding: 6px 8px;
-      border-bottom: 1px solid #1f2937;
+      padding: 8px 10px;
       text-align: left;
+      white-space: nowrap;
     }
-
     th {
       font-weight: 500;
-      color: #9ca3af;
-      background: #020617;
-      position: sticky;
-      top: 0;
-      z-index: 1;
+      color: var(--muted);
+      border-bottom: 1px solid #1f2937;
     }
-
-    tr:hover td {
-      background: rgba(15, 23, 42, 0.8);
+    tbody tr:nth-child(even) {
+      background: rgba(15, 23, 42, 0.5);
     }
-
-    .tag-active {
-      display: inline-block;
-      padding: 2px 8px;
-      font-size: 11px;
+    tbody tr:hover {
+      background: rgba(31, 41, 55, 0.8);
+    }
+    td.status {
+      font-size: 0.75rem;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
       border-radius: 999px;
-      background: rgba(34, 197, 94, 0.12);
-      color: #4ade80;
-      border: 1px solid rgba(34, 197, 94, 0.3);
-    }
-
-    .tag-inactive {
-      display: inline-block;
       padding: 2px 8px;
-      font-size: 11px;
-      border-radius: 999px;
+      font-size: 0.7rem;
+      gap: 6px;
+    }
+    .status-pill span {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+    .status-active {
+      background: rgba(34, 197, 94, 0.1);
+      color: #bbf7d0;
+    }
+    .status-active span {
+      background: #22c55e;
+    }
+    .status-inactive {
       background: rgba(148, 163, 184, 0.1);
       color: #e5e7eb;
-      border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+    .status-inactive span {
+      background: #6b7280;
+    }
+    .status-cancelled {
+      background: rgba(248, 113, 113, 0.12);
+      color: #fecaca;
+    }
+    .status-cancelled span {
+      background: #f97373;
+    }
+    .badge-small {
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 0.7rem;
+      border: 1px solid #374151;
+      color: #e5e7eb;
+      background: rgba(15, 23, 42, 0.9);
+    }
+    .text-muted {
+      color: var(--muted);
     }
 
-    .actions {
+    .input-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    @media (max-width: 900px) {
+      .input-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+    label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 3px;
+    }
+    input, select, textarea {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text);
+      padding: 7px 9px;
+      font-size: 0.8rem;
+      outline: none;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(255, 122, 26, 0.4);
+    }
+    .btn-row {
       display: flex;
-      gap: 4px;
+      gap: 8px;
       flex-wrap: wrap;
+      margin-top: 8px;
     }
-
     button {
       border-radius: 999px;
       border: none;
-      padding: 5px 10px;
-      font-size: 12px;
+      padding: 7px 13px;
+      font-size: 0.8rem;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      background: #111827;
-      color: #e5e7eb;
-      border: 1px solid #1f2937;
+      gap: 6px;
     }
-
-    button.primary {
-      background: #f97316;
-      border-color: #fb923c;
-      color: #0b1120;
+    .btn-primary {
+      background: linear-gradient(135deg, #f97316, #ea580c);
+      color: #111827;
       font-weight: 500;
     }
-
-    button.danger {
-      background: #7f1d1d;
-      border-color: #b91c1c;
-      color: #fee2e2;
+    .btn-secondary {
+      background: rgba(15, 23, 42, 0.95);
+      color: var(--muted);
+      border: 1px solid var(--border);
     }
-
-    button.small {
-      padding: 4px 8px;
-      font-size: 11px;
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border-radius: 999px;
+      padding-inline: 6px;
+      font-size: 0.75rem;
     }
-
-    button:disabled {
-      opacity: 0.5;
-      cursor: default;
+    .btn-primary:disabled,
+    .btn-secondary:disabled {
+      opacity: 0.6;
+      cursor: wait;
     }
-
-    form label {
-      display: block;
-      font-size: 12px;
-      margin-bottom: 2px;
-      color: #9ca3af;
+    .tag-danger {
+      color: var(--danger);
+      font-size: 0.75rem;
     }
-
-    form input {
-      width: 100%;
-      padding: 6px 8px;
-      margin-bottom: 8px;
-      border-radius: 8px;
-      border: 1px solid #374151;
-      background: #020617;
-      color: #e5e7eb;
-      font-size: 13px;
+    .tag-success {
+      color: var(--success);
+      font-size: 0.75rem;
     }
-
-    form input:focus {
-      outline: none;
-      border-color: #f97316;
-      box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.4);
+    .small {
+      font-size: 0.75rem;
     }
-
-    .form-row {
-      display: flex;
-      gap: 8px;
-    }
-
-    .form-row > div {
-      flex: 1;
-    }
-
-    .status-line {
-      margin-top: 8px;
-      font-size: 12px;
-      color: #9ca3af;
-    }
-
-    .status-line.ok {
-      color: #4ade80;
-    }
-
-    .status-line.error {
-      color: #fca5a5;
-    }
-
-    .small-text {
-      font-size: 11px;
-      color: #6b7280;
-    }
-
-    .scroll-table {
-      max-height: 400px;
+    .mt-1 { margin-top: 4px; }
+    .mt-2 { margin-top: 8px; }
+    .mt-3 { margin-top: 12px; }
+    .mt-4 { margin-top: 16px; }
+    .scroll {
       overflow: auto;
-      border-radius: 8px;
-      border: 1px solid #1f2937;
-      background: rgba(15, 23, 42, 0.9);
+    }
+    .right-column-section {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px dashed #1f2937;
     }
   </style>
 </head>
 <body>
+<div class="page">
   <header>
     <div>
       <h1>Lalm Treningssenter – Admin</h1>
-      <span>Medlemsadministrasjon & TELL-synk</span>
+      <p>Medlemsadministrasjon, Vipps-ordrer og TELL-synk.</p>
     </div>
-    <div class="badge dot">
-      Server: <span id="health-status">ukjent</span>
+    <div>
+      <div id="serverStatus" class="badge">
+        <span class="badge-dot"></span>
+        <span>Server: Ukjent</span>
+      </div>
     </div>
   </header>
 
   <main>
-    <div class="grid">
-      <!-- VENSTRE: Medlemsliste -->
-      <section class="card">
-        <h2>Medlemmer</h2>
-        <p class="desc">
-          Oversikt over alle medlemmer. Du kan aktivere/deaktivere, slette og synkronisere mot TELL.
-        </p>
-
-        <div class="stats">
-          <span class="badge">
-            Totalt: <strong id="stat-total">0</strong>
-          </span>
-          <span class="badge">
-            Aktive: <strong id="stat-active">0</strong>
-          </span>
+    <!-- VENSTRE: Medlemmer -->
+    <section class="card">
+      <div class="card-title-row">
+        <div>
+          <div class="card-title">Medlemmer</div>
+          <div class="card-subtitle">
+            Oversikt over alle medlemmer. Aktive medlemmer med telefon synkroniseres mot TELL.
+          </div>
         </div>
+        <div style="text-align:right;">
+          <div class="pill-row">
+            <div class="pill active">Aktive: <span id="statsActiveCount">0</span></div>
+            <div class="pill">Totalt: <span id="statsTotalCount">0</span></div>
+          </div>
+        </div>
+      </div>
 
-        <div class="scroll-table">
+      <div class="mt-2">
+        <div class="input-grid">
+          <div>
+            <label for="searchInput">Søk (navn, e-post eller telefon)</label>
+            <input id="searchInput" type="text" placeholder="Søk..." />
+          </div>
+          <div>
+            <label for="filterPlan">Filter: plan</label>
+            <select id="filterPlan">
+              <option value="">Alle planer</option>
+              <option value="LALM_IL_BINDING">Lalm IL – binding</option>
+              <option value="STANDARD_BINDING">Standard – binding</option>
+              <option value="HYTTE_BINDING">Hytte – binding</option>
+              <option value="LALM_IL_UBIND">Lalm IL – uten binding</option>
+              <option value="STANDARD_UBIND">Standard – uten binding</option>
+              <option value="TEST_1KR">TEST – 1 kr</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrapper mt-2">
+        <div class="scroll">
           <table>
             <thead>
-  <tr>
-    <th>Navn</th>
-    <th>E-post</th>
-    <th>Telefon</th>
-    <th>Plan</th>
-    <th>IL-medlem</th>
-    <th>Status</th>
-    <th style="width: 200px;">Handlinger</th>
-  </tr>
-</thead>
-
-            <tbody id="members-body">
-              <tr>
-                <td colspan="5">Laster medlemmer…</td>
-              </tr>
+            <tr>
+              <th>Navn</th>
+              <th>E-post</th>
+              <th>Telefon</th>
+              <th>Plan</th>
+              <th>IL-medlem</th>
+              <th>Status</th>
+              <th>Handling</th>
+            </tr>
+            </thead>
+            <tbody id="membersTableBody">
+            <tr>
+              <td colspan="7" class="text-muted">Laster medlemmer...</td>
+            </tr>
             </tbody>
           </table>
         </div>
+      </div>
 
-        <div class="status-line" id="members-status"></div>
-      </section>
+      <div id="membersError" class="mt-2 small tag-danger" style="display:none;"></div>
+    </section>
 
-      <!-- HØYRE: Skjema m.m. -->
-      <section class="card">
-        <h2>Legg til medlem</h2>
-        <p class="desc">
-          Registrer nytt medlem. Aktive medlemmer med telefonnummer synkroniseres automatisk til TELL.
-        </p>
-
-        <form id="add-form">
-          <div class="form-row">
-            <div>
-              <label for="name">Navn</label>
-              <input id="name" name="name" type="text" placeholder="Fornavn Etternavn" required />
-            </div>
+    <!-- HØYRE: Legg til medlem + Ordrer -->
+    <section class="card">
+      <!-- Legg til medlem -->
+      <div class="card-title-row">
+        <div>
+          <div class="card-title">Legg til medlem</div>
+          <div class="card-subtitle">
+            Registrer nytt medlem. Aktive medlemmer med telefon synkroniseres til TELL.
           </div>
+        </div>
+      </div>
 
-          <label for="email">E-post</label>
-          <input id="email" name="email" type="email" placeholder="epost@example.com" required />
-
-          <label for="phone">Telefon (for TELL)</label>
-          <input id="phone" name="phone" type="tel" placeholder="+47xxxxxxxx" />
-
-            <label for="plan">Abonnement / plan</label>
-  <select id="plan" name="plan" style="width:100%; padding:6px 8px; margin-bottom:8px; border-radius:8px; border:1px solid #374151; background:#020617; color:#e5e7eb; font-size:13px;">
-    <option value="">Velg plan…</option>
-    <option value="medlem_m_binding">Medlem Lalm IL m/binding (349/mnd)</option>
-    <option value="standard_m_binding">Ikke-medlem m/binding (449/mnd)</option>
-    <option value="medlem_u_binding">Medlem Lalm IL u/binding (499/mnd)</option>
-    <option value="standard_u_binding">Ikke-medlem u/binding (549/mnd)</option>
-    <option value="hyttemedlem_m_binding">Hyttemedlem m/binding (179/mnd)</option>
-  </select>
-
-
-          <div style="display:flex; justify-content: space-between; align-items: center; margin-top: 4px;">
-            <button type="submit" class="primary">
-              + Legg til medlem
-            </button>
-            <span class="small-text">
-              Nytt medlem blir <strong>aktivt</strong> som standard.
-            </span>
+      <div class="mt-2">
+        <div class="input-grid">
+          <div>
+            <label for="newName">Navn</label>
+            <input id="newName" type="text" placeholder="Fornavn Etternavn" />
           </div>
-        </form>
-
-        <hr style="border-color:#1f2937; margin:16px 0;">
-
-        <h2>Verktøy</h2>
-        <p class="desc">TELL-synk og systeminfo.</p>
-
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button type="button" id="btn-sync-tell">
-            🔄 Synk alle aktive til TELL
-          </button>
-          <button type="button" id="btn-reload">
-            ⟳ Oppdater liste
-          </button>
-          <hr style="border-color:#1f2937; margin:20px 0;">
-
-<h2>NIF medlemsimport</h2>
-<p class="desc" style="margin-bottom:8px;">
-  Lim inn hele medlemslisten fra NIF (kopiert fra Excel). Kun medlemmer med “Aktiv” status vil gi IL-medlemskap.
-</p>
-
-<textarea id="nif-csv" 
-          placeholder="Lim inn CSV/Excel-innhold her..."
-          style="
-            width:100%;
-            min-height:130px;
-            margin-bottom:10px;
-            border-radius:8px;
-            background:#020617;
-            color:#e5e7eb;
-            border:1px solid #374151;
-            padding:10px;
-            resize:vertical;
-          "></textarea>
-
-<button id="btn-import-nif" 
-        style="
-          background:#2563eb;
-          padding:6px 12px;
-          border-radius:6px;
-          border:none;
-          color:white;
-          font-weight:500;
-          cursor:pointer;
-        ">
-  📥 Importer NIF-liste
-</button>
-
-<div id="nif-status" class="status-line" style="margin-top:8px;"></div>
-
+          <div>
+            <label for="newEmail">E-post</label>
+            <input id="newEmail" type="email" placeholder="epost@example.com" />
+          </div>
+          <div>
+            <label for="newPhone">Telefon (for TELL)</label>
+            <input id="newPhone" type="tel" placeholder="+47xxxxxxxx" />
+          </div>
+          <div>
+            <label for="newPlan">Abonnement / plan</label>
+            <select id="newPlan">
+              <option value="">Velg plan…</option>
+              <option value="LALM_IL_BINDING">Lalm IL – 12 mnd binding</option>
+              <option value="STANDARD_BINDING">Standard – 12 mnd binding</option>
+              <option value="HYTTE_BINDING">Hytte – 12 mnd binding</option>
+              <option value="LALM_IL_UBIND">Lalm IL – uten binding</option>
+              <option value="STANDARD_UBIND">Standard – uten binding</option>
+              <option value="TEST_1KR">TEST – 1 kr</option>
+            </select>
+          </div>
         </div>
 
-        <div class="status-line" id="tools-status"></div>
+        <div class="mt-1 small text-muted">
+          Nye medlemmer blir satt som <strong>aktiv</strong> som standard.
+        </div>
+        <div class="btn-row">
+          <button id="btnAddMember" class="btn-primary">+ Legg til medlem</button>
+        </div>
+        <div id="addMemberMsg" class="mt-1 small"></div>
+      </div>
 
-        <p class="small-text" style="margin-top:12px;">
-          Tips: Hvis du har endret TELL-brukere manuelt, kan du trykke
-          <strong>Synk alle aktive</strong> for å sikre at alle aktive medlemmer ligger i TELL.
-        </p>
-      </section>
-    </div>
+      <!-- Verktøy -->
+      <div class="right-column-section">
+        <div class="card-subtitle" style="margin-bottom:6px;">Verktøy</div>
+        <div class="small text-muted">
+          Systemverktøy for TELL-synk og NIF-medlemsimport.
+        </div>
+        <div class="btn-row mt-2">
+          <button id="btnTellSync" class="btn-secondary">🔄 Synk alle aktive til TELL</button>
+          <button id="btnReloadMembers" class="btn-secondary">⟳ Oppdater liste</button>
+        </div>
+        <div id="toolsMsg" class="mt-1 small"></div>
+
+        <div class="mt-3">
+          <label for="nifTextarea">NIF medlemsimport (CSV fra Excel)</label>
+          <textarea id="nifTextarea" placeholder="Lim inn medlemslisten her…"></textarea>
+          <div class="btn-row mt-1">
+            <button id="btnNifImport" class="btn-secondary">📥 Importer NIF-liste</button>
+            <button id="btnClearNif" class="btn-ghost">Tøm felt</button>
+          </div>
+          <div id="nifMsg" class="mt-1 small"></div>
+        </div>
+      </div>
+
+      <!-- Ordrer -->
+      <div class="right-column-section">
+        <div class="card-title-row" style="margin-bottom:8px;">
+          <div>
+            <div class="card-title">Vipps-ordrer</div>
+            <div class="card-subtitle">
+              Viser siste betalinger via Vipps Checkout.
+            </div>
+          </div>
+          <div>
+            <span class="badge-small">
+              Totalt: <span id="ordersCount">0</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="table-wrapper" style="max-height: 220px;">
+          <div class="scroll">
+            <table>
+              <thead>
+              <tr>
+                <th>OrderId</th>
+                <th>Status</th>
+                <th>Plan</th>
+                <th>Beløp</th>
+                <th>E-post</th>
+                <th>Opprettet</th>
+              </tr>
+              </thead>
+              <tbody id="ordersTableBody">
+              <tr>
+                <td colspan="6" class="text-muted">Laster ordrer…</td>
+              </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="ordersError" class="mt-1 small tag-danger" style="display:none;"></div>
+      </div>
+    </section>
   </main>
+</div>
 
-  <script>
-    async function fetchJSON(url, options) {
-      const res = await fetch(url, {
-        headers: { "Content-Type": "application/json" },
-        ...options,
+<script>
+  const serverStatusEl = document.getElementById('serverStatus');
+  const membersTableBody = document.getElementById('membersTableBody');
+  const membersErrorEl = document.getElementById('membersError');
+  const statsActiveCount = document.getElementById('statsActiveCount');
+  const statsTotalCount = document.getElementById('statsTotalCount');
+
+  const ordersTableBody = document.getElementById('ordersTableBody');
+  const ordersCountEl = document.getElementById('ordersCount');
+  const ordersErrorEl = document.getElementById('ordersError');
+
+  const searchInput = document.getElementById('searchInput');
+  const filterPlan = document.getElementById('filterPlan');
+
+  const btnAddMember = document.getElementById('btnAddMember');
+  const addMemberMsg = document.getElementById('addMemberMsg');
+
+  const btnTellSync = document.getElementById('btnTellSync');
+  const btnReloadMembers = document.getElementById('btnReloadMembers');
+  const toolsMsg = document.getElementById('toolsMsg');
+
+  const nifTextarea = document.getElementById('nifTextarea');
+  const btnNifImport = document.getElementById('btnNifImport');
+  const btnClearNif = document.getElementById('btnClearNif');
+  const nifMsg = document.getElementById('nifMsg');
+
+  const newName = document.getElementById('newName');
+  const newEmail = document.getElementById('newEmail');
+  const newPhone = document.getElementById('newPhone');
+  const newPlan = document.getElementById('newPlan');
+
+  let allMembers = [];
+  let allOrders = [];
+
+  function setServerStatus(ok, text) {
+    serverStatusEl.classList.toggle('badge-error', !ok);
+    const dot = serverStatusEl.querySelector('.badge-dot');
+    if (dot) {
+      dot.style.background = ok ? '#6ee7b7' : '#fecaca';
+    }
+    serverStatusEl.querySelector('span:last-child').textContent = 'Server: ' + text;
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '-';
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '-';
+      return d.toLocaleString('nb-NO', {
+        year: '2-digit',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
       });
-      let data = null;
-      try {
-        data = await res.json();
-      } catch (_) {
-        data = null;
-      }
-      if (!res.ok) {
-        const err = new Error("HTTP " + res.status);
-        err.status = res.status;
-        err.data = data;
-        throw err;
-      }
-      return data;
+    } catch {
+      return '-';
+    }
+  }
+
+  function fmtAmount(øre) {
+    if (typeof øre !== 'number') return '-';
+    return (øre / 100).toLocaleString('nb-NO', {
+      style: 'currency',
+      currency: 'NOK',
+      minimumFractionDigits: 2
+    });
+  }
+
+  function renderMembers() {
+    const q = (searchInput.value || '').toLowerCase();
+    const planFilter = filterPlan.value || '';
+
+    const filtered = allMembers.filter(m => {
+      if (planFilter && (m.plan || '') !== planFilter) return false;
+      if (!q) return true;
+      const name = (m.name || '').toLowerCase();
+      const email = (m.email || '').toLowerCase();
+      const phone = (m.phone || '').toLowerCase();
+      return name.includes(q) || email.includes(q) || phone.includes(q);
+    });
+
+    statsTotalCount.textContent = allMembers.length;
+    statsActiveCount.textContent = allMembers.filter(m => m.active).length;
+
+    if (!filtered.length) {
+      membersTableBody.innerHTML = '<tr><td colspan="7" class="text-muted">Ingen medlemmer funnet.</td></tr>';
+      return;
     }
 
-    async function loadHealth() {
-      const el = document.getElementById("health-status");
-      try {
-        const data = await fetchJSON("/health");
-        el.textContent = data.status === "ok" ? "OK" : "Feil";
-        if (!data.tellReady) {
-          el.textContent += " (TELL ikke klar)";
-        }
-      } catch (e) {
-        el.textContent = "Feil (" + (e.status || "?") + ")";
-      }
-    }
+    membersTableBody.innerHTML = '';
+    filtered.forEach(m => {
+      const tr = document.createElement('tr');
 
-    async function loadMembers() {
-      const body = document.getElementById("members-body");
-      const status = document.getElementById("members-status");
-      const statTotal = document.getElementById("stat-total");
-      const statActive = document.getElementById("stat-active");
+      const ilText = m.clubMember ? 'Ja' : 'Nei';
+      const statusClass = m.active ? 'status-active' : 'status-inactive';
+      const statusLabel = m.active ? 'Aktiv' : 'Inaktiv';
 
-      body.innerHTML = `
-        <tr>
-          <td colspan="5">Laster medlemmer…</td>
-        </tr>
+      tr.innerHTML = `
+        <td>${m.name || '–'}</td>
+        <td>${m.email || '–'}</td>
+        <td>${m.phone || '–'}</td>
+        <td>${m.plan || '–'}</td>
+        <td>${ilText}</td>
+        <td class="status">
+          <div class="status-pill ${statusClass}">
+            <span></span>
+            <span>${statusLabel}</span>
+          </div>
+        </td>
+        <td>
+          <button class="btn-ghost" data-email="${m.email}">${m.active ? 'Deaktiver' : 'Aktiver'}</button>
+        </td>
       `;
-      status.textContent = "";
-
-      try {
-        const members = await fetchJSON("/api/admin/members");
-
-        statTotal.textContent = members.length;
-        statActive.textContent = members.filter(m => m.active).length;
-
-        if (members.length === 0) {
-          body.innerHTML = `
-            <tr>
-              <td colspan="5">Ingen medlemmer registrert ennå.</td>
-            </tr>
-          `;
-          return;
-        }
-
-        body.innerHTML = "";
-        members.forEach(m => {
-          const tr = document.createElement("tr");
-
-const tdName = document.createElement("td");
-tdName.textContent = m.name || "—";
-
-const tdEmail = document.createElement("td");
-tdEmail.textContent = m.email || "—";
-
-const tdPhone = document.createElement("td");
-tdPhone.textContent = m.phone || "—";
-
-const tdPlan = document.createElement("td");
-tdPlan.textContent = m.plan || "—";
-
-const tdClub = document.createElement("td");
-const spanClub = document.createElement("span");
-spanClub.className = m.clubMember ? "tag-active" : "tag-inactive";
-spanClub.textContent = m.clubMember ? "Ja" : "Nei";
-tdClub.appendChild(spanClub);
-
-const tdStatus = document.createElement("td");
-const span = document.createElement("span");
-span.className = m.active ? "tag-active" : "tag-inactive";
-span.textContent = m.active ? "Aktiv" : "Inaktiv";
-tdStatus.appendChild(span);
-
-const tdActions = document.createElement("td");
-const actions = document.createElement("div");
-actions.className = "actions";
-
-const btnToggle = document.createElement("button");
-btnToggle.className = "small";
-btnToggle.textContent = m.active ? "Deaktiver" : "Aktiver";
-btnToggle.onclick = () => toggleMember(m.email);
-
-const btnClub = document.createElement("button");
-btnClub.className = "small";
-btnClub.textContent = m.clubMember ? "IL: Fjern" : "IL: Sett";
-btnClub.onclick = () => toggleClubMember(m.email, !m.clubMember);
-
-const btnDelete = document.createElement("button");
-btnDelete.className = "small danger";
-btnDelete.textContent = "Slett";
-btnDelete.onclick = () => deleteMember(m.email, m.name);
-
-actions.appendChild(btnToggle);
-actions.appendChild(btnClub);
-actions.appendChild(btnDelete);
-tdActions.appendChild(actions);
-
-tr.appendChild(tdName);
-tr.appendChild(tdEmail);
-tr.appendChild(tdPhone);
-tr.appendChild(tdPlan);
-tr.appendChild(tdClub);
-tr.appendChild(tdStatus);
-tr.appendChild(tdActions);
-
-body.appendChild(tr);
-
-        });
-
-        status.textContent = "Medlemsliste oppdatert.";
-        status.className = "status-line ok";
-      } catch (e) {
-        console.error(e);
-        body.innerHTML = `
-          <tr>
-            <td colspan="5">Kunne ikke laste medlemmer (HTTP ${e.status || "?"}).</td>
-          </tr>
-        `;
-        status.textContent = "Feil ved henting av medlemmer.";
-        status.className = "status-line error";
-      }
-    }
-
-    async function toggleMember(email) {
-      if (!email) return;
-      const status = document.getElementById("members-status");
-      status.textContent = "Oppdaterer status for " + email + "…";
-      status.className = "status-line";
-
-      try {
-        await fetchJSON("/api/admin/members/toggle", {
-          method: "POST",
-          body: JSON.stringify({ email }),
-        });
-        await loadMembers();
-        status.textContent = "Status oppdatert for " + email + ".";
-        status.className = "status-line ok";
-      } catch (e) {
-        console.error(e);
-        status.textContent = "Kunne ikke oppdatere status (HTTP " + (e.status || "?") + ").";
-        status.className = "status-line error";
-      }
-    }
-
-    async function deleteMember(email, name) {
-      if (!email) return;
-      const confirmDelete = confirm(
-        "Slette medlem \"" + (name || email) + "\"?\n\nDette fjerner medlemmet og prøver å slette fra TELL."
-      );
-      if (!confirmDelete) return;
-
-      const status = document.getElementById("members-status");
-      status.textContent = "Sletter " + email + "…";
-      status.className = "status-line";
-
-      try {
-        await fetchJSON("/api/admin/members?email=" + encodeURIComponent(email), {
-          method: "DELETE",
-        });
-        await loadMembers();
-        status.textContent = "Slettet " + email + ".";
-        status.className = "status-line ok";
-      } catch (e) {
-        console.error(e);
-        status.textContent = "Kunne ikke slette medlem (HTTP " + (e.status || "?") + ").";
-        status.className = "status-line error";
-      }
-    }
-
-    async function toggleClubMember(email, clubMember) {
-  const status = document.getElementById("members-status");
-  status.textContent = "Oppdaterer IL-medlemskap for " + email + "…";
-  status.className = "status-line";
-
-  try {
-    await fetchJSON("/api/admin/members/club-toggle", {
-      method: "POST",
-      body: JSON.stringify({ email, clubMember }),
+      membersTableBody.appendChild(tr);
     });
-    await loadMembers();
-    status.textContent = "IL-medlemskap oppdatert for " + email + ".";
-    status.className = "status-line ok";
-  } catch (e) {
-    console.error(e);
-    status.textContent = "Feil ved oppdatering av IL-medlemskap.";
-    status.className = "status-line error";
-  }
-}
-
-async function importNifList() {
-  const textarea = document.getElementById("nif-csv");
-  const status = document.getElementById("nif-status");
-  const csv = (textarea.value || "").trim();
-
-  if (!csv) {
-    status.textContent = "Du må lime inn innhold fra NIF-filen.";
-    status.className = "status-line error";
-    return;
   }
 
-  status.textContent = "Importerer NIF-liste…";
-  status.className = "status-line";
+  function renderOrders() {
+    ordersCountEl.textContent = allOrders.length;
 
-  try {
-    const data = await fetchJSON("/api/admin/nif-import", {
-      method: "POST",
-      body: JSON.stringify({ csv }),
-    });
-
-    status.textContent = 
-      `Import fullført — Matchet ${data.matched} | Unike ikke funnet: ${data.unmatched}`;
-    status.className = "status-line ok";
-
-    await loadMembers();
-  } catch (e) {
-    console.error(e);
-    status.textContent = "Feil ved import av NIF-liste.";
-    status.className = "status-line error";
-  }
-}
-
-    async function syncTell() {
-      const status = document.getElementById("tools-status");
-      status.textContent = "Starter TELL-synk…";
-      status.className = "status-line";
-
-      try {
-        await fetchJSON("/api/admin/tell-sync", {
-          method: "POST",
-          body: JSON.stringify({}),
-        });
-        status.textContent = "TELL-synk fullført.";
-        status.className = "status-line ok";
-      } catch (e) {
-        console.error(e);
-        status.textContent = "Feil i TELL-synk (HTTP " + (e.status || "?") + ").";
-        status.className = "status-line error";
-      }
+    if (!allOrders.length) {
+      ordersTableBody.innerHTML = '<tr><td colspan="6" class="text-muted">Ingen ordrer registrert ennå.</td></tr>';
+      return;
     }
 
-    function setupForm() {
-      const form = document.getElementById("add-form");
-      const status = document.getElementById("members-status");
+    // Sorter nyeste først
+    const sorted = [...allOrders].sort((a, b) => {
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    }).slice(0, 50); // maks 50
 
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const formData = new FormData(form);
-        const name = formData.get("name")?.toString().trim();
-        const email = formData.get("email")?.toString().trim();
-        const phone = formData.get("phone")?.toString().trim();
-        const plan = formData.get("plan")?.toString().trim() || null;
+    ordersTableBody.innerHTML = '';
+    sorted.forEach(o => {
+      const tr = document.createElement('tr');
 
+      const status = (o.status || '').toUpperCase();
+      let statusClass = 'status-inactive';
+      let statusLabel = status || '-';
+      if (['RESERVED', 'SALE', 'CAPTURED'].includes(status)) {
+        statusClass = 'status-active';
+      } else if (['CANCELLED', 'FAILED'].includes(status)) {
+        statusClass = 'status-cancelled';
+      }
 
-        if (!name || !email) {
-          alert("Navn og e-post er påkrevd.");
-          return;
-        }
+      tr.innerHTML = `
+        <td>${o.orderId || '–'}</td>
+        <td class="status">
+          <div class="status-pill ${statusClass}">
+            <span></span>
+            <span>${statusLabel}</span>
+          </div>
+        </td>
+        <td>${o.membershipKey || '–'}</td>
+        <td>${fmtAmount(o.amount)}</td>
+        <td>${o.email || '–'}</td>
+        <td>${fmtDate(o.createdAt)}</td>
+      `;
+      ordersTableBody.appendChild(tr);
+    });
+  }
 
-        status.textContent = "Legger til " + email + "…";
-        status.className = "status-line";
+  async function loadMembers() {
+    membersErrorEl.style.display = 'none';
+    try {
+      const res = await fetch('/admin/members');
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+      const data = await res.json();
+      allMembers = Array.isArray(data) ? data : [];
+      renderMembers();
+      setServerStatus(true, 'OK');
+    } catch (e) {
+      console.error('Feil ved henting av medlemmer:', e);
+      membersTableBody.innerHTML =
+        '<tr><td colspan="7" class="text-muted">Kunne ikke laste medlemmer.</td></tr>';
+      membersErrorEl.textContent = 'Feil ved henting av medlemmer: ' + e.message;
+      membersErrorEl.style.display = 'block';
+      setServerStatus(false, 'Feil');
+    }
+  }
 
-        try {
-          await fetchJSON("/api/admin/members", {
-  method: "POST",
-  body: JSON.stringify({
-    name,
-    email,
-    phone,
-    plan,
-    active: true,
-  }),
-});
+  async function loadOrders() {
+    ordersErrorEl.style.display = 'none';
+    try {
+      const res = await fetch('/admin/orders');
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+      const data = await res.json();
+      allOrders = Array.isArray(data) ? data : [];
+      renderOrders();
+    } catch (e) {
+      console.error('Feil ved henting av ordrer:', e);
+      ordersTableBody.innerHTML =
+        '<tr><td colspan="6" class="text-muted">Kunne ikke laste ordrer.</td></tr>';
+      ordersErrorEl.textContent = 'Feil ved henting av ordrer: ' + e.message;
+      ordersErrorEl.style.display = 'block';
+    }
+  }
 
-          form.reset();
-          await loadMembers();
-          status.textContent = "La til medlem " + email + ".";
-          status.className = "status-line ok";
-        } catch (e2) {
-          console.error(e2);
-          let msg = "Feil ved lagring (HTTP " + (e2.status || "?") + ").";
-          if (e2.data && e2.data.error === "member_exists") {
-            msg = "Medlem med denne e-posten finnes allerede.";
-          }
-          status.textContent = msg;
-          status.className = "status-line error";
-        }
+  async function toggleMemberActive(email) {
+    try {
+      const res = await fetch('/api/admin/members/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
       });
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+      const data = await res.json();
+      if (!data.ok) {
+        throw new Error(data.error || 'Ukjent feil');
+      }
+      await loadMembers();
+    } catch (e) {
+      alert('Kunne ikke endre status for medlem: ' + e.message);
+    }
+  }
+
+  async function addMember() {
+    const name = newName.value.trim();
+    const email = newEmail.value.trim();
+    const phone = newPhone.value.trim();
+    const plan = newPlan.value || null;
+
+    addMemberMsg.textContent = '';
+    if (!email) {
+      addMemberMsg.textContent = 'E-post er påkrevd.';
+      addMemberMsg.className = 'mt-1 small tag-danger';
+      return;
     }
 
-    function setupButtons() {
-      document.getElementById("btn-sync-tell").addEventListener("click", syncTell);
-      document.getElementById("btn-reload").addEventListener("click", loadMembers);
+    btnAddMember.disabled = true;
+    addMemberMsg.textContent = 'Lagrer...';
+    addMemberMsg.className = 'mt-1 small text-muted';
+
+    try {
+      const res = await fetch('/api/admin/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          name,
+          phone,
+          plan,
+          active: true
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || ('HTTP ' + res.status));
+      }
+      addMemberMsg.textContent = 'Medlem lagt til.';
+      addMemberMsg.className = 'mt-1 small tag-success';
+      newName.value = '';
+      newEmail.value = '';
+      newPhone.value = '';
+      newPlan.value = '';
+      await loadMembers();
+    } catch (e) {
+      console.error('Feil ved lagring av medlem:', e);
+      addMemberMsg.textContent = 'Feil: ' + e.message;
+      addMemberMsg.className = 'mt-1 small tag-danger';
+    } finally {
+      btnAddMember.disabled = false;
     }
+  }
 
-window.addEventListener("load", () => {
-  setupForm();
-  setupButtons();
+  async function runTellSync() {
+    toolsMsg.textContent = 'Synkroniserer aktive medlemmer til TELL...';
+    toolsMsg.className = 'mt-1 small text-muted';
+    btnTellSync.disabled = true;
+    try {
+      const res = await fetch('/api/admin/tell-sync', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      toolsMsg.textContent = 'TELL-synk fullført.';
+      toolsMsg.className = 'mt-1 small tag-success';
+    } catch (e) {
+      console.error('tell-sync error:', e);
+      toolsMsg.textContent = 'Feil ved TELL-synk: ' + e.message;
+      toolsMsg.className = 'mt-1 small tag-danger';
+    } finally {
+      btnTellSync.disabled = false;
+    }
+  }
 
-  const nifBtn = document.getElementById("btn-import-nif");
-  if (nifBtn) nifBtn.addEventListener("click", importNifList);
+  async function runNifImport() {
+    const csv = nifTextarea.value.trim();
+    if (!csv) {
+      nifMsg.textContent = 'Lim inn CSV-data fra NIF først.';
+      nifMsg.className = 'mt-1 small tag-danger';
+      return;
+    }
+    nifMsg.textContent = 'Importer NIF-data...';
+    nifMsg.className = 'mt-1 small text-muted';
+    btnNifImport.disabled = true;
+    try {
+      const res = await fetch('/api/admin/nif-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csv })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      nifMsg.textContent = `Importert. Matchet: ${data.matched}, ikke matchet: ${data.unmatched}.`;
+      nifMsg.className = 'mt-1 small tag-success';
+      await loadMembers();
+    } catch (e) {
+      console.error('NIF-import error:', e);
+      nifMsg.textContent = 'Feil ved NIF-import: ' + e.message;
+      nifMsg.className = 'mt-1 small tag-danger';
+    } finally {
+      btnNifImport.disabled = false;
+    }
+  }
 
-  loadHealth();
-  loadMembers();
-});
+  // Event listeners
+  searchInput.addEventListener('input', () => renderMembers());
+  filterPlan.addEventListener('change', () => renderMembers());
 
-  </script>
+  membersTableBody.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-email]');
+    if (!btn) return;
+    const email = btn.getAttribute('data-email');
+    if (!email) return;
+    toggleMemberActive(email);
+  });
+
+  btnAddMember.addEventListener('click', addMember);
+  btnTellSync.addEventListener('click', runTellSync);
+  btnReloadMembers.addEventListener('click', () => {
+    loadMembers();
+    loadOrders();
+  });
+
+  btnNifImport.addEventListener('click', runNifImport);
+  btnClearNif.addEventListener('click', () => {
+    nifTextarea.value = '';
+    nifMsg.textContent = '';
+  });
+
+  // Init
+  (async function init() {
+    await loadMembers();
+    await loadOrders();
+  })();
+</script>
 </body>
 </html>
+

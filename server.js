@@ -416,6 +416,13 @@ app.get('/admin/members', basicAuth, (req, res) => {
   res.json(members);
 });
 
+// Hent alle Vipps-ordrer (vises i admin)
+app.get('/admin/orders', basicAuth, (req, res) => {
+  const orders = getOrders();
+  res.json(orders);
+});
+
+
 // Legg til/oppdater medlem (nytt admin-UI)
 app.post('/admin/members', basicAuth, (req, res) => {
   const body = req.body || {};
