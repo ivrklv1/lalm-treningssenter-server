@@ -200,28 +200,58 @@ function parseCookies(cookieHeader) {
 }
 
 // ----------------------------
-// TELL Gate Control API
+// TELL-konfig
 // ----------------------------
-const TELL_BASE_URL =
-  process.env.TELL_BASE_URL || 'https://tellcoreapi.azurewebsites.net/api';
+const TELL = {
+  base: 'https://api.tell.hu',
+  apiKey: process.env.TELL_API_KEY,
+  hwid: process.env.TELL_HWID,            // Hardware ID
+  appId: process.env.TELL_APP_ID,         // App-ID / Channel ID
+};
 
-async function tellAddUser(phone, name) {
-  const body = {
-    phoneNumber: normalizePhone(phone),
-    name: name || phone,
+// Hjelpefunksjon: lage auth-headere
+function tellHeaders() {
+  if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
+    console.warn('TELL-konfig ikke komplett, mangler env-variabler.');
+  }
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${TELL.apiKey}`,
   };
+}
 
-  console.log('Sender til TELL addUser:', body);
+// ----------------------------
+// Legg til bruker i TELL (adgang)
+// ----------------------------
+async function tellAddUser(phone, name) {
+  const phoneNormalized = normalizePhone(phone);
+  if (!phoneNormalized) {
+    console.warn('[TELL] tellAddUser kalt uten gyldig telefonnummer');
+    return;
+  }
 
-  const res = await axios.post(`${TELL_BASE_URL}/adduser`, body, {
-    headers: {
-      'x-functions-key': process.env.TELL_API_KEY,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  console.log('Svar fra TELL addUser:', res.data);
-  return res.data;
+  try {
+    const headers = tellHeaders();
+    const data = { hwid: TELL.hwid, appId: TELL.appId, phone: phoneNormalized, name };
+    const r = await axios.post(`${TELL.base}/gc/adduser`, data, { headers });
+    console.log(`✅ [TELL] La til ${name} (${phoneNormalized})`);
+    fs.appendFileSync(
+      'access.log',
+      `[${new Date().toISOString()}] [TELL SYNC] La til bruker ${name} ${phoneNormalized}\n`
+    );
+    return r.data;
+  } catch (e) {
+    console.error(
+      `❌ [TELL] Feil ved legg til ${phoneNormalized}:`,
+      e?.response?.data || e.message
+    );
+    fs.appendFileSync(
+      'access.log',
+      `[${new Date().toISOString()}] [TELL SYNC ERROR] Klarte ikke legge til ${name} ${phoneNormalized}: ${
+        e?.response?.data?.message || e.message
+      }\n`
+    );
+  }
 }
 
 // ----------------------------
