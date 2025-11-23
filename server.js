@@ -240,10 +240,10 @@ function tellHeaders() {
   }
   return {
     'Content-Type': 'application/json',
-    // Viktig: header-navn skal være "API key" ifølge dokumentasjonen
-    'API key': TELL.apiKey,
+    'ApiKey': TELL.apiKey,
   };
 }
+
 
 // ----------------------------
 // Legg til bruker i TELL (adgang) – /gc/adduser
