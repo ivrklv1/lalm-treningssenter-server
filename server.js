@@ -218,26 +218,36 @@ const doorConfig = {
 };
 
 // ----------------------------
-// TELL-konfig
+// TELL-konfig (Gate Control PRO)
 // ----------------------------
 const TELL = {
   base: 'https://api.tell.hu',
   apiKey: process.env.TELL_API_KEY,
-  hwid: process.env.TELL_HWID, // Hardware ID
-  appId: process.env.TELL_APP_ID, // App-ID / Channel ID
+  hwId: process.env.TELL_HWID,                // f.eks. "11:22:33:44:55:D1"
+  appId: process.env.TELL_APP_ID,             // 40-tegns appId fra /gc/addappid
+  hwName: process.env.TELL_HW_NAME || 'Lalm Treningssenter',
+  inserter: process.env.TELL_INSERTER || 'Lalm Treningssenter admin',
+  schemes: (process.env.TELL_SCHEMES || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean),
 };
 
+// Hjelpefunksjon: lage auth-headere
 function tellHeaders() {
-  if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
-    console.warn('TELL-konfig ikke komplett, mangler env-variabler.');
+  if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
+    console.warn('TELL-konfig ikke komplett (API key / hwId / appId mangler).');
   }
   return {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${TELL.apiKey}`,
+    // Viktig: header-navn skal være "API key" ifølge dokumentasjonen
+    'API key': TELL.apiKey,
   };
 }
 
-// Legg til bruker i TELL
+// ----------------------------
+// Legg til bruker i TELL (adgang) – /gc/adduser
+// ----------------------------
 async function tellAddUser(phone, name) {
   const phoneNormalized = normalizePhone(phone);
   if (!phoneNormalized) {
@@ -245,24 +255,59 @@ async function tellAddUser(phone, name) {
     return;
   }
 
-  // TELL liker ofte rene sifre (ingen + eller mellomrom)
+  // Kun sifre til TELL (ingen + eller mellomrom)
   const phoneDigits = phoneNormalized.replace(/\D/g, '');
   if (!phoneDigits) {
     console.warn('[TELL] tellAddUser: klarte ikke å hente siffer fra telefon:', phone);
     return;
   }
 
-  try {
-    const headers = tellHeaders();
-    const data = {
-      hwid: TELL.hwid,
-      appId: TELL.appId,
-      phone: phoneDigits,
-      name: name || phoneDigits,
-    };
-    console.log('[TELL] adduser payload:', data);
+  const headers = tellHeaders();
 
-    const r = await axios.post(`${TELL.base}/gc/adduser`, data, { headers });
+  // Body bygget etter "ADD USER" i dokumentasjonen
+  const body = {
+    hwId: TELL.hwId,
+    hwName: TELL.hwName,
+    appId: TELL.appId,
+
+    // Brukernavn + visningsnavn
+    name: phoneDigits,                // "username"
+    fname: name || phoneDigits,       // "full name / comment"
+    phoneNumber: phoneDigits,
+
+    // Tilgangsskjema – kan være tom array hvis dere ikke bruker templates enda
+    schemes: TELL.schemes,
+
+    // Hva brukeren får lov til
+    go1: true,       // kan styre utgang 1
+    go2: false,      // ingen utgang 2
+    out1: true,
+    out2: false,
+
+    // Varslinger – slått av til å begynne med
+    pushD: false,
+    smsD: false,
+    call: false,
+    sms: false,
+    pushE: false,
+    doorBell: false,
+    cam1: false,
+    cam2: false,
+
+    // Hvem som la inn brukeren
+    inserter: TELL.inserter,
+
+    // Rolle: U = vanlig bruker
+    role: 'U',
+
+    // Ingen spesialregel
+    specificRuleType: '',
+  };
+
+  console.log('[TELL] adduser payload:', body);
+
+  try {
+    const r = await axios.post(`${TELL.base}/gc/adduser`, body, { headers });
     console.log(`✅ [TELL] La til ${name} (${phoneDigits})`, r.data);
     fs.appendFileSync(
       ACCESS_LOG,
@@ -280,8 +325,10 @@ async function tellAddUser(phone, name) {
         JSON.stringify(e?.response?.data || e.message)
       }\n`
     );
+    throw e;
   }
 }
+
 
 // Test-endepunkt for TELL: sjekk at API-nøkkel, hwid og appId fungerer
 app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
