@@ -396,7 +396,7 @@
       <div id="membersError" class="mt-2 small tag-danger" style="display:none;"></div>
     </section>
 
-    <!-- HØYRE: Legg til medlem + Ordrer -->
+    <!-- HØYRE: Legg til medlem + Verktøy + SMS + Ordrer -->
     <section class="card">
       <!-- Legg til medlem -->
       <div class="card-title-row">
@@ -465,6 +465,73 @@
             <button id="btnClearNif" class="btn-ghost">Tøm felt</button>
           </div>
           <div id="nifMsg" class="mt-1 small"></div>
+        </div>
+      </div>
+
+      <!-- SMS til medlemmer -->
+      <div class="right-column-section">
+        <div class="card-title-row" style="margin-bottom:8px;">
+          <div>
+            <div class="card-title">SMS til medlemmer</div>
+            <div class="card-subtitle">
+              Send meldinger til segmenter eller valgte medlemmer.
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-2">
+          <label for="smsMessage"><strong>Melding</strong></label>
+          <textarea id="smsMessage" rows="3" placeholder="Skriv SMS-meldingen her…"></textarea>
+        </div>
+
+        <div class="mt-2 small">
+          <strong>Velg mottakere:</strong><br />
+          <label style="margin-right: 12px;">
+            <input type="radio" name="smsMode" value="segment" checked />
+            Segment (aktive / inaktive / alle)
+          </label>
+          <label>
+            <input type="radio" name="smsMode" value="selected" />
+            Valgte medlemmer (huk av i lista)
+          </label>
+        </div>
+
+        <div id="smsSegmentWrapper" class="mt-2">
+          <label for="smsSegment"><strong>Segment</strong></label>
+          <select id="smsSegment">
+            <option value="active">Aktive medlemmer</option>
+            <option value="inactive">Inaktive medlemmer</option>
+            <option value="all">Alle medlemmer</option>
+          </select>
+        </div>
+
+        <div class="mt-3 small">
+          <strong>Medlemsliste for avhuking</strong>
+        </div>
+
+        <div style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; margin-top: 6px;">
+          <table style="width:100%; border-collapse: collapse; font-size:0.75rem;">
+            <thead style="position: sticky; top:0; background: rgba(15,23,42,0.96);">
+              <tr>
+                <th style="padding:6px; border-bottom:1px solid #1f2937; text-align:center;">
+                  <input type="checkbox" id="smsSelectAll" />
+                </th>
+                <th style="padding:6px; border-bottom:1px solid #1f2937; text-align:left;">Navn</th>
+                <th style="padding:6px; border-bottom:1px solid #1f2937; text-align:left;">Telefon</th>
+                <th style="padding:6px; border-bottom:1px solid #1f2937; text-align:left;">Status</th>
+              </tr>
+            </thead>
+            <tbody id="smsMembersBody">
+              <tr>
+                <td colspan="4" class="text-muted" style="padding:6px;">Laster medlemmer…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-2">
+          <button id="sendSmsBtn" class="btn-secondary">📩 Send SMS</button>
+          <span id="smsStatus" class="small" style="margin-left:8px;"></span>
         </div>
       </div>
 
@@ -542,8 +609,19 @@
   const newPhone = document.getElementById('newPhone');
   const newPlan = document.getElementById('newPlan');
 
+  // SMS-panel elementer
+  const smsMessageEl = document.getElementById('smsMessage');
+  const smsSegmentEl = document.getElementById('smsSegment');
+  const smsStatusEl = document.getElementById('smsStatus');
+  const smsSelectAllEl = document.getElementById('smsSelectAll');
+  const smsMembersBodyEl = document.getElementById('smsMembersBody');
+  const smsSegmentWrapperEl = document.getElementById('smsSegmentWrapper');
+  const sendSmsBtn = document.getElementById('sendSmsBtn');
+  const SMS_API_URL = '/admin/sms/broadcast';
+
   let allMembers = [];
   let allOrders = [];
+  let smsMembers = [];
 
   function setServerStatus(ok, text) {
     serverStatusEl.classList.toggle('badge-error', !ok);
@@ -598,35 +676,37 @@
 
     if (!filtered.length) {
       membersTableBody.innerHTML = '<tr><td colspan="7" class="text-muted">Ingen medlemmer funnet.</td></tr>';
-      return;
+    } else {
+      membersTableBody.innerHTML = '';
+      filtered.forEach(m => {
+        const tr = document.createElement('tr');
+
+        const ilText = m.clubMember ? 'Ja' : 'Nei';
+        const statusClass = m.active ? 'status-active' : 'status-inactive';
+        const statusLabel = m.active ? 'Aktiv' : 'Inaktiv';
+
+        tr.innerHTML = `
+          <td>${m.name || '–'}</td>
+          <td>${m.email || '–'}</td>
+          <td>${m.phone || '–'}</td>
+          <td>${m.plan || '–'}</td>
+          <td>${ilText}</td>
+          <td class="status">
+            <div class="status-pill ${statusClass}">
+              <span></span>
+              <span>${statusLabel}</span>
+            </div>
+          </td>
+          <td>
+            <button class="btn-ghost" data-email="${m.email}">${m.active ? 'Deaktiver' : 'Aktiver'}</button>
+          </td>
+        `;
+        membersTableBody.appendChild(tr);
+      });
     }
 
-    membersTableBody.innerHTML = '';
-    filtered.forEach(m => {
-      const tr = document.createElement('tr');
-
-      const ilText = m.clubMember ? 'Ja' : 'Nei';
-      const statusClass = m.active ? 'status-active' : 'status-inactive';
-      const statusLabel = m.active ? 'Aktiv' : 'Inaktiv';
-
-      tr.innerHTML = `
-        <td>${m.name || '–'}</td>
-        <td>${m.email || '–'}</td>
-        <td>${m.phone || '–'}</td>
-        <td>${m.plan || '–'}</td>
-        <td>${ilText}</td>
-        <td class="status">
-          <div class="status-pill ${statusClass}">
-            <span></span>
-            <span>${statusLabel}</span>
-          </div>
-        </td>
-        <td>
-          <button class="btn-ghost" data-email="${m.email}">${m.active ? 'Deaktiver' : 'Aktiver'}</button>
-        </td>
-      `;
-      membersTableBody.appendChild(tr);
-    });
+    // Oppdater SMS-listen samtidig
+    renderSmsMembers();
   }
 
   function renderOrders() {
@@ -830,6 +910,131 @@
     }
   }
 
+  // ---------- SMS-funksjoner ----------
+
+  function getSmsMode() {
+    const checked = document.querySelector('input[name="smsMode"]:checked');
+    return checked ? checked.value : 'segment';
+  }
+
+  function updateSmsModeUi() {
+    if (!smsSegmentWrapperEl) return;
+    const mode = getSmsMode();
+    if (mode === 'segment') {
+      smsSegmentWrapperEl.style.opacity = '1';
+      smsSegmentWrapperEl.style.pointerEvents = 'auto';
+    } else {
+      smsSegmentWrapperEl.style.opacity = '0.4';
+      smsSegmentWrapperEl.style.pointerEvents = 'none';
+    }
+  }
+
+  function renderSmsMembers() {
+    if (!smsMembersBodyEl) return;
+
+    smsMembers = allMembers || [];
+
+    if (!smsMembers.length) {
+      smsMembersBodyEl.innerHTML =
+        '<tr><td colspan="4" class="text-muted" style="padding:6px;">Ingen medlemmer i listen.</td></tr>';
+      if (smsSelectAllEl) smsSelectAllEl.checked = false;
+      return;
+    }
+
+    smsMembersBodyEl.innerHTML = '';
+    smsMembers.forEach(m => {
+      const name =
+        m.name ||
+        [m.firstName, m.lastName].filter(Boolean).join(' ') ||
+        m.email ||
+        'Ukjent';
+
+      const phone = m.phone || m.mobile || m.phoneFull || '';
+
+      const statusLabel = m.active ? 'Aktiv' : 'Inaktiv';
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="padding:4px; border-bottom:1px solid #111827; text-align:center;">
+          <input
+            type="checkbox"
+            class="smsMemberCheckbox"
+            data-phone="${phone}"
+          />
+        </td>
+        <td style="padding:4px; border-bottom:1px solid #111827;">${name}</td>
+        <td style="padding:4px; border-bottom:1px solid #111827;">${phone}</td>
+        <td style="padding:4px; border-bottom:1px solid #111827;">${statusLabel}</td>
+      `;
+      smsMembersBodyEl.appendChild(tr);
+    });
+
+    if (smsSelectAllEl) smsSelectAllEl.checked = false;
+  }
+
+  async function sendSmsFromPanel() {
+    if (!smsMessageEl) return;
+
+    const message = smsMessageEl.value.trim();
+    const mode = getSmsMode();
+
+    if (!message) {
+      smsStatusEl.textContent = 'Meldingen kan ikke være tom.';
+      smsStatusEl.style.color = '#f97373';
+      return;
+    }
+
+    const payload = { message };
+
+    if (mode === 'segment') {
+      if (smsSegmentEl) {
+        payload.segment = smsSegmentEl.value;
+      } else {
+        payload.segment = 'all';
+      }
+    } else {
+      const selectedPhones = [];
+      document.querySelectorAll('.smsMemberCheckbox:checked').forEach(cb => {
+        const p = cb.getAttribute('data-phone');
+        if (p) selectedPhones.push(p);
+      });
+
+      if (!selectedPhones.length) {
+        smsStatusEl.textContent = 'Ingen medlemmer er huket av.';
+        smsStatusEl.style.color = '#f97373';
+        return;
+      }
+      payload.phones = selectedPhones;
+    }
+
+    if (!confirm('Send SMS nå?')) return;
+
+    try {
+      smsStatusEl.textContent = 'Sender...';
+      smsStatusEl.style.color = '#9ca3af';
+
+      const res = await fetch(SMS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || ('HTTP ' + res.status));
+      }
+
+      smsStatusEl.textContent =
+        `Sendt til ${data.sent} av ${data.attempted} numre. Feil: ${data.failed}.`;
+      smsStatusEl.style.color = '#22c55e';
+      smsMessageEl.value = '';
+    } catch (e) {
+      console.error('Feil ved SMS-utsending:', e);
+      smsStatusEl.textContent = 'Feil ved sending av SMS: ' + e.message;
+      smsStatusEl.style.color = '#f97373';
+    }
+  }
+
   // Event listeners
   searchInput.addEventListener('input', () => renderMembers());
   filterPlan.addEventListener('change', () => renderMembers());
@@ -855,12 +1060,29 @@
     nifMsg.textContent = '';
   });
 
+  if (smsSelectAllEl) {
+    smsSelectAllEl.addEventListener('change', () => {
+      const checked = smsSelectAllEl.checked;
+      document.querySelectorAll('.smsMemberCheckbox').forEach(cb => {
+        cb.checked = checked;
+      });
+    });
+  }
+
+  document.querySelectorAll('input[name="smsMode"]').forEach(rb => {
+    rb.addEventListener('change', updateSmsModeUi);
+  });
+
+  if (sendSmsBtn) {
+    sendSmsBtn.addEventListener('click', sendSmsFromPanel);
+  }
+
   // Init
   (async function init() {
+    updateSmsModeUi();
     await loadMembers();
     await loadOrders();
   })();
 </script>
 </body>
 </html>
-
