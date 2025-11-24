@@ -1567,6 +1567,21 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     if (!res.headersSent) return res.status(200).send('OK');
   }
 });
+const fs = require('fs');
+const path = require('path');
+
+const MEMBERS_FILE = path.join(process.cwd(), 'data', 'members.json');
+
+function loadMembers() {
+  if (!fs.existsSync(MEMBERS_FILE)) return [];
+  const raw = fs.readFileSync(MEMBERS_FILE, 'utf8');
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Kunne ikke parse members.json:', e);
+    return [];
+  }
+}
 
 /**
  * Admin-endpoint: send SMS til medlemmer
