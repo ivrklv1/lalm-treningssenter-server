@@ -428,7 +428,10 @@ const eurobateConfig = {
   simulate: process.env.EUROBATE_SIMULATE === '1' ? 1 : 0,
 };
 
-async function sendSmsLoginCode(phone, code) {
+/**
+ * Felles helper for å sende SMS via Eurobate
+ */
+async function sendSms(phone, message) {
   const phoneNormalized = normalizePhone(phone);
   if (!phoneNormalized) {
     throw new Error('Ugyldig telefonnummer');
@@ -438,8 +441,6 @@ async function sendSmsLoginCode(phone, code) {
   if (!Number.isFinite(msisdn)) {
     throw new Error('Ugyldig msisdn etter normalisering');
   }
-
-  const message = `Lalm Treningssenter: Din kode er ${code}.\n#${code}`;
 
   const payload = {
     user: eurobateConfig.user,
@@ -458,9 +459,18 @@ async function sendSmsLoginCode(phone, code) {
     headers: { 'Content-Type': 'application/json' },
   });
 
-  console.log('Eurobate-respons:', res.data);
+  console.log('Eurobate-respons (sendSms):', res.data);
   return res.data;
 }
+
+/**
+ * Spesialisert funksjon for innloggingskode
+ */
+async function sendSmsLoginCode(phone, code) {
+  const message = `Lalm Treningssenter: Din kode er ${code}.\n#${code}`;
+  return sendSms(phone, message);
+}
+
 
 // ----------------------------
 // Middleware
@@ -1557,6 +1567,76 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     if (!res.headersSent) return res.status(200).send('OK');
   }
 });
+
+/**
+ * Admin-endpoint: send SMS til medlemmer
+ * body: { message: string, segment: 'active' | 'inactive' | 'all' }
+ */
+app.post('/admin/sms/broadcast', async (req, res) => {
+  try {
+    const { message, segment } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Meldingen kan ikke være tom.' });
+    }
+
+    const members = loadMembers();
+
+    let targets = members;
+    if (segment === 'active') {
+      targets = members.filter((m) => m.isActive);
+    } else if (segment === 'inactive') {
+      targets = members.filter((m) => !m.isActive);
+    }
+    // segment === 'all' → ingen ekstra filtrering
+
+    // Plukk ut unike telefonnummer
+    const seen = new Set();
+    const phones = [];
+
+    for (const m of targets) {
+      if (!m.mobile) continue;
+      const norm = normalizePhone(m.mobile);
+      if (!norm) continue;
+      if (seen.has(norm)) continue;
+      seen.add(norm);
+      phones.push(norm);
+    }
+
+    if (phones.length === 0) {
+      return res
+        .status(400)
+        .json({ error: 'Fant ingen medlemmer med gyldig telefonnummer.' });
+    }
+
+    let sent = 0;
+    let failed = 0;
+
+    // Send én og én – enkelt og robust
+    for (const phone of phones) {
+      try {
+        await sendSms(phone, message);
+        sent++;
+      } catch (err) {
+        console.error('Feil ved SMS til', phone, err.message);
+        failed++;
+      }
+    }
+
+    return res.json({
+      ok: true,
+      segment: segment || 'all',
+      totalCandidates: targets.length,
+      attempted: phones.length,
+      sent,
+      failed,
+    });
+  } catch (err) {
+    console.error('Feil i /admin/sms/broadcast:', err);
+    return res.status(500).json({ error: 'Kunne ikke sende SMS. Sjekk server-loggen.' });
+  }
+});
+
 
 // ----------------------------
 // Start server
