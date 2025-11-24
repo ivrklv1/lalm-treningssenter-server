@@ -1570,8 +1570,6 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
 const fs = require('fs');
 const path = require('path');
 
-const MEMBERS_FILE = path.join(process.cwd(), 'data', 'members.json');
-
 function loadMembers() {
   if (!fs.existsSync(MEMBERS_FILE)) return [];
   const raw = fs.readFileSync(MEMBERS_FILE, 'utf8');
