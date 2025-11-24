@@ -1567,39 +1567,27 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     if (!res.headersSent) return res.status(200).send('OK');
   }
 });
-const fs = require('fs');
-const path = require('path');
-
-function loadMembers() {
-  if (!fs.existsSync(MEMBERS_FILE)) return [];
-  const raw = fs.readFileSync(MEMBERS_FILE, 'utf8');
-  try {
-    return JSON.parse(raw);
-  } catch (e) {
-    console.error('Kunne ikke parse members.json:', e);
-    return [];
-  }
-}
 
 /**
  * Admin-endpoint: send SMS til medlemmer
  * body: { message: string, segment: 'active' | 'inactive' | 'all' }
  */
-app.post('/admin/sms/broadcast', async (req, res) => {
+app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
   try {
-    const { message, segment } = req.body;
+    const { message, segment } = req.body || {};
 
     if (!message || !message.trim()) {
       return res.status(400).json({ error: 'Meldingen kan ikke være tom.' });
     }
 
-    const members = loadMembers();
+    // Bruk eksisterende helper
+    const members = getMembers();
 
     let targets = members;
     if (segment === 'active') {
-      targets = members.filter((m) => m.isActive);
+      targets = members.filter((m) => m.active);   // merk: feltet heter "active"
     } else if (segment === 'inactive') {
-      targets = members.filter((m) => !m.isActive);
+      targets = members.filter((m) => !m.active);
     }
     // segment === 'all' → ingen ekstra filtrering
 
@@ -1608,10 +1596,14 @@ app.post('/admin/sms/broadcast', async (req, res) => {
     const phones = [];
 
     for (const m of targets) {
-      if (!m.mobile) continue;
-      const norm = normalizePhone(m.mobile);
+      // vi prøver flere felt, siden gamle og nye members kan ha litt ulik struktur
+      const candidatePhone = m.phone || m.mobile || m.phoneFull;
+      if (!candidatePhone) continue;
+
+      const norm = normalizePhone(candidatePhone);
       if (!norm) continue;
       if (seen.has(norm)) continue;
+
       seen.add(norm);
       phones.push(norm);
     }
@@ -1625,7 +1617,6 @@ app.post('/admin/sms/broadcast', async (req, res) => {
     let sent = 0;
     let failed = 0;
 
-    // Send én og én – enkelt og robust
     for (const phone of phones) {
       try {
         await sendSms(phone, message);
@@ -1649,6 +1640,7 @@ app.post('/admin/sms/broadcast', async (req, res) => {
     return res.status(500).json({ error: 'Kunne ikke sende SMS. Sjekk server-loggen.' });
   }
 });
+
 
 
 // ----------------------------
