@@ -24,6 +24,7 @@ const PORT = Number(process.env.PORT || 3000);
 // ----------------------------
 // Filbasert lagring → persistent /data på Render
 // ----------------------------
+// NB: Render lager tom /data ved deploy. Ikke bruk .json filer i repo for prod-data.
 const DATA_DIR = process.env.DATA_DIR || '/data';
 
 try {
@@ -267,9 +268,9 @@ function tellHeaders() {
   };
 }
 
-
 // ----------------------------
 // Legg til bruker i TELL (adgang) – /gc/adduser
+// NB: Denne funksjonen blir ikke lenger brukt automatisk i systemet
 // ----------------------------
 async function tellAddUser(phone, name) {
   const phoneNormalized = normalizePhone(phone);
@@ -352,28 +353,8 @@ async function tellAddUser(phone, name) {
   }
 }
 
-
-// Test-endepunkt for TELL: sjekk at API-nøkkel, hwid og appId fungerer
-app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
-  try {
-    const headers = tellHeaders();
-    const data = { hwid: TELL.hwid, appId: TELL.appId, gateIndex: 1 };
-
-    const r = await axios.post(`${TELL.base}/gc/open`, data, { headers });
-    console.log('[TELL TEST] gc/open result:', r.data);
-
-    return res.json({ ok: true, response: r.data });
-  } catch (e) {
-    console.error('[TELL TEST] error:', e?.response?.data || e.message);
-    return res.status(500).json({
-      ok: false,
-      error: e?.response?.data || e.message,
-    });
-  }
-});
-
-
 // Fjern bruker i TELL
+// NB: Ikke lenger brukt automatisk
 async function tellRemoveUser(phone) {
   const phoneNormalized = normalizePhone(phone);
   if (!phoneNormalized) return;
@@ -400,6 +381,7 @@ async function gcOpen(gateIndex) {
 }
 
 // Synk alle aktive medlemmer til TELL
+// NB: Ikke lenger brukt via admin-API (endpoint er deaktivert)
 async function tellSyncAll() {
   const members = getMembers();
   for (const m of members) {
@@ -415,6 +397,25 @@ async function tellSyncAll() {
     }
   }
 }
+
+// Test-endepunkt for TELL: sjekk at API-nøkkel, hwid og appId fungerer
+app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
+  try {
+    const headers = tellHeaders();
+    const data = { hwid: TELL.hwid, appId: TELL.appId, gateIndex: 1 };
+
+    const r = await axios.post(`${TELL.base}/gc/open`, data, { headers });
+    console.log('[TELL TEST] gc/open result:', r.data);
+
+    return res.json({ ok: true, response: r.data });
+  } catch (e) {
+    console.error('[TELL TEST] error:', e?.response?.data || e.message);
+    return res.status(500).json({
+      ok: false,
+      error: e?.response?.data || e.message,
+    });
+  }
+});
 
 // ----------------------------
 // Eurobate SMS-konfig
@@ -470,7 +471,6 @@ async function sendSmsLoginCode(phone, code) {
   const message = `Lalm Treningssenter: Din kode er ${code}.\n#${code}`;
   return sendSms(phone, message);
 }
-
 
 // ----------------------------
 // Middleware
@@ -535,7 +535,6 @@ app.get('/admin/orders', basicAuth, (req, res) => {
   const orders = getOrders();
   res.json(orders);
 });
-
 
 // Legg til/oppdater medlem (nytt admin-UI)
 app.post('/admin/members', basicAuth, (req, res) => {
@@ -614,13 +613,7 @@ app.post('/api/admin/members', basicAuth, async (req, res) => {
   members.push(member);
   saveMembers(members);
 
-  try {
-    if (member.active && member.phone) {
-      await tellAddUser(member.phone, member.name || member.email);
-    }
-  } catch (e) {
-    console.error('tellAddUser error:', e?.response?.data || e.message);
-  }
+  // TELL-sync fjernet: vi legger ikke lenger brukere automatisk inn i TELL
 
   res.json({ ok: true, member });
 });
@@ -636,16 +629,7 @@ app.post('/api/admin/members/toggle', basicAuth, async (req, res) => {
   members[idx].active = !members[idx].active;
   saveMembers(members);
 
-  try {
-    const { phone, name, active } = members[idx];
-    if (phone) {
-      active
-        ? await tellAddUser(phone, name || email.toLowerCase())
-        : await tellRemoveUser(phone);
-    }
-  } catch (e) {
-    console.error('TELL toggle sync error:', e?.response?.data || e.message);
-  }
+  // TELL-sync fjernet
 
   res.json({ ok: true, active: members[idx].active });
 });
@@ -661,24 +645,15 @@ app.delete('/api/admin/members', basicAuth, async (req, res) => {
     return res.status(404).json({ error: 'not_found' });
   }
 
-  try {
-    if (victim?.phone) await tellRemoveUser(victim.phone);
-  } catch (e) {
-    console.error('tellRemoveUser error:', e?.response?.data || e.message);
-  }
+  // TELL-sync fjernet (vi fjerner ikke automatisk fra TELL lenger)
 
   saveMembers(filtered);
   res.json({ ok: true });
 });
 
+// TELL-sync endpoint deaktivert
 app.post('/api/admin/tell-sync', basicAuth, async (req, res) => {
-  try {
-    await tellSyncAll();
-    res.json({ ok: true });
-  } catch (e) {
-    console.error('tellSyncAll error:', e?.response?.data || e.message);
-    res.status(500).json({ ok: false, error: 'tell_sync_failed' });
-  }
+  return res.status(501).json({ ok: false, error: 'tell_sync_disabled' });
 });
 
 app.post('/api/admin/nif-import', basicAuth, (req, res) => {
@@ -959,11 +934,7 @@ app.post('/dropin/create', async (req, res) => {
       validUntil: validUntil.toISOString(),
     });
 
-    try {
-      await tellAddUser(phoneNormalized, personName || phoneNormalized);
-    } catch (e) {
-      console.error('Feil ved sync mot TELL for drop-in:', e?.message);
-    }
+    // TELL-sync for drop-in er fjernet
 
     appendAccessLog(
       `[${new Date().toISOString()}] DROPIN_CREATE phone=${phoneNormalized} token=${token} validUntil=${validUntil.toISOString()}\n`,
@@ -1157,14 +1128,20 @@ app.post('/auth/verify-code', async (req, res) => {
 // Vipps RETURN -> redirect til app
 // ===============================
 app.get('/vipps/return', (req, res) => {
-  const { orderId } = req.query;
+  const { orderId, status } = req.query;
 
-  // Deeplink inn i appen
-  const deepLink = `lalmtreningssenter://payment-result?orderId=${orderId}`;
+  // Base deeplink kan evt. ligge i .env
+  const deeplinkBase =
+    process.env.APP_RETURN_URL || 'lalmtreningssenter://payment-result';
+
+  const finalStatus = (status && String(status)) || 'success';
+
+  const deepLink =
+    `${deeplinkBase}?status=${encodeURIComponent(finalStatus)}` +
+    (orderId ? `&orderId=${encodeURIComponent(String(orderId))}` : '');
 
   return res.redirect(deepLink);
 });
-
 
 // =====================================================
 // Vipps Checkout / eCom payment – NY modell m/orders.json
@@ -1187,7 +1164,7 @@ app.post('/vipps/checkout', async (req, res) => {
     // 1) Lag orderId
     const orderId = 'ORDER-' + Date.now();
 
-    // 2) ⭐ NY LINJE: returnUrl som peker til backend -> /vipps/return
+    // 2) ⭐ returnUrl som peker til backend -> /vipps/return
     const returnUrl = `${process.env.SERVER_URL}/vipps/return?orderId=${orderId}`
 
     // Medlemskap og full månedspris (i øre)
@@ -1225,7 +1202,11 @@ app.post('/vipps/checkout', async (req, res) => {
         text: 'Standard – uten binding',
         prorate: true
       },
-      // Ev. senere: DROPIN, etc.
+      DROPIN: {
+  amount: 14900, // 50 kr i øre (juster pris)
+  text: 'Drop-in adgang (gyldig i dag)',
+  prorate: false
+},
     };
 
     const selected = membershipMap[membershipKey];
@@ -1479,7 +1460,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       `[${new Date().toISOString()}] VIPPS_STATUS orderId=${orderId} status=${status} mapped=${newStatus}\n`
     );
 
-    // 4) Ved betalt → aktiver medlem
+    // 4) Ved betalt → aktiver medlem (uten TELL-sync)
     if (['RESERVED', 'SALE', 'CAPTURED'].includes(newStatus)) {
       const members = getMembers();
       const phoneDigits = String(updatedOrder.phone || '').replace(/\D/g, '');
@@ -1498,11 +1479,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
             membersChanged = true;
 
             memberId = m.id || null;
-            try {
-              await tellAddUser(m.phone, m.name || m.email);
-            } catch (e) {
-              console.error('TELL sync feilet:', e?.response?.data || e.message);
-            }
+            // TELL-sync fjernet
           }
         }
       }
@@ -1526,13 +1503,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         membersChanged = true;
         memberId = newMemberId;
 
-        try {
-          if (newMember.phone) {
-            await tellAddUser(newMember.phone, newMember.name || newMember.email);
-          }
-        } catch (e) {
-          console.error('TELL sync (nytt medlem) feilet:', e?.response?.data || e.message);
-        }
+        // TELL-sync for nye medlemmer er fjernet
 
         appendAccessLog(
           `[${new Date().toISOString()}] VIPPS_CREATED_MEMBER orderId=${orderId} email=${newMember.email}\n`
@@ -1640,8 +1611,6 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
     return res.status(500).json({ error: 'Kunne ikke sende SMS. Sjekk server-loggen.' });
   }
 });
-
-
 
 // ----------------------------
 // Start server
