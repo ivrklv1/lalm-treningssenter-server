@@ -1154,12 +1154,17 @@ app.post('/vipps/checkout', async (req, res) => {
   try {
     const { membershipKey, phone, name, email } = req.body || {};
 
-    if (!membershipKey || !phone || !email) {
-      return res.status(400).json({
-        ok: false,
-        error: 'membershipKey_phone_email_required'
-      });
-    }
+// E-post er påkrevd for alle andre enn DROPIN
+if (!membershipKey || !phone || (!email && membershipKey !== 'DROPIN')) {
+  return res.status(400).json({
+    ok: false,
+    error:
+      membershipKey === 'DROPIN'
+        ? 'membershipKey_phone_required'
+        : 'membershipKey_phone_email_required'
+  });
+}
+
 
     // 1) Lag orderId
     const orderId = 'ORDER-' + Date.now();
@@ -1259,10 +1264,10 @@ app.post('/vipps/checkout', async (req, res) => {
     }
 
     // Innmeldingsavgift 199,-
-    let SIGNUP_FEE = 19900;
-    if (membershipKey === 'TEST_1KR') {
-      SIGNUP_FEE = 0;
-    }
+let SIGNUP_FEE = 19900;
+if (membershipKey === 'TEST_1KR' || membershipKey === 'DROPIN') {
+  SIGNUP_FEE = 0;
+}
 
     const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
 
