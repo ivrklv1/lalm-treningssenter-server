@@ -111,7 +111,7 @@ function normalizePhone(raw) {
 // ----------------------------
 // Apple testbruker (for App Review)
 // ----------------------------
-const APPLE_TEST_PHONE = process.env.APPLE_TEST_PHONE || '+4712345678'; // legg inn ditt nr i .env
+const APPLE_TEST_PHONE = process.env.APPLE_TEST_PHONE || '+4799999999'; // legg inn ditt nr i .env
 const APPLE_TEST_CODE = process.env.APPLE_TEST_CODE || '111111';        // koden Apple skal bruke
 
 // ----------------------------
