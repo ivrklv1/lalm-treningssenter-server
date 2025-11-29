@@ -67,6 +67,52 @@ function appendAccessLog(line) {
     console.error('Kunne ikke skrive til access.log:', e.message);
   }
 }
+// ----------------------------
+// Normalisering av telefonnummer
+// ----------------------------
+function normalizePhone(raw) {
+  if (!raw) return null;
+
+  // Fjern mellomrom, bindestrek, parenteser osv.
+  let phone = String(raw).replace(/[\s\-()]/g, '');
+
+  // Bytt ut 00-prefiks med +
+  if (phone.startsWith('00')) {
+    phone = '+' + phone.slice(2);
+  }
+
+  // Hvis den starter med +, behold formatet
+  if (phone.startsWith('+')) {
+    // Norge: +47 + 8 sifre
+    if (/^\+47\d{8}$/.test(phone)) {
+      return phone;
+    }
+    return null; // andre land avvises nå (kan utvides senere)
+  }
+
+  // Hvis den starter med 47 og resten er 8 sifre → +47
+  if (phone.startsWith('47') && phone.length === 10) {
+    return '+47' + phone.slice(2);
+  }
+
+  // Hvis det er 8 sifre → antar norsk mobil og legger på +47
+  if (/^\d{8}$/.test(phone)) {
+    return '+47' + phone;
+  }
+
+  // Hvis det er 9 sifre og starter med 0 (0XXXXXXXX) → fjern 0 og legg +47
+  if (/^0\d{8}$/.test(phone)) {
+    return '+47' + phone.slice(1);
+  }
+
+  return null;
+}
+
+// ----------------------------
+// Apple testbruker (for App Review)
+// ----------------------------
+const APPLE_TEST_PHONE = process.env.APPLE_TEST_PHONE || '+4712345678'; // legg inn ditt nr i .env
+const APPLE_TEST_CODE = process.env.APPLE_TEST_CODE || '111111';        // koden Apple skal bruke
 
 // ----------------------------
 // Hjelpefunksjoner for members.json (persistent /data)
@@ -1050,6 +1096,22 @@ app.post('/auth/send-code', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'invalid_phone' });
     }
 
+    // --- Apple testbruker: ikke send SMS, bare registrer testkode ---
+    const applePhoneNormalized = normalizePhone(APPLE_TEST_PHONE || '');
+    if (applePhoneNormalized && phoneNormalized === applePhoneNormalized) {
+      const now = Date.now();
+      loginCodes.set(phoneNormalized, {
+        code: APPLE_TEST_CODE,
+        // Gyldig lenge nok til at Apple rekker å teste (24 timer)
+        codeExpiresAt: now + 24 * 60 * 60 * 1000,
+        lastSentAt: now,
+      });
+
+      console.log('APPLE TEST: /auth/send-code for Apple test user – skipper SMS');
+      return res.json({ ok: true, testUser: true });
+    }
+    // ---------------------------------------------------------------
+
     const existing = loginCodes.get(phoneNormalized) || {};
     const now = Date.now();
     if (existing.lastSentAt && now - existing.lastSentAt < 60000) {
@@ -1070,6 +1132,7 @@ app.post('/auth/send-code', async (req, res) => {
   }
 });
 
+
 app.post('/auth/verify-code', async (req, res) => {
   try {
     const { phone, code } = req.body || {};
@@ -1083,6 +1146,29 @@ app.post('/auth/verify-code', async (req, res) => {
     if (!phoneNormalized) {
       return res.status(400).json({ ok: false, error: 'invalid_phone' });
     }
+
+    const applePhoneNormalized = normalizePhone(APPLE_TEST_PHONE || '');
+
+    // --- Apple testbruker: bypass vanlig kode-sjekk og medlemsregister ---
+    if (
+      applePhoneNormalized &&
+      phoneNormalized === applePhoneNormalized &&
+      String(code) === String(APPLE_TEST_CODE)
+    ) {
+      console.log('APPLE TEST: /auth/verify-code OK for Apple test user');
+
+      return res.json({
+        ok: true,
+        isMember: true,
+        member: {
+          email: 'apple-test@lalmtreningssenter.no',
+          name: 'Apple Testbruker',
+          phone: phoneNormalized,
+        },
+        testUser: true,
+      });
+    }
+    // ---------------------------------------------------------------------
 
     const entry = loginCodes.get(phoneNormalized);
     if (!entry || entry.code !== code) {
@@ -1123,6 +1209,7 @@ app.post('/auth/verify-code', async (req, res) => {
     return res.status(500).json({ ok: false, error: 'internal_error' });
   }
 });
+
 
 // ===============================
 // Vipps RETURN -> redirect til app
