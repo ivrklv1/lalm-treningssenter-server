@@ -38,6 +38,8 @@ try {
 
 const MEMBERS_FILE = path.join(DATA_DIR, 'members.json');
 const ORDERS_FILE  = path.join(DATA_DIR, 'orders.json');
+const PLANS_FILE   = path.join(DATA_DIR, 'plans.json');
+
 
 // ----------------------------
 // Global state
@@ -199,6 +201,41 @@ function saveOrders(orders) {
     console.error('Kunne ikke skrive orders.json til', ORDERS_FILE, e.message);
   }
 }
+// ----------------------------
+// Hjelpefunksjoner for plans.json (medlemskap / produkter)
+// ----------------------------
+function getPlans() {
+  try {
+    if (!fs.existsSync(PLANS_FILE)) {
+      // Ingen egen plans-fil ennå → returner null og bruk legacy membershipMap
+      return null;
+    }
+    const raw = fs.readFileSync(PLANS_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      console.error('plans.json må være et array. Ignorerer innholdet.');
+      return null;
+    }
+    return parsed;
+  } catch (e) {
+    console.error('Kunne ikke lese plans.json fra', PLANS_FILE, '- returnerer null:', e.message);
+    return null;
+  }
+}
+
+function savePlans(plans) {
+  try {
+    fs.writeFileSync(
+      PLANS_FILE,
+      JSON.stringify(plans, null, 2),
+      'utf-8',
+    );
+  } catch (e) {
+    console.error('Kunne ikke skrive plans.json til', PLANS_FILE, e.message);
+  }
+}
+
+
 
 function upsertOrder(order) {
   const orders = getOrders();
@@ -703,6 +740,195 @@ app.get('/admin/members/search', basicAuth, (req, res) => {
   });
 
   res.json({ matches });
+});
+
+
+// -----------------------------------------------------
+// Medlemskap / planer – felles API (app/nettside) + admin
+// -----------------------------------------------------
+
+// Offentlig API: tilgjengelige medlemskap som kan kjøpes (kun aktive)
+app.get('/api/plans', (req, res) => {
+  const plans = getPlans() || [];
+  const publicPlans = plans
+    .filter((p) => !p || p.active !== false ? true : false)
+    .sort((a, b) => {
+      const ao = typeof a.sortOrder === 'number' ? a.sortOrder : 9999;
+      const bo = typeof b.sortOrder === 'number' ? b.sortOrder : 9999;
+      return ao - bo;
+    });
+
+  res.json(publicPlans);
+});
+
+// Admin: hent alle medlemskap (også inaktive)
+app.get('/admin/plans', basicAuth, (req, res) => {
+  const plans = getPlans() || [];
+  res.json(plans);
+});
+
+// Admin: opprett nytt medlemskap
+app.post('/admin/plans', basicAuth, (req, res) => {
+  const body = req.body || {};
+  let plans = getPlans() || [];
+
+  const id = (body.id || '').trim();
+  if (!id) {
+    return res.status(400).json({ ok: false, error: 'id_required' });
+  }
+
+  if (plans.some((p) => (p.id || p.key) === id)) {
+    return res.status(400).json({ ok: false, error: 'plan_exists' });
+  }
+
+  const amountNum = Number(body.amount);
+  if (!Number.isFinite(amountNum) || amountNum < 0) {
+    return res.status(400).json({ ok: false, error: 'amount_invalid' });
+  }
+
+  const sortOrder =
+    typeof body.sortOrder === 'number'
+      ? body.sortOrder
+      : plans.length + 1;
+
+  const plan = {
+    id,
+    key: id,
+    name: body.name || body.text || id,
+    text: body.text || body.name || id,
+    amount: amountNum,
+    prorate: body.prorate !== false,
+    active: body.active !== false,
+    sortOrder,
+    description: body.description || '',
+    type: body.type || null,
+  };
+
+  plans.push(plan);
+  savePlans(plans);
+
+  res.json({ ok: true, plan });
+});
+
+// Admin: oppdater eksisterende medlemskap
+app.put('/admin/plans/:id', basicAuth, (req, res) => {
+  const id = String(req.params.id || '').trim();
+  const body = req.body || {};
+  let plans = getPlans() || [];
+
+  const idx = plans.findIndex((p) => (p.id || p.key) === id);
+  if (idx === -1) {
+    return res.status(404).json({ ok: false, error: 'plan_not_found' });
+  }
+
+  const plan = plans[idx];
+
+  if (Object.prototype.hasOwnProperty.call(body, 'amount')) {
+    const amountNum = Number(body.amount);
+    if (!Number.isFinite(amountNum) || amountNum < 0) {
+      return res.status(400).json({ ok: false, error: 'amount_invalid' });
+    }
+    plan.amount = amountNum;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'name')) {
+    plan.name = body.name;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'text')) {
+    plan.text = body.text;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'prorate')) {
+    plan.prorate = !!body.prorate;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'active')) {
+    plan.active = !!body.active;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'sortOrder')) {
+    plan.sortOrder = Number(body.sortOrder);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'description')) {
+    plan.description = body.description;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'type')) {
+    plan.type = body.type;
+  }
+
+  savePlans(plans);
+  res.json({ ok: true, plan });
+});
+
+// Admin: "slette" medlemskap → sett active:false
+app.delete('/admin/plans/:id', basicAuth, (req, res) => {
+  const id = String(req.params.id || '').trim();
+  let plans = getPlans() || [];
+
+  const idx = plans.findIndex((p) => (p.id || p.key) === id);
+  if (idx === -1) {
+    return res.status(404).json({ ok: false, error: 'plan_not_found' });
+  }
+
+  plans[idx].active = false;
+  savePlans(plans);
+
+  res.json({ ok: true, id, active: false });
+});
+
+// -----------------------------------------------------
+// Admin: oppdatere / slette medlem via id (nytt admin-UI)
+// -----------------------------------------------------
+
+// Oppdatér medlem (navn, e-post, telefon, plan, aktiv m.m.)
+app.put('/admin/members/:id', basicAuth, (req, res) => {
+  const id = String(req.params.id || '').trim();
+  const body = req.body || {};
+  const members = getMembers();
+
+  const idx = members.findIndex((m) => String(m.id) === id);
+  if (idx === -1) {
+    return res.status(404).json({ ok: false, error: 'member_not_found' });
+  }
+
+  const member = members[idx];
+
+  const allowed = [
+    'name',
+    'email',
+    'phone',
+    'phoneFull',
+    'mobile',
+    'plan',
+    'active',
+    'clubMember',
+    'clubMemberSource',
+    'notes',
+  ];
+
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(body, key)) {
+      member[key] = body[key];
+    }
+  }
+
+  member.updatedAt = new Date().toISOString();
+  saveMembers(members);
+
+  res.json({ ok: true, member });
+});
+
+// Slett medlem helt (bruk med forsiktighet!)
+app.delete('/admin/members/:id', basicAuth, (req, res) => {
+  const id = String(req.params.id || '').trim();
+  const members = getMembers();
+
+  const idx = members.findIndex((m) => String(m.id) === id);
+  if (idx === -1) {
+    return res.status(404).json({ ok: false, error: 'member_not_found' });
+  }
+
+  const deleted = members.splice(idx, 1)[0];
+  saveMembers(members);
+
+  res.json({ ok: true, deletedId: id });
 });
 
 // =====================================================
@@ -1340,48 +1566,70 @@ app.post('/vipps/checkout', async (req, res) => {
     const returnUrl = `${process.env.SERVER_URL}/vipps/return?orderId=${orderId}`;
 
     // Medlemskap og full månedspris (i øre)
-    const membershipMap = {
-      LALM_IL_BINDING: {
-        amount: 34900,
-        text: 'Lalm IL-medlem – 12 mnd binding',
-        prorate: true,
-      },
-      STANDARD_BINDING: {
-        amount: 44900,
-        text: 'Standard – 12 mnd binding',
-        prorate: true,
-      },
-      HYTTE_BINDING: {
-        amount: 16900,
-        text: 'Hyttemedlemskap – 12 mnd binding',
-        prorate: true,
-      },
+    const plans = getPlans();
+    let selected = null;
 
-      // 🧪 TESTMEDLEMSKAP 1 kr
-      TEST_1KR: {
-        amount: 100,
-        text: 'TEST – 1 kr (ingen innmeldingsavgift)',
-        prorate: false,
-      },
+    if (plans && Array.isArray(plans)) {
+      const planObj = plans.find(
+        (p) =>
+          p &&
+          (p.id === membershipKey || p.key === membershipKey) &&
+          p.active !== false
+      );
+      if (planObj && typeof planObj.amount === 'number') {
+        selected = {
+          amount: planObj.amount,
+          text: planObj.text || planObj.name || membershipKey,
+          prorate: planObj.prorate !== false,
+        };
+      }
+    }
 
-      LALM_IL_UBIND: {
-        amount: 44900,
-        text: 'Lalm IL-medlem – uten binding',
-        prorate: true,
-      },
-      STANDARD_UBIND: {
-        amount: 54900,
-        text: 'Standard – uten binding',
-        prorate: true,
-      },
-      DROPIN: {
-        amount: 14900, // 149 kr i øre (juster pris)
-        text: 'Drop-in adgang (gyldig i dag)',
-        prorate: false,
-      },
-    };
+    if (!selected) {
+      const membershipMap = {
+            LALM_IL_BINDING: {
+              amount: 34900,
+              text: 'Lalm IL-medlem – 12 mnd binding',
+              prorate: true,
+            },
+            STANDARD_BINDING: {
+              amount: 44900,
+              text: 'Standard – 12 mnd binding',
+              prorate: true,
+            },
+            HYTTE_BINDING: {
+              amount: 16900,
+              text: 'Hyttemedlemskap – 12 mnd binding',
+              prorate: true,
+            },
+      
+            // 🧪 TESTMEDLEMSKAP 1 kr
+            TEST_1KR: {
+              amount: 100,
+              text: 'TEST – 1 kr (ingen innmeldingsavgift)',
+              prorate: false,
+            },
+      
+            LALM_IL_UBIND: {
+              amount: 44900,
+              text: 'Lalm IL-medlem – uten binding',
+              prorate: true,
+            },
+            STANDARD_UBIND: {
+              amount: 54900,
+              text: 'Standard – uten binding',
+              prorate: true,
+            },
+            DROPIN: {
+              amount: 14900, // 149 kr i øre (juster pris)
+              text: 'Drop-in adgang (gyldig i dag)',
+              prorate: false,
+            },
+          };
 
-    const selected = membershipMap[membershipKey];
+      selected = membershipMap[membershipKey];
+    }
+
     if (!selected) {
       return res.status(400).json({
         ok: false,
@@ -1390,7 +1638,7 @@ app.post('/vipps/checkout', async (req, res) => {
       });
     }
 
-    // Telefon-normalisering
+// Telefon-normalisering
     const phoneFull = normalizePhone(phone); // f.eks. +4790000000
     if (!phoneFull) {
       return res.status(400).json({ ok: false, error: 'invalid_phone' });
