@@ -142,6 +142,36 @@ function saveMembers(members) {
   }
 }
 
+// -----------------------------------------------------
+// Finn eksisterende medlem via telefon / e-post
+// -----------------------------------------------------
+function findMemberByPhoneOrEmail(phoneFull, email) {
+  const members = getMembers();
+  const normPhone = normalizePhone(phoneFull || '');
+  const digits = normPhone ? normPhone.replace(/\D/g, '') : '';
+  const emailLc = (email || '').toLowerCase();
+
+  for (const m of members) {
+    const candidatePhone =
+      m.phone || m.mobile || m.phoneFull || null;
+    const mNormPhone = candidatePhone ? normalizePhone(candidatePhone) : null;
+    const mDigits = mNormPhone ? mNormPhone.replace(/\D/g, '') : '';
+    const mEmailLc = (m.email || '').toLowerCase();
+
+    // Telefonmatch (slutter på samme 8 sifre)
+    if (digits && mDigits && mDigits.endsWith(digits)) {
+      return m;
+    }
+
+    // E-postmatch
+    if (emailLc && mEmailLc && emailLc === mEmailLc) {
+      return m;
+    }
+  }
+
+  return null;
+}
+
 // ----------------------------
 // Hjelpefunksjoner for orders.json (Vipps-ordrer) – persistent /data
 // ----------------------------
@@ -1332,6 +1362,23 @@ app.post('/vipps/checkout', async (req, res) => {
 
     const cleanPhone = digits; // 8 siffer
 
+        // Sjekk: finnes det allerede et aktivt medlem med samme tlf / e-post?
+    const existingMember = findMemberByPhoneOrEmail(phoneFull, email);
+
+    if (existingMember && existingMember.active) {
+      appendAccessLog(
+        `[${new Date().toISOString()}] VIPPS_CHECKOUT_BLOCKED_EXISTING_MEMBER phone=${phoneFull} email=${(email || '').toLowerCase()} memberId=${existingMember.id}\n`
+      );
+
+      return res.status(400).json({
+        ok: false,
+        error: 'member_already_active',
+        message:
+          'Det finnes allerede et aktivt medlem med dette telefonnummeret/e-posten. Ta kontakt med Lalm Treningssenter hvis du mener dette er feil.',
+      });
+    }
+
+
     // Dag-proratering første måned
     const now = new Date();
     const year = now.getFullYear();
@@ -1723,31 +1770,53 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         }
       }
 
-      // 4.2) Opprett nytt medlem hvis ingen match
+      // 4.2) Opprett / gjenbruk medlem hvis ingen match bare på telefon
       if (!memberId && updatedOrder.email) {
-        const newMemberId = `mem_${Date.now()}_${Math.floor(
-          Math.random() * 100000
-        )}`;
-        const newMember = {
-          id: newMemberId,
-          email: updatedOrder.email,
-          name: updatedOrder.name || updatedOrder.email,
-          phone:
-            updatedOrder.phoneFull || normalizePhone(updatedOrder.phone),
-          active: true,
-          plan: updatedOrder.membershipKey || null,
-          clubMember: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-
-        members.push(newMember);
-        membersChanged = true;
-        memberId = newMemberId;
-
-        appendAccessLog(
-          `[${new Date().toISOString()}] VIPPS_CREATED_MEMBER orderId=${orderId} email=${newMember.email}\n`
+        // Sjekk en ekstra gang: finnes medlem via e-post / telefon?
+        const existingByEmailOrPhone = findMemberByPhoneOrEmail(
+          updatedOrder.phoneFull || updatedOrder.phone,
+          updatedOrder.email
         );
+
+        if (existingByEmailOrPhone) {
+          // Gjenbruk eksisterende medlem
+          existingByEmailOrPhone.active = true;
+          existingByEmailOrPhone.plan =
+            updatedOrder.membershipKey || existingByEmailOrPhone.plan || null;
+          existingByEmailOrPhone.updatedAt = new Date().toISOString();
+
+          memberId = existingByEmailOrPhone.id || null;
+          membersChanged = true;
+
+          appendAccessLog(
+            `[${new Date().toISOString()}] VIPPS_REUSED_MEMBER orderId=${orderId} memberId=${memberId} email=${updatedOrder.email}\n`
+          );
+        } else {
+          // Ingen match → opprett nytt medlem
+          const newMemberId = `mem_${Date.now()}_${Math.floor(
+            Math.random() * 100000
+          )}`;
+          const newMember = {
+            id: newMemberId,
+            email: updatedOrder.email,
+            name: updatedOrder.name || updatedOrder.email,
+            phone:
+              updatedOrder.phoneFull || normalizePhone(updatedOrder.phone),
+            active: true,
+            plan: updatedOrder.membershipKey || null,
+            clubMember: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+          members.push(newMember);
+          membersChanged = true;
+          memberId = newMemberId;
+
+          appendAccessLog(
+            `[${new Date().toISOString()}] VIPPS_CREATED_MEMBER orderId=${orderId} email=${newMember.email}\n`
+          );
+        }
       }
 
       if (membersChanged) {
