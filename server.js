@@ -576,9 +576,9 @@ async function sendWelcomeMembershipSms(order, member) {
         .trim() || 'Hei';
 
     const message =
-      `${firstName}! Ditt medlemskap på Lalm Treningssenter er nå aktivt. ` +
-      `Du har tilgang via appen Lalm Treningssenter. ` +
-      `Ta kontakt med oss hvis du har spørsmål.`;
+      `Hei ${firstName}! Velkommen som medlem hos Lalm Treningssenter! 🎉 ` +
+      `Medlemskapet ditt er nå aktivt. Last ned appen for å få tilgang til treningssenteret. ` +
+      `Gi oss beskjed hvis du trenger hjelp - God trening! 💪`;
 
     await sendSms(phoneNormalized, message);
 
