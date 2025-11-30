@@ -2184,6 +2184,41 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
   }
 });
 
+// =====================================================
+// Vipps – status-endepunkt for appen (polling)
+// =====================================================
+app.get('/vipps/order-status/:orderId', (req, res) => {
+  const orderId = String(req.params.orderId || '').trim();
+  if (!orderId) {
+    return res.status(400).json({ ok: false, error: 'orderId_required' });
+  }
+
+  const order = findOrder(orderId);
+  if (!order) {
+    // Ikke teknisk feil – bare at vi ikke har rukket å lagre ordren ennå
+    return res.json({ ok: false, found: false });
+  }
+
+  const rawStatus = order.status || order.vippsTransactionStatus || 'PENDING';
+  const status = String(rawStatus || '').toUpperCase();
+
+  // "Betalt" i vår verden = samme logikk som i callbacken:
+  // vi aktiverer medlem ved RESERVED / SALE / CAPTURED.
+  const isPaid = ['RESERVED', 'SALE', 'CAPTURED'].includes(status);
+
+  return res.json({
+    ok: true,
+    found: true,
+    status,
+    isPaid,
+    membershipKey: order.membershipKey || null,
+    memberId: order.memberId || null,
+    email: order.email || null,
+    processedAt: order.processedAt || null,
+  });
+});
+
+
 /**
  * Admin-endpoint: send SMS til medlemmer
  * body: { message: string, segment: 'active' | 'inactive' | 'all' }
