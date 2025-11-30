@@ -548,6 +548,55 @@ async function sendSmsLoginCode(phone, code) {
   return sendSms(phone, message);
 }
 
+/**
+ * Velkommen-SMS ved innmelding
+ */
+async function sendWelcomeMembershipSms(order, member) {
+  try {
+    const rawPhone =
+      member?.phoneFull ||
+      member?.phone ||
+      order?.phoneFull ||
+      order?.phone;
+
+    const phoneNormalized = normalizePhone(rawPhone);
+    if (!phoneNormalized) {
+      console.warn(
+        '[WELCOME_SMS] Fant ikke gyldig telefon for orderId=',
+        order?.orderId,
+        'memberId=',
+        member?.id
+      );
+      return;
+    }
+
+    const firstName =
+      (member?.name || order?.name || '')
+        .split(' ')[0]
+        .trim() || 'Hei';
+
+    const message =
+      `${firstName}! Ditt medlemskap på Lalm Treningssenter er nå aktivt. ` +
+      `Du har tilgang via appen Lalm Treningssenter. ` +
+      `Ta kontakt med oss hvis du har spørsmål.`;
+
+    await sendSms(phoneNormalized, message);
+
+    appendAccessLog(
+      `[${new Date().toISOString()}] WELCOME_SMS_SENT orderId=${order?.orderId} phone=${phoneNormalized}\n`
+    );
+  } catch (e) {
+    console.error(
+      '[WELCOME_SMS] Feil ved sending:',
+      e?.response?.data || e.message
+    );
+    appendAccessLog(
+      `[${new Date().toISOString()}] WELCOME_SMS_ERROR orderId=${order?.orderId} err=${e.message}\n`
+    );
+  }
+}
+
+
 // ----------------------------
 // Middleware
 // ----------------------------
@@ -1372,7 +1421,7 @@ app.post('/vipps/checkout', async (req, res) => {
 
       return res.status(400).json({
         ok: false,
-        error: 'member_already_active',
+        error: 'Allerede aktivt medlemskap',
         title: 'Allerede aktivt medlemskap',
         message:
           'Det finnes allerede et aktivt medlemskap registrert på dette telefonnummeret eller denne e-postadressen. ' +
@@ -1837,6 +1886,40 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           memberId: memberId || updatedOrder.memberId || null,
           processedAt: new Date().toISOString(),
         });
+      }
+            // 4.3) Send velkommen-SMS én gang (ikke for DROPIN)
+      try {
+        const orderAfter = findOrder(orderId);
+
+        if (
+          orderAfter &&
+          orderAfter.membershipKey !== 'DROPIN' &&          // ikke send SMS for drop-in
+          !orderAfter.welcomeSmsSent &&                     // bare én gang
+          (newStatus === 'SALE' || newStatus === 'CAPTURED') // kun når faktisk belastet
+        ) {
+          // Finn medlem-objekt (hvis vi har memberId)
+          const allMembers = getMembers();
+          const memberObj =
+            (orderAfter.memberId &&
+              allMembers.find((m) => m.id === orderAfter.memberId)) ||
+            null;
+
+          await sendWelcomeMembershipSms(orderAfter, memberObj);
+
+          updateOrderStatus(orderId, orderAfter.status, {
+            welcomeSmsSent: true,
+            welcomeSmsAt: new Date().toISOString(),
+          });
+        }
+      } catch (e) {
+        console.error(
+          '[WELCOME_SMS] callback wrapper error for orderId',
+          orderId,
+          e.message
+        );
+        appendAccessLog(
+          `[${new Date().toISOString()}] WELCOME_SMS_CALLBACK_ERROR orderId=${orderId} err=${e.message}\n`
+        );
       }
     }
 
