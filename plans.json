@@ -1,0 +1,93 @@
+[
+  {
+    "id": "LALM_IL_BINDING",
+    "key": "LALM_IL_BINDING",
+    "name": "Lalm IL-medlem - 12 mnd binding",
+    "text": "Lalm IL-medlem - 12 mnd binding",
+    "type": "binding",
+    "amount": 34900,
+    "signupFee": 19900,
+    "prorate": true,
+    "description": "Rabattert medlemskap for medlemmer i Lalm IL med 12 måneders bindingstid.",
+    "active": true,
+    "sortOrder": 1
+  },
+  {
+    "id": "STANDARD_BINDING",
+    "key": "STANDARD_BINDING",
+    "name": "Standard - 12 mnd binding",
+    "text": "Standard - 12 mnd binding",
+    "type": "binding",
+    "amount": 44900,
+    "signupFee": 19900,
+    "prorate": true,
+    "description": "Ordinært medlemskap med 12 måneders bindingstid.",
+    "active": true,
+    "sortOrder": 2
+  },
+  {
+    "id": "HYTTE_BINDING",
+    "key": "HYTTE_BINDING",
+    "name": "Hyttemedlemskap - 12 mnd binding",
+    "text": "Hyttemedlemskap - 12 mnd binding",
+    "type": "binding",
+    "amount": 16900,
+    "signupFee": 19900,
+    "prorate": true,
+    "description": "Medlemskap for hyttegjester med 12 måneders bindingstid.",
+    "active": true,
+    "sortOrder": 3
+  },
+  {
+    "id": "LALM_IL_UBIND",
+    "key": "LALM_IL_UBIND",
+    "name": "Lalm IL-medlem - uten binding",
+    "text": "Lalm IL-medlem - uten binding",
+    "type": "uten_binding",
+    "amount": 44900,
+    "signupFee": 19900,
+    "prorate": true,
+    "description": "Rabattert medlemskap for Lalm IL-medlemmer uten bindingstid.",
+    "active": true,
+    "sortOrder": 4
+  },
+  {
+    "id": "STANDARD_UBIND",
+    "key": "STANDARD_UBIND",
+    "name": "Standard - uten binding",
+    "text": "Standard - uten binding",
+    "type": "uten_binding",
+    "amount": 54900,
+    "signupFee": 19900,
+    "prorate": true,
+    "description": "Fleksibelt medlemskap uten bindingstid.",
+    "active": true,
+    "sortOrder": 5
+  },
+  {
+    "id": "DROPIN",
+    "key": "DROPIN",
+    "name": "Drop-in adgang (gyldig i dag)",
+    "text": "Drop-in adgang (gyldig i dag)",
+    "type": "dropin",
+    "amount": 14900,
+    "signupFee": 0,
+    "prorate": false,
+    "description": "Engangstilgang til senteret som gjelder ut dagen.",
+    "active": true,
+    "sortOrder": 10
+  },
+  {
+    "id": "TEST_1KR",
+    "key": "TEST_1KR",
+    "name": "TEST - 1 kr (ingen innmeldingsavgift)",
+    "text": "TEST - 1 kr (ingen innmeldingsavgift)",
+    "type": "test",
+    "amount": 100,
+    "signupFee": 0,
+    "prorate": false,
+    "description": "Testmedlemskap kun for intern bruk og utvikling.",
+    "active": true,
+    "sortOrder": 99
+  }
+]
