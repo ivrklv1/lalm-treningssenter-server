@@ -1370,13 +1370,14 @@ app.post('/vipps/checkout', async (req, res) => {
         `[${new Date().toISOString()}] VIPPS_CHECKOUT_BLOCKED_EXISTING_MEMBER phone=${phoneFull} email=${(email || '').toLowerCase()} memberId=${existingMember.id}\n`
       );
 
-      return res.status(400).json({
-        ok: false,
-        error: 'member_already_active',
-        message:
-          'Det finnes allerede et aktivt medlem med dette telefonnummeret/e-posten. Ta kontakt med Lalm Treningssenter hvis du mener dette er feil.',
-      });
-    }
+return res.status(400).json({
+  ok: false,
+  error: 'member_already_active',
+  title: 'Allerede aktivt medlemskap',
+  message:
+    'Det finnes allerede et aktivt medlemskap registrert på dette telefonnummeret eller denne e-postadressen. ' +
+    'Hvis du mener dette er en feil, ta kontakt med Lalm Treningssenter for hjelp.',
+});
 
 
     // Dag-proratering første måned
