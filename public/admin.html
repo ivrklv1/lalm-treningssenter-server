@@ -96,7 +96,7 @@
       color: #fee2e2;
     }
 
-    /* TABS – ny, mer moderne stil */
+    /* TABS */
 
     .tabs-row {
       margin-top: 18px;
@@ -480,13 +480,14 @@
   <!-- FANER -->
   <div class="tabs-row">
     <button class="tab-button active" data-tab="members">Medlemmer</button>
+    <button class="tab-button" data-tab="plans">Medlemskap & priser</button>
     <button class="tab-button" data-tab="sms">SMS</button>
     <button class="tab-button" data-tab="orders">Vipps-ordrer</button>
     <button class="tab-button" data-tab="tools">Verktøy / NIF</button>
   </div>
 
-  <!-- TAB: MEDLEMMER -->
   <main>
+    <!-- TAB: MEDLEMMER -->
     <section id="tab-members" class="tab-panel active">
       <div class="panel-grid">
         <!-- VENSTRE: Medlemsliste -->
@@ -605,6 +606,53 @@
           </div>
         </section>
       </div>
+    </section>
+
+    <!-- TAB: MEDLEMSKAP & PRISER (plans.json) -->
+    <section id="tab-plans" class="tab-panel">
+      <section class="card">
+        <div class="card-title-row">
+          <div>
+            <div class="card-title">Medlemskap & priser</div>
+            <div class="card-subtitle">
+              Administrer hvilke medlemskap som finnes, pris per måned, innmeldingsavgift og binding (lagres i plans.json).
+            </div>
+          </div>
+          <div>
+            <span class="badge-small">
+              Antall: <span id="plansCount">0</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="table-wrapper" style="max-height: 400px;">
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nøkkel</th>
+                  <th>Navn (vises for bruker)</th>
+                  <th>Pris / mnd (kr)</th>
+                  <th>Innmeldingsavgift (kr)</th>
+                  <th>Binding (mnd)</th>
+                  <th>Aktiv</th>
+                </tr>
+              </thead>
+              <tbody id="plansTableBody">
+                <tr>
+                  <td colspan="6" class="text-muted">Laster medlemskap...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="btn-row mt-2">
+          <button id="btnAddPlanRow" class="btn-secondary">+ Ny linje</button>
+          <button id="btnSavePlans" class="btn-primary">💾 Lagre endringer</button>
+        </div>
+        <div id="plansMsg" class="mt-1 small"></div>
+      </section>
     </section>
 
     <!-- TAB: SMS -->
@@ -751,36 +799,36 @@
 
 <script>
   const serverStatusEl = document.getElementById('serverStatus');
+
+  // Medlemmer
   const membersTableBody = document.getElementById('membersTableBody');
   const membersErrorEl = document.getElementById('membersError');
   const statsActiveCount = document.getElementById('statsActiveCount');
   const statsTotalCount = document.getElementById('statsTotalCount');
+  const searchInput = document.getElementById('searchInput');
+  const filterPlan = document.getElementById('filterPlan');
+  const btnReloadMembers = document.getElementById('btnReloadMembers');
+  const newName = document.getElementById('newName');
+  const newEmail = document.getElementById('newEmail');
+  const newPhone = document.getElementById('newPhone');
+  const newPlan = document.getElementById('newPlan');
+  const btnAddMember = document.getElementById('btnAddMember');
+  const addMemberMsg = document.getElementById('addMemberMsg');
 
+  // Vipps-ordrer
   const ordersTableBody = document.getElementById('ordersTableBody');
   const ordersCountEl = document.getElementById('ordersCount');
   const ordersErrorEl = document.getElementById('ordersError');
 
-  const searchInput = document.getElementById('searchInput');
-  const filterPlan = document.getElementById('filterPlan');
-
-  const btnAddMember = document.getElementById('btnAddMember');
-  const addMemberMsg = document.getElementById('addMemberMsg');
-
+  // Verktøy
   const btnTellSync = document.getElementById('btnTellSync');
-  const btnReloadMembers = document.getElementById('btnReloadMembers');
   const toolsMsg = document.getElementById('toolsMsg');
-
   const nifTextarea = document.getElementById('nifTextarea');
   const btnNifImport = document.getElementById('btnNifImport');
   const btnClearNif = document.getElementById('btnClearNif');
   const nifMsg = document.getElementById('nifMsg');
 
-  const newName = document.getElementById('newName');
-  const newEmail = document.getElementById('newEmail');
-  const newPhone = document.getElementById('newPhone');
-  const newPlan = document.getElementById('newPlan');
-
-  // SMS-panel elementer
+  // SMS
   const smsMessageEl = document.getElementById('smsMessage');
   const smsSegmentEl = document.getElementById('smsSegment');
   const smsStatusEl = document.getElementById('smsStatus');
@@ -790,8 +838,16 @@
   const sendSmsBtn = document.getElementById('sendSmsBtn');
   const SMS_API_URL = '/admin/sms/broadcast';
 
+  // Plans (plans.json)
+  const plansTableBody = document.getElementById('plansTableBody');
+  const btnAddPlanRow = document.getElementById('btnAddPlanRow');
+  const btnSavePlans = document.getElementById('btnSavePlans');
+  const plansMsg = document.getElementById('plansMsg');
+  const plansCountEl = document.getElementById('plansCount');
+
   let allMembers = [];
   let allOrders = [];
+  let allPlans = [];
   let smsMembers = [];
 
   function setServerStatus(ok, text) {
@@ -828,6 +884,8 @@
       minimumFractionDigits: 2
     });
   }
+
+  // ------- Medlemmer -------
 
   function renderMembers() {
     const q = (searchInput.value || '').toLowerCase();
@@ -876,50 +934,7 @@
       });
     }
 
-    // Oppdater SMS-listen samtidig
     renderSmsMembers();
-  }
-
-  function renderOrders() {
-    ordersCountEl.textContent = allOrders.length;
-
-    if (!allOrders.length) {
-      ordersTableBody.innerHTML = '<tr><td colspan="6" class="text-muted">Ingen ordrer registrert ennå.</td></tr>';
-      return;
-    }
-
-    const sorted = [...allOrders].sort((a, b) => {
-      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-    }).slice(0, 50);
-
-    ordersTableBody.innerHTML = '';
-    sorted.forEach(o => {
-      const tr = document.createElement('tr');
-
-      const status = (o.status || '').toUpperCase();
-      let statusClass = 'status-inactive';
-      let statusLabel = status || '-';
-      if (['RESERVED', 'SALE', 'CAPTURED'].includes(status)) {
-        statusClass = 'status-active';
-      } else if (['CANCELLED', 'FAILED'].includes(status)) {
-        statusClass = 'status-cancelled';
-      }
-
-      tr.innerHTML = `
-        <td>${o.orderId || '–'}</td>
-        <td class="status">
-          <div class="status-pill ${statusClass}">
-            <span></span>
-            <span>${statusLabel}</span>
-          </div>
-        </td>
-        <td>${o.membershipKey || '–'}</td>
-        <td>${fmtAmount(o.amount)}</td>
-        <td>${o.email || '–'}</td>
-        <td>${fmtDate(o.createdAt)}</td>
-      `;
-      ordersTableBody.appendChild(tr);
-    });
   }
 
   async function loadMembers() {
@@ -940,25 +955,6 @@
       membersErrorEl.textContent = 'Feil ved henting av medlemmer: ' + e.message;
       membersErrorEl.style.display = 'block';
       setServerStatus(false, 'Feil');
-    }
-  }
-
-  async function loadOrders() {
-    ordersErrorEl.style.display = 'none';
-    try {
-      const res = await fetch('/admin/orders');
-      if (!res.ok) {
-        throw new Error('HTTP ' + res.status);
-      }
-      const data = await res.json();
-      allOrders = Array.isArray(data) ? data : [];
-      renderOrders();
-    } catch (e) {
-      console.error('Feil ved henting av ordrer:', e);
-      ordersTableBody.innerHTML =
-        '<tr><td colspan="6" class="text-muted">Kunne ikke laste ordrer.</td></tr>';
-      ordersErrorEl.textContent = 'Feil ved henting av ordrer: ' + e.message;
-      ordersErrorEl.style.display = 'block';
     }
   }
 
@@ -1031,6 +1027,71 @@
     }
   }
 
+  // ------- Vipps-ordrer -------
+
+  function renderOrders() {
+    ordersCountEl.textContent = allOrders.length;
+
+    if (!allOrders.length) {
+      ordersTableBody.innerHTML = '<tr><td colspan="6" class="text-muted">Ingen ordrer registrert ennå.</td></tr>';
+      return;
+    }
+
+    const sorted = [...allOrders].sort((a, b) => {
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    }).slice(0, 50);
+
+    ordersTableBody.innerHTML = '';
+    sorted.forEach(o => {
+      const tr = document.createElement('tr');
+
+      const status = (o.status || '').toUpperCase();
+      let statusClass = 'status-inactive';
+      let statusLabel = status || '-';
+      if (['RESERVED', 'SALE', 'CAPTURED'].includes(status)) {
+        statusClass = 'status-active';
+      } else if (['CANCELLED', 'FAILED'].includes(status)) {
+        statusClass = 'status-cancelled';
+      }
+
+      tr.innerHTML = `
+        <td>${o.orderId || '–'}</td>
+        <td class="status">
+          <div class="status-pill ${statusClass}">
+            <span></span>
+            <span>${statusLabel}</span>
+          </div>
+        </td>
+        <td>${o.membershipKey || '–'}</td>
+        <td>${fmtAmount(o.amount)}</td>
+        <td>${o.email || '–'}</td>
+        <td>${fmtDate(o.createdAt)}</td>
+      `;
+      ordersTableBody.appendChild(tr);
+    });
+  }
+
+  async function loadOrders() {
+    ordersErrorEl.style.display = 'none';
+    try {
+      const res = await fetch('/admin/orders');
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+      const data = await res.json();
+      allOrders = Array.isArray(data) ? data : [];
+      renderOrders();
+    } catch (e) {
+      console.error('Feil ved henting av ordrer:', e);
+      ordersTableBody.innerHTML =
+        '<tr><td colspan="6" class="text-muted">Kunne ikke laste ordrer.</td></tr>';
+      ordersErrorEl.textContent = 'Feil ved henting av ordrer: ' + e.message;
+      ordersErrorEl.style.display = 'block';
+    }
+  }
+
+  // ------- Verktøy -------
+
   async function runTellSync() {
     toolsMsg.textContent = 'Synkroniserer aktive medlemmer til TELL...';
     toolsMsg.className = 'mt-1 small text-muted';
@@ -1080,7 +1141,186 @@
     }
   }
 
-  // ---------- SMS-funksjoner ----------
+  // ------- Plans / plans.json -------
+
+  function krFromOre(øre) {
+    if (typeof øre !== 'number') return '';
+    return (øre / 100).toFixed(0); // vis hele kroner
+  }
+
+  function oreFromKrStr(value) {
+    const v = String(value || '').replace(',', '.').trim();
+    if (!v) return 0;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 0;
+    return Math.round(n * 100);
+  }
+
+  function renderPlans() {
+    if (!Array.isArray(allPlans) || !allPlans.length) {
+      plansTableBody.innerHTML =
+        '<tr><td colspan="6" class="text-muted">Ingen medlemskap funnet.</td></tr>';
+      plansCountEl.textContent = '0';
+      return;
+    }
+
+    allPlans.sort((a, b) => (a.sort || 0) - (b.sort || 0));
+    plansCountEl.textContent = String(allPlans.length);
+    plansTableBody.innerHTML = '';
+
+    allPlans.forEach((p, idx) => {
+      const tr = document.createElement('tr');
+      tr.dataset.index = idx;
+
+      tr.innerHTML = `
+        <td>
+          <input
+            type="text"
+            data-field="key"
+            value="${p.key || ''}"
+            style="width:120px;"
+          />
+        </td>
+        <td>
+          <input
+            type="text"
+            data-field="label"
+            value="${p.label || ''}"
+            style="width:100%;"
+          />
+        </td>
+        <td>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            data-field="price"
+            value="${krFromOre(p.price)}"
+            style="width:90px;"
+          />
+        </td>
+        <td>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            data-field="signupFee"
+            value="${krFromOre(p.signupFee)}"
+            style="width:110px;"
+          />
+        </td>
+        <td>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            data-field="bindingMonths"
+            value="${p.bindingMonths ?? 0}"
+            style="width:70px;"
+          />
+        </td>
+        <td>
+          <input
+            type="checkbox"
+            data-field="active"
+            ${p.active ? 'checked' : ''}
+          />
+        </td>
+      `;
+      plansTableBody.appendChild(tr);
+    });
+  }
+
+  async function loadPlansAdmin() {
+    try {
+      plansMsg.textContent = '';
+      const res = await fetch('/admin/plans');
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+      const list = await res.json();
+      allPlans = Array.isArray(list) ? list : [];
+      renderPlans();
+    } catch (err) {
+      console.error('Feil ved henting av planer:', err);
+      plansTableBody.innerHTML =
+        '<tr><td colspan="6" class="text-muted">Kunne ikke laste medlemskap.</td></tr>';
+      plansMsg.textContent = 'Feil ved henting av medlemskap: ' + err.message;
+      plansMsg.className = 'mt-1 small tag-danger';
+    }
+  }
+
+  function addPlanRow() {
+    const nextSort = (allPlans.reduce((max, p) => Math.max(max, p.sort || 0), 0) || 0) + 1;
+    allPlans.push({
+      key: '',
+      label: '',
+      price: 0,
+      signupFee: 0,
+      bindingMonths: 0,
+      active: false,
+      sort: nextSort,
+    });
+    renderPlans();
+  }
+
+  async function savePlansAdmin() {
+    if (!Array.isArray(allPlans) || !allPlans.length) {
+      plansMsg.textContent = 'Ingen medlemskap å lagre.';
+      plansMsg.className = 'mt-1 small tag-danger';
+      return;
+    }
+
+    const rows = plansTableBody.querySelectorAll('tr');
+    rows.forEach((tr, idx) => {
+      const inputs = tr.querySelectorAll('input');
+      const item = allPlans[idx] || {};
+      inputs.forEach(input => {
+        const field = input.getAttribute('data-field');
+        if (!field) return;
+        if (field === 'active') {
+          item.active = input.checked;
+        } else if (field === 'price') {
+          item.price = oreFromKrStr(input.value);
+        } else if (field === 'signupFee') {
+          item.signupFee = oreFromKrStr(input.value);
+        } else if (field === 'bindingMonths') {
+          item.bindingMonths = Number(input.value || 0);
+        } else {
+          item[field] = input.value.trim();
+        }
+      });
+      allPlans[idx] = item;
+    });
+
+    plansMsg.textContent = 'Lagrer...';
+    plansMsg.className = 'mt-1 small text-muted';
+    btnSavePlans.disabled = true;
+
+    try {
+      const res = await fetch('/admin/plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: allPlans }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || ('HTTP ' + res.status));
+      }
+      plansMsg.textContent = 'Endringer lagret (' + data.count + ' medlemskap).';
+      plansMsg.className = 'mt-1 small tag-success';
+      await loadPlansAdmin();
+    } catch (err) {
+      console.error('Feil ved lagring av planer:', err);
+      plansMsg.textContent = 'Feil ved lagring: ' + err.message;
+      plansMsg.className = 'mt-1 small tag-danger';
+    } finally {
+      btnSavePlans.disabled = false;
+    }
+  }
+
+  // ------- SMS -------
+
   function getSmsMode() {
     const checked = document.querySelector('input[name="smsMode"]:checked');
     return checked ? checked.value : 'segment';
@@ -1204,7 +1444,8 @@
     }
   }
 
-  // Event listeners
+  // ------- Event listeners -------
+
   searchInput.addEventListener('input', () => renderMembers());
   filterPlan.addEventListener('change', () => renderMembers());
 
@@ -1246,7 +1487,14 @@
     sendSmsBtn.addEventListener('click', sendSmsFromPanel);
   }
 
-  // FANER – enkel logikk
+  if (btnAddPlanRow) {
+    btnAddPlanRow.addEventListener('click', addPlanRow);
+  }
+  if (btnSavePlans) {
+    btnSavePlans.addEventListener('click', savePlansAdmin);
+  }
+
+  // FANER
   const tabButtons = document.querySelectorAll('.tab-button');
   const tabPanels = document.querySelectorAll('.tab-panel');
 
@@ -1267,6 +1515,7 @@
     updateSmsModeUi();
     await loadMembers();
     await loadOrders();
+    await loadPlansAdmin();
   })();
 </script>
 </body>
