@@ -1236,69 +1236,70 @@ app.get('/vipps/return', (req, res) => {
 app.post('/vipps/checkout', async (req, res) => {
   const ts = new Date().toISOString();
   console.log('MOTTOK /vipps/checkout', req.body);
-  appendAccessLog(`[${ts}] VIPPS_CHECKOUT_REQUEST body=${JSON.stringify(req.body)}\n`);
+  appendAccessLog(
+    `[${ts}] VIPPS_CHECKOUT_REQUEST body=${JSON.stringify(req.body)}\n`
+  );
 
   try {
     const { membershipKey, phone, name, email } = req.body || {};
 
-// E-post er påkrevd for alle andre enn DROPIN
-if (!membershipKey || !phone || (!email && membershipKey !== 'DROPIN')) {
-  return res.status(400).json({
-    ok: false,
-    error:
-      membershipKey === 'DROPIN'
-        ? 'membershipKey_phone_required'
-        : 'membershipKey_phone_email_required'
-  });
-}
-
+    // E-post er påkrevd for alle andre enn DROPIN
+    if (!membershipKey || !phone || (!email && membershipKey !== 'DROPIN')) {
+      return res.status(400).json({
+        ok: false,
+        error:
+          membershipKey === 'DROPIN'
+            ? 'membershipKey_phone_required'
+            : 'membershipKey_phone_email_required',
+      });
+    }
 
     // 1) Lag orderId
     const orderId = 'ORDER-' + Date.now();
 
-    // 2) ⭐ returnUrl som peker til backend -> /vipps/return
-    const returnUrl = `${process.env.SERVER_URL}/vipps/return?orderId=${orderId}`
+    // 2) returnUrl som peker til backend -> /vipps/return
+    const returnUrl = `${process.env.SERVER_URL}/vipps/return?orderId=${orderId}`;
 
     // Medlemskap og full månedspris (i øre)
     const membershipMap = {
       LALM_IL_BINDING: {
         amount: 34900,
         text: 'Lalm IL-medlem – 12 mnd binding',
-        prorate: true
+        prorate: true,
       },
       STANDARD_BINDING: {
         amount: 44900,
         text: 'Standard – 12 mnd binding',
-        prorate: true
+        prorate: true,
       },
       HYTTE_BINDING: {
         amount: 16900,
         text: 'Hyttemedlemskap – 12 mnd binding',
-        prorate: true
+        prorate: true,
       },
 
       // 🧪 TESTMEDLEMSKAP 1 kr
       TEST_1KR: {
         amount: 100,
         text: 'TEST – 1 kr (ingen innmeldingsavgift)',
-        prorate: false
+        prorate: false,
       },
 
       LALM_IL_UBIND: {
         amount: 44900,
         text: 'Lalm IL-medlem – uten binding',
-        prorate: true
+        prorate: true,
       },
       STANDARD_UBIND: {
         amount: 54900,
         text: 'Standard – uten binding',
-        prorate: true
+        prorate: true,
       },
       DROPIN: {
-  amount: 14900, // 50 kr i øre (juster pris)
-  text: 'Drop-in adgang (gyldig i dag)',
-  prorate: false
-},
+        amount: 14900, // 149 kr i øre (juster pris)
+        text: 'Drop-in adgang (gyldig i dag)',
+        prorate: false,
+      },
     };
 
     const selected = membershipMap[membershipKey];
@@ -1306,7 +1307,7 @@ if (!membershipKey || !phone || (!email && membershipKey !== 'DROPIN')) {
       return res.status(400).json({
         ok: false,
         error: `unknown_membershipKey`,
-        membershipKey
+        membershipKey,
       });
     }
 
@@ -1325,7 +1326,7 @@ if (!membershipKey || !phone || (!email && membershipKey !== 'DROPIN')) {
       return res.status(400).json({
         ok: false,
         error: 'phone_must_be_norwegian_8_digits',
-        phoneSent: phone
+        phoneSent: phone,
       });
     }
 
@@ -1351,10 +1352,10 @@ if (!membershipKey || !phone || (!email && membershipKey !== 'DROPIN')) {
     }
 
     // Innmeldingsavgift 199,-
-let SIGNUP_FEE = 19900;
-if (membershipKey === 'TEST_1KR' || membershipKey === 'DROPIN') {
-  SIGNUP_FEE = 0;
-}
+    let SIGNUP_FEE = 19900;
+    if (membershipKey === 'TEST_1KR' || membershipKey === 'DROPIN') {
+      SIGNUP_FEE = 0;
+    }
 
     const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
 
@@ -1363,7 +1364,7 @@ if (membershipKey === 'TEST_1KR' || membershipKey === 'DROPIN') {
         ? 'https://apitest.vipps.no'
         : 'https://api.vipps.no';
 
-    // 1. Hent access token
+    // 1. Hent access token (Checkout)
     const tokenRes = await axios.post(
       `${apiBase}/accesstoken/get`,
       {},
@@ -1373,8 +1374,8 @@ if (membershipKey === 'TEST_1KR' || membershipKey === 'DROPIN') {
           client_id: process.env.VIPPS_CLIENT_ID,
           client_secret: process.env.VIPPS_CLIENT_SECRET,
           'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY,
-          'Merchant-Serial-Number': process.env.VIPPS_MSN
-        }
+          'Merchant-Serial-Number': process.env.VIPPS_MSN,
+        },
       }
     );
 
@@ -1385,23 +1386,23 @@ if (membershipKey === 'TEST_1KR' || membershipKey === 'DROPIN') {
 
     const paymentBody = {
       customerInfo: {
-        mobileNumber: cleanPhone
+        mobileNumber: cleanPhone,
       },
       merchantInfo: {
         merchantSerialNumber: process.env.VIPPS_MSN,
         callbackPrefix: process.env.VIPPS_CALLBACK_URL,
         // Vipps åpner denne URL-en etter betaling (fullført / avbrutt)
         // Her peker vi til backend, som igjen redirecter videre inn i appen via deeplink.
-        fallBack: returnUrl
+        fallBack: returnUrl,
       },
       transaction: {
-        amount: finalAmount, // i øre – proratert + innmeldingsavgift
+        amount: finalAmount, // i øre – proratert + ev. innmeldingsavgift
         orderId,
         transactionText:
           selected.text +
           prorationLabel +
-          (SIGNUP_FEE > 0 ? ' + innmeldingsavgift 199,-' : '')
-      }
+          (SIGNUP_FEE > 0 ? ' + innmeldingsavgift 199,-' : ''),
+      },
     };
 
     const checkoutRes = await axios.post(
@@ -1417,8 +1418,8 @@ if (membershipKey === 'TEST_1KR' || membershipKey === 'DROPIN') {
           'Vipps-System-Version': '1.0.0',
           'Vipps-System-Plugin-Name': 'lalm-app',
           'Vipps-System-Plugin-Version': '1.0.0',
-          'X-Request-Id': orderId
-        }
+          'X-Request-Id': orderId,
+        },
       }
     );
 
@@ -1429,10 +1430,13 @@ if (membershipKey === 'TEST_1KR' || membershipKey === 'DROPIN') {
 
     const redirectUrl = checkoutRes.data.url || checkoutRes.data.redirectUrl;
     if (!redirectUrl) {
-      console.error('Uventet respons fra Vipps, fant ikke url', checkoutRes.data);
+      console.error(
+        'Uventet respons fra Vipps, fant ikke url',
+        checkoutRes.data
+      );
       return res.status(500).json({
         ok: false,
-        error: 'missing_redirect_url_from_vipps'
+        error: 'missing_redirect_url_from_vipps',
       });
     }
 
@@ -1460,7 +1464,7 @@ if (membershipKey === 'TEST_1KR' || membershipKey === 'DROPIN') {
       memberId: null,
       processedAt: null,
       createdAt: nowIso,
-      updatedAt: nowIso
+      updatedAt: nowIso,
     });
 
     return res.json({
@@ -1474,22 +1478,119 @@ if (membershipKey === 'TEST_1KR' || membershipKey === 'DROPIN') {
       currency: 'NOK',
       daysInMonth,
       remainingDays,
-      fraction
+      fraction,
     });
   } catch (err) {
-    console.error('Vipps Checkout error:', err.response?.data || err.message || err);
+    console.error(
+      'Vipps Checkout error:',
+      err.response?.data || err.message || err
+    );
     appendAccessLog(
-      `[${new Date().toISOString()}] VIPPS_CHECKOUT_ERROR err=${err.message} data=${JSON.stringify(err.response?.data || {})}\n`
+      `[${new Date().toISOString()}] VIPPS_CHECKOUT_ERROR err=${
+        err.message
+      } data=${JSON.stringify(err.response?.data || {})}\n`
     );
 
     if (!res.headersSent) {
-      return res.status(500).json({ ok: false, error: 'vipps_checkout_failed' });
+      return res
+        .status(500)
+        .json({ ok: false, error: 'vipps_checkout_failed' });
     }
   }
 });
 
+// -----------------------------------------------------
+// Vipps helpers: access token + auto-capture
+// -----------------------------------------------------
+async function getVippsAccessToken() {
+  const apiBase =
+    process.env.VIPPS_ENV === 'test'
+      ? 'https://apitest.vipps.no'
+      : 'https://api.vipps.no';
+
+  const tokenRes = await axios.post(
+    `${apiBase}/accesstoken/get`,
+    {},
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        client_id: process.env.VIPPS_CLIENT_ID,
+        client_secret: process.env.VIPPS_CLIENT_SECRET,
+        'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY,
+        'Merchant-Serial-Number': process.env.VIPPS_MSN,
+      },
+    }
+  );
+
+  const accessToken = tokenRes.data?.access_token;
+  if (!accessToken) {
+    throw new Error('Mangler access_token fra Vipps (getVippsAccessToken)');
+  }
+  return accessToken;
+}
+
+/**
+ * Auto-capture av en Vipps-betaling.
+ * - orderId: ORDER-...
+ * - amountInOre: beløp i øre (bruk existingOrder.amount)
+ * - transactionText: tekst som vises i Vipps
+ */
+async function vippsAutoCapture(orderId, amountInOre, transactionText) {
+  const apiBase =
+    process.env.VIPPS_ENV === 'test'
+      ? 'https://apitest.vipps.no'
+      : 'https://api.vipps.no';
+
+  const accessToken = await getVippsAccessToken();
+
+  const url = `${apiBase}/ecomm/v2/payments/${orderId}/capture`;
+
+  const body = {
+    merchantInfo: {
+      merchantSerialNumber: process.env.VIPPS_MSN,
+    },
+    transaction: {
+      amount: amountInOre,
+      transactionText:
+        transactionText || 'Lalm Treningssenter medlemskap',
+    },
+  };
+
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${accessToken}`,
+    'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY,
+    'Merchant-Serial-Number': process.env.VIPPS_MSN,
+    'Vipps-System-Name': 'lalm-treningssenter',
+    'Vipps-System-Version': '1.0.0',
+    'Vipps-System-Plugin-Name': 'lalm-app',
+    'Vipps-System-Plugin-Version': '1.0.0',
+    'X-Request-Id': `capture-${orderId}-${Date.now()}`, // idempotent-ish
+  };
+
+  appendAccessLog(
+    `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_START orderId=${orderId} amount=${amountInOre}\n`
+  );
+
+  const res = await axios.post(url, body, { headers });
+
+  if (res.status === 200) {
+    appendAccessLog(
+      `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_OK orderId=${orderId}\n`
+    );
+    return true;
+  } else {
+    appendAccessLog(
+      `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_BAD_STATUS orderId=${orderId} httpStatus=${res.status} body=${JSON.stringify(
+        res.data
+      )}\n`
+    );
+    return false;
+  }
+}
+
 // =====================================================
-// Vipps callback – idempotent
+// Vipps callback – idempotent + auto-capture
 // =====================================================
 app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
   const { orderId } = req.params || {};
@@ -1501,9 +1602,16 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     (body.transactionSummary && body.transactionSummary.transactionStatus) ||
     '';
 
-  console.log('MOTTOK Vipps callback for orderId:', orderId, 'status:', callbackStatus);
+  console.log(
+    'MOTTOK Vipps callback for orderId:',
+    orderId,
+    'status:',
+    callbackStatus
+  );
   appendAccessLog(
-    `[${ts}] VIPPS_CALLBACK orderId=${orderId} statusRaw=${callbackStatus} body=${JSON.stringify(body)}\n`
+    `[${ts}] VIPPS_CALLBACK orderId=${orderId} statusRaw=${callbackStatus} body=${JSON.stringify(
+      body
+    )}\n`
   );
 
   try {
@@ -1519,7 +1627,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       return;
     }
 
-    // 2) Idempotens
+    // 2) Idempotens: hvis vi allerede har en "ferdig" status, gjør ingenting
     if (['RESERVED', 'SALE', 'CAPTURED'].includes(existingOrder.status)) {
       appendAccessLog(
         `[${new Date().toISOString()}] VIPPS_CALLBACK_IDEMPOTENT orderId=${orderId} alreadyStatus=${existingOrder.status}\n`
@@ -1528,8 +1636,9 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       return;
     }
 
-    // 3) Oppdater ordrestatus
+    // 3) Mappe status fra Vipps -> vår interne status
     let newStatus = existingOrder.status;
+
     if (['SALE', 'CAPTURED', 'RESERVED', 'RESERVE'].includes(status)) {
       newStatus = status === 'RESERVE' ? 'RESERVED' : status;
     } else if (['CANCELLED', 'CANCELED', 'REFUND', 'REVERSED'].includes(status)) {
@@ -1543,9 +1652,48 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       (body.transactionSummary && body.transactionSummary.transactionId) ||
       null;
 
+    // 3.1 AUTO-CAPTURE: hvis Vipps sier RESERVED/RESERVE → prøv å belaste
+    if (['RESERVE', 'RESERVED'].includes(status)) {
+      try {
+        const captureText =
+          existingOrder.membershipKey === 'DROPIN'
+            ? 'Drop-in adgang Lalm Treningssenter'
+            : 'Medlemskap Lalm Treningssenter';
+
+        const amountInOre = existingOrder.amount; // samme som vi reserverte
+
+        const captureOk = await vippsAutoCapture(
+          orderId,
+          amountInOre,
+          captureText
+        );
+
+        if (captureOk) {
+          newStatus = 'CAPTURED';
+          appendAccessLog(
+            `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_STATUS_UPDATED orderId=${orderId} newStatus=CAPTURED\n`
+          );
+        } else {
+          appendAccessLog(
+            `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_FAILED orderId=${orderId}\n`
+          );
+        }
+      } catch (e) {
+        console.error(
+          'Feil ved auto-capture for orderId',
+          orderId,
+          e.message
+        );
+        appendAccessLog(
+          `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_ERROR orderId=${orderId} err=${e.message}\n`
+        );
+      }
+    }
+
+    // 3.2 Lagre oppdatert status på ordren
     const updatedOrder = updateOrderStatus(orderId, newStatus, {
       vippsTransactionStatus: status,
-      vippsReference
+      vippsReference,
     });
 
     appendAccessLog(
@@ -1571,31 +1719,31 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
             membersChanged = true;
 
             memberId = m.id || null;
-            // TELL-sync fjernet
           }
         }
       }
 
       // 4.2) Opprett nytt medlem hvis ingen match
       if (!memberId && updatedOrder.email) {
-        const newMemberId = `mem_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+        const newMemberId = `mem_${Date.now()}_${Math.floor(
+          Math.random() * 100000
+        )}`;
         const newMember = {
           id: newMemberId,
           email: updatedOrder.email,
           name: updatedOrder.name || updatedOrder.email,
-          phone: updatedOrder.phoneFull || normalizePhone(updatedOrder.phone),
+          phone:
+            updatedOrder.phoneFull || normalizePhone(updatedOrder.phone),
           active: true,
           plan: updatedOrder.membershipKey || null,
           clubMember: false,
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
         };
 
         members.push(newMember);
         membersChanged = true;
         memberId = newMemberId;
-
-        // TELL-sync for nye medlemmer er fjernet
 
         appendAccessLog(
           `[${new Date().toISOString()}] VIPPS_CREATED_MEMBER orderId=${orderId} email=${newMember.email}\n`
@@ -1616,14 +1764,17 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       if (!updatedOrder.processedAt) {
         updateOrderStatus(orderId, newStatus, {
           memberId: memberId || updatedOrder.memberId || null,
-          processedAt: new Date().toISOString()
+          processedAt: new Date().toISOString(),
         });
       }
     }
 
     if (!res.headersSent) return res.status(200).send('OK');
   } catch (err) {
-    console.error('Vipps callback error:', err?.response?.data || err.message || err);
+    console.error(
+      'Vipps callback error:',
+      err?.response?.data || err.message || err
+    );
     appendAccessLog(
       `[${new Date().toISOString()}] VIPPS_CALLBACK_ERROR orderId=${orderId} err=${err.message}\n`
     );
@@ -1648,7 +1799,7 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
 
     let targets = members;
     if (segment === 'active') {
-      targets = members.filter((m) => m.active);   // merk: feltet heter "active"
+      targets = members.filter((m) => m.active); // feltet heter "active"
     } else if (segment === 'inactive') {
       targets = members.filter((m) => !m.active);
     }
@@ -1672,9 +1823,9 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
     }
 
     if (phones.length === 0) {
-      return res
-        .status(400)
-        .json({ error: 'Fant ingen medlemmer med gyldig telefonnummer.' });
+      return res.status(400).json({
+        error: 'Fant ingen medlemmer med gyldig telefonnummer.',
+      });
     }
 
     let sent = 0;
@@ -1700,9 +1851,12 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('Feil i /admin/sms/broadcast:', err);
-    return res.status(500).json({ error: 'Kunne ikke sende SMS. Sjekk server-loggen.' });
+    return res
+      .status(500)
+      .json({ error: 'Kunne ikke sende SMS. Sjekk server-loggen.' });
   }
 });
+
 
 // ----------------------------
 // Start server
