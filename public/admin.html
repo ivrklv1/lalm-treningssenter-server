@@ -314,6 +314,60 @@
       padding-top: 12px;
       border-top: 1px dashed #1f2937;
     }
+  
+    /* Tabs layout */
+    .tab-bar {
+      display: inline-flex;
+      gap: 8px;
+      padding: 4px;
+      border-radius: 999px;
+      border: 1px solid rgba(31, 41, 55, 0.9);
+      background: radial-gradient(circle at top left, #020617 0, #020617 60%, #000 100%);
+      margin-bottom: 20px;
+    }
+    .tab-button {
+      border: none;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      background: transparent;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .tab-button span.icon {
+      font-size: 0.9rem;
+    }
+    .tab-button.active {
+      background: radial-gradient(circle at top left, #1f2937 0, #020617 60%);
+      color: var(--text);
+      box-shadow: 0 0 0 1px #1f2937, 0 10px 25px rgba(15, 23, 42, 0.9);
+    }
+    .tab-panel {
+      display: none;
+    }
+    .tab-panel.active {
+      display: block;
+    }
+    .grid-2col {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr);
+      gap: 24px;
+    }
+    @media (max-width: 900px) {
+      .grid-2col {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+    .member-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
   </style>
 </head>
 <body>
@@ -332,6 +386,24 @@
   </header>
 
   <main>
+    <div class="tab-bar">
+      <button class="tab-button active" data-tab="members">
+        <span class="icon">👥</span>
+        <span>Medlemmer</span>
+      </button>
+      <button class="tab-button" data-tab="sms">
+        <span class="icon">📩</span>
+        <span>SMS</span>
+      </button>
+      <button class="tab-button" data-tab="orders">
+        <span class="icon">💳</span>
+        <span>Vipps-ordrer</span>
+      </button>
+    </div>
+
+    <div class="tab-panel active" data-tab-panel="members">
+      <div class="grid-2col">
+
     <!-- VENSTRE: Medlemmer -->
     <section class="card">
       <div class="card-title-row">
@@ -396,7 +468,7 @@
       <div id="membersError" class="mt-2 small tag-danger" style="display:none;"></div>
     </section>
 
-    <!-- HØYRE: Legg til medlem + Verktøy + SMS + Ordrer -->
+<!-- HØYRE: Legg til medlem + Verktøy + SMS + Ordrer -->
     <section class="card">
       <!-- Legg til medlem -->
       <div class="card-title-row">
@@ -468,6 +540,14 @@
         </div>
       </div>
 
+
+      </div>
+    </section>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-tab-panel="sms">
+<section class="card">
       <!-- SMS til medlemmer -->
       <div class="right-column-section">
         <div class="card-title-row" style="margin-bottom:8px;">
@@ -535,6 +615,12 @@
         </div>
       </div>
 
+
+    </section>
+    </div>
+
+    <div class="tab-panel" data-tab-panel="orders">
+<section class="card">
       <!-- Ordrer -->
       <div class="right-column-section">
         <div class="card-title-row" style="margin-bottom:8px;">
@@ -575,10 +661,26 @@
         <div id="ordersError" class="mt-1 small tag-danger" style="display:none;"></div>
       </div>
     </section>
+    </section>
+    </div>
+
   </main>
 </div>
 
 <script>
+  const tabButtons = document.querySelectorAll('.tab-button');
+  const tabPanels = document.querySelectorAll('.tab-panel');
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.getAttribute('data-tab');
+      tabButtons.forEach(b => b.classList.toggle('active', b === btn));
+      tabPanels.forEach(panel => {
+        panel.classList.toggle('active', panel.getAttribute('data-tab-panel') === tab);
+      });
+    });
+  });
+
   const serverStatusEl = document.getElementById('serverStatus');
   const membersTableBody = document.getElementById('membersTableBody');
   const membersErrorEl = document.getElementById('membersError');
