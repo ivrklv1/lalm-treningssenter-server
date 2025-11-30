@@ -6,17 +6,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
-      --bg: #050814;
-      --bg-alt: #0d1020;
-      --card: #171b2f;
-      --accent: #ff7a1a;
-      --accent-soft: rgba(255, 122, 26, 0.1);
-      --text: #f9fafb;
-      --muted: #9ca3af;
-      --border: #262b40;
-      --danger: #f97373;
-      --success: #22c55e;
-      --radius: 18px;
+      --bg: #f3f4f6;
+      --bg-alt: #ffffff;
+      --card: #ffffff;
+      --accent: #0E3A5D; /* blå */
+      --accent-soft: #e0ecf4;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --danger: #b91c1c;
+      --success: #15803d;
+      --radius: 14px;
     }
     * {
       box-sizing: border-box;
@@ -25,30 +25,37 @@
     }
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top, #111827 0, #020617 45%, #000 100%);
+      background: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      padding: 24px;
+      padding: 16px;
     }
     .page {
-      max-width: 1280px;
+      max-width: 1200px;
       margin: 0 auto;
     }
+
+    /* HEADER */
     header {
+      background: var(--accent);
+      color: #ffffff;
+      border-radius: 16px;
+      padding: 14px 18px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 24px;
+      gap: 12px;
     }
     header h1 {
-      font-size: 1.6rem;
-      letter-spacing: 0.03em;
+      font-size: 1.4rem;
+      font-weight: 600;
     }
     header p {
       font-size: 0.9rem;
-      color: var(--muted);
-      margin-top: 4px;
+      color: #dbeafe;
+      margin-top: 2px;
     }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -56,8 +63,8 @@
       padding: 4px 10px;
       border-radius: 999px;
       font-size: 0.8rem;
-      background: #022c22;
-      color: #6ee7b7;
+      background: rgba(15, 23, 42, 0.2);
+      color: #e5e7eb;
     }
     .badge-dot {
       width: 8px;
@@ -66,33 +73,73 @@
       background: #6ee7b7;
     }
     .badge.badge-error {
-      background: #450a0a;
-      color: #fecaca;
+      background: rgba(127, 29, 29, 0.8);
+      color: #fee2e2;
     }
-    .badge.badge-error .badge-dot {
-      background: #fecaca;
+
+    /* TABS */
+    .tabs-row {
+      margin-top: 16px;
+      margin-bottom: 14px;
+      background: var(--bg-alt);
+      border-radius: 999px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
     }
-    main {
+    .tab-button {
+      border: none;
+      background: transparent;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      color: var(--muted);
+      white-space: nowrap;
+      flex: 1;
+    }
+    .tab-button.active {
+      background: #e5effb;
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* LAYOUT & CARDS */
+    .panel-grid {
       display: grid;
-      grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr);
-      gap: 24px;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr);
+      gap: 16px;
+      align-items: flex-start;
     }
     @media (max-width: 900px) {
-      body { padding: 16px; }
-      main { grid-template-columns: minmax(0, 1fr); }
+      body { padding: 12px; }
+      .panel-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
     }
+
     .card {
-      background: radial-gradient(circle at top left, #1f2937 0, #020617 50%);
+      background: var(--card);
       border-radius: var(--radius);
       border: 1px solid var(--border);
-      padding: 18px 18px 14px 18px;
-      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.85);
+      padding: 16px 16px 12px 16px;
+      box-shadow: 0 10px 18px rgba(15, 23, 42, 0.04);
     }
     .card-title-row {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
+      gap: 8px;
     }
     .card-title {
       font-size: 1rem;
@@ -102,21 +149,6 @@
       font-size: 0.8rem;
       color: var(--muted);
     }
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(15, 23, 42, 0.9);
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      padding: 3px 10px;
-      font-size: 0.8rem;
-      color: var(--muted);
-    }
-    .chip span {
-      font-size: 0.85rem;
-      color: var(--text);
-    }
 
     .pill-row {
       display: inline-flex;
@@ -124,12 +156,11 @@
       border: 1px solid var(--border);
       overflow: hidden;
       font-size: 0.75rem;
-      margin-top: 4px;
     }
     .pill {
       padding: 4px 10px;
       color: var(--muted);
-      background: transparent;
+      background: #f9fafb;
     }
     .pill.active {
       background: var(--accent-soft);
@@ -137,10 +168,10 @@
     }
 
     .table-wrapper {
-      border-radius: 14px;
+      border-radius: 10px;
       border: 1px solid var(--border);
       overflow: hidden;
-      background: rgba(15, 23, 42, 0.6);
+      background: #ffffff;
       max-height: 340px;
       display: flex;
       flex-direction: column;
@@ -151,24 +182,25 @@
       font-size: 0.8rem;
     }
     thead {
-      background: rgba(15, 23, 42, 0.95);
+      background: #f3f4f6;
     }
     th, td {
       padding: 8px 10px;
       text-align: left;
       white-space: nowrap;
+      border-bottom: 1px solid #e5e7eb;
     }
     th {
       font-weight: 500;
       color: var(--muted);
-      border-bottom: 1px solid #1f2937;
     }
     tbody tr:nth-child(even) {
-      background: rgba(15, 23, 42, 0.5);
+      background: #f9fafb;
     }
     tbody tr:hover {
-      background: rgba(31, 41, 55, 0.8);
+      background: #eff6ff;
     }
+
     td.status {
       font-size: 0.75rem;
     }
@@ -186,33 +218,34 @@
       border-radius: 50%;
     }
     .status-active {
-      background: rgba(34, 197, 94, 0.1);
-      color: #bbf7d0;
+      background: #dcfce7;
+      color: #166534;
     }
     .status-active span {
-      background: #22c55e;
+      background: #16a34a;
     }
     .status-inactive {
-      background: rgba(148, 163, 184, 0.1);
-      color: #e5e7eb;
+      background: #e5e7eb;
+      color: #4b5563;
     }
     .status-inactive span {
       background: #6b7280;
     }
     .status-cancelled {
-      background: rgba(248, 113, 113, 0.12);
-      color: #fecaca;
+      background: #fee2e2;
+      color: #b91c1c;
     }
     .status-cancelled span {
       background: #f97373;
     }
+
     .badge-small {
       border-radius: 999px;
       padding: 2px 7px;
       font-size: 0.7rem;
-      border: 1px solid #374151;
-      color: #e5e7eb;
-      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #d1d5db;
+      color: #374151;
+      background: #f9fafb;
     }
     .text-muted {
       color: var(--muted);
@@ -237,9 +270,9 @@
     }
     input, select, textarea {
       width: 100%;
-      border-radius: 10px;
+      border-radius: 8px;
       border: 1px solid var(--border);
-      background: rgba(15, 23, 42, 0.9);
+      background: #f9fafb;
       color: var(--text);
       padding: 7px 9px;
       font-size: 0.8rem;
@@ -251,8 +284,10 @@
     }
     input:focus, select:focus, textarea:focus {
       border-color: var(--accent);
-      box-shadow: 0 0 0 1px rgba(255, 122, 26, 0.4);
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.3);
+      background: #ffffff;
     }
+
     .btn-row {
       display: flex;
       gap: 8px;
@@ -270,27 +305,26 @@
       gap: 6px;
     }
     .btn-primary {
-      background: linear-gradient(135deg, #f97316, #ea580c);
-      color: #111827;
+      background: #0EA5E9;
+      color: #f9fafb;
       font-weight: 500;
     }
     .btn-secondary {
-      background: rgba(15, 23, 42, 0.95);
-      color: var(--muted);
-      border: 1px solid var(--border);
+      background: #e5e7eb;
+      color: #111827;
     }
     .btn-ghost {
       background: transparent;
       color: var(--muted);
-      border-radius: 999px;
-      padding-inline: 6px;
+      padding-inline: 8px;
       font-size: 0.75rem;
     }
     .btn-primary:disabled,
     .btn-secondary:disabled {
       opacity: 0.6;
-      cursor: wait;
+      cursor: default;
     }
+
     .tag-danger {
       color: var(--danger);
       font-size: 0.75rem;
@@ -309,65 +343,12 @@
     .scroll {
       overflow: auto;
     }
-    .right-column-section {
-      margin-top: 16px;
-      padding-top: 12px;
-      border-top: 1px dashed #1f2937;
-    }
-  
-    /* Tabs layout */
-    .tab-bar {
-      display: inline-flex;
-      gap: 8px;
-      padding: 4px;
-      border-radius: 999px;
-      border: 1px solid rgba(31, 41, 55, 0.9);
-      background: radial-gradient(circle at top left, #020617 0, #020617 60%, #000 100%);
-      margin-bottom: 20px;
-    }
-    .tab-button {
-      border: none;
-      padding: 6px 14px;
-      border-radius: 999px;
-      font-size: 0.8rem;
-      cursor: pointer;
-      background: transparent;
-      color: var(--muted);
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      white-space: nowrap;
-    }
-    .tab-button span.icon {
-      font-size: 0.9rem;
-    }
-    .tab-button.active {
-      background: radial-gradient(circle at top left, #1f2937 0, #020617 60%);
-      color: var(--text);
-      box-shadow: 0 0 0 1px #1f2937, 0 10px 25px rgba(15, 23, 42, 0.9);
-    }
-    .tab-panel {
-      display: none;
-    }
-    .tab-panel.active {
-      display: block;
-    }
-    .grid-2col {
-      display: grid;
-      grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr);
-      gap: 24px;
-    }
-    @media (max-width: 900px) {
-      .grid-2col {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-    .member-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-    }
 
+    .right-column-section {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dashed #e5e7eb;
+    }
   </style>
 </head>
 <body>
@@ -375,7 +356,7 @@
   <header>
     <div>
       <h1>Lalm Treningssenter – Admin</h1>
-      <p>Medlemsadministrasjon, Vipps-ordrer og TELL-synk.</p>
+      <p>Enkel administrasjon av medlemmer, SMS og Vipps.</p>
     </div>
     <div>
       <div id="serverStatus" class="badge">
@@ -385,172 +366,140 @@
     </div>
   </header>
 
+  <!-- FANER -->
+  <div class="tabs-row">
+    <button class="tab-button active" data-tab="members">Medlemmer</button>
+    <button class="tab-button" data-tab="sms">SMS</button>
+    <button class="tab-button" data-tab="orders">Vipps-ordrer</button>
+    <button class="tab-button" data-tab="tools">Verktøy / NIF</button>
+  </div>
+
+  <!-- TAB: MEDLEMMER -->
   <main>
-    <div class="tab-bar">
-      <button class="tab-button active" data-tab="members">
-        <span class="icon">👥</span>
-        <span>Medlemmer</span>
-      </button>
-      <button class="tab-button" data-tab="sms">
-        <span class="icon">📩</span>
-        <span>SMS</span>
-      </button>
-      <button class="tab-button" data-tab="orders">
-        <span class="icon">💳</span>
-        <span>Vipps-ordrer</span>
-      </button>
-    </div>
-
-    <div class="tab-panel active" data-tab-panel="members">
-      <div class="grid-2col">
-
-    <!-- VENSTRE: Medlemmer -->
-    <section class="card">
-      <div class="card-title-row">
-        <div>
-          <div class="card-title">Medlemmer</div>
-          <div class="card-subtitle">
-            Oversikt over alle medlemmer. Aktive medlemmer med telefon synkroniseres mot TELL.
+    <section id="tab-members" class="tab-panel active">
+      <div class="panel-grid">
+        <!-- VENSTRE: Medlemsliste -->
+        <section class="card">
+          <div class="card-title-row">
+            <div>
+              <div class="card-title">Medlemmer</div>
+              <div class="card-subtitle">
+                Oversikt over alle medlemmer. Aktive medlemmer med telefon synkroniseres mot TELL.
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div class="pill-row">
+                <div class="pill active">Aktive: <span id="statsActiveCount">0</span></div>
+                <div class="pill">Totalt: <span id="statsTotalCount">0</span></div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div style="text-align:right;">
-          <div class="pill-row">
-            <div class="pill active">Aktive: <span id="statsActiveCount">0</span></div>
-            <div class="pill">Totalt: <span id="statsTotalCount">0</span></div>
+
+          <div class="mt-2">
+            <div class="input-grid">
+              <div>
+                <label for="searchInput">Søk (navn, e-post eller telefon)</label>
+                <input id="searchInput" type="text" placeholder="Søk..." />
+              </div>
+              <div>
+                <label for="filterPlan">Filter: plan</label>
+                <select id="filterPlan">
+                  <option value="">Alle planer</option>
+                  <option value="LALM_IL_BINDING">Lalm IL – binding</option>
+                  <option value="STANDARD_BINDING">Standard – binding</option>
+                  <option value="HYTTE_BINDING">Hytte – binding</option>
+                  <option value="LALM_IL_UBIND">Lalm IL – uten binding</option>
+                  <option value="STANDARD_UBIND">Standard – uten binding</option>
+                  <option value="TEST_1KR">TEST – 1 kr</option>
+                </select>
+              </div>
+            </div>
+            <div class="btn-row" style="justify-content:flex-start;">
+              <button id="btnReloadMembers" class="btn-secondary">⟳ Oppdater liste</button>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <div class="mt-2">
-        <div class="input-grid">
-          <div>
-            <label for="searchInput">Søk (navn, e-post eller telefon)</label>
-            <input id="searchInput" type="text" placeholder="Søk..." />
+          <div class="table-wrapper mt-2">
+            <div class="scroll">
+              <table>
+                <thead>
+                <tr>
+                  <th>Navn</th>
+                  <th>E-post</th>
+                  <th>Telefon</th>
+                  <th>Plan</th>
+                  <th>IL-medlem</th>
+                  <th>Status</th>
+                  <th>Handling</th>
+                </tr>
+                </thead>
+                <tbody id="membersTableBody">
+                <tr>
+                  <td colspan="7" class="text-muted">Laster medlemmer...</td>
+                </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div>
-            <label for="filterPlan">Filter: plan</label>
-            <select id="filterPlan">
-              <option value="">Alle planer</option>
-              <option value="LALM_IL_BINDING">Lalm IL – binding</option>
-              <option value="STANDARD_BINDING">Standard – binding</option>
-              <option value="HYTTE_BINDING">Hytte – binding</option>
-              <option value="LALM_IL_UBIND">Lalm IL – uten binding</option>
-              <option value="STANDARD_UBIND">Standard – uten binding</option>
-              <option value="TEST_1KR">TEST – 1 kr</option>
-            </select>
+
+          <div id="membersError" class="mt-2 small tag-danger" style="display:none;"></div>
+        </section>
+
+        <!-- HØYRE: Legg til medlem -->
+        <section class="card">
+          <div class="card-title-row">
+            <div>
+              <div class="card-title">Legg til medlem</div>
+              <div class="card-subtitle">
+                Registrer nytt medlem. Aktive medlemmer med telefon synkroniseres til TELL.
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <div class="table-wrapper mt-2">
-        <div class="scroll">
-          <table>
-            <thead>
-            <tr>
-              <th>Navn</th>
-              <th>E-post</th>
-              <th>Telefon</th>
-              <th>Plan</th>
-              <th>IL-medlem</th>
-              <th>Status</th>
-              <th>Handling</th>
-            </tr>
-            </thead>
-            <tbody id="membersTableBody">
-            <tr>
-              <td colspan="7" class="text-muted">Laster medlemmer...</td>
-            </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+          <div class="mt-2">
+            <div class="input-grid">
+              <div>
+                <label for="newName">Navn</label>
+                <input id="newName" type="text" placeholder="Fornavn Etternavn" />
+              </div>
+              <div>
+                <label for="newEmail">E-post</label>
+                <input id="newEmail" type="email" placeholder="epost@example.com" />
+              </div>
+              <div>
+                <label for="newPhone">Telefon (for TELL)</label>
+                <input id="newPhone" type="tel" placeholder="+47xxxxxxxx" />
+              </div>
+              <div>
+                <label for="newPlan">Abonnement / plan</label>
+                <select id="newPlan">
+                  <option value="">Velg plan…</option>
+                  <option value="LALM_IL_BINDING">Lalm IL – 12 mnd binding</option>
+                  <option value="STANDARD_BINDING">Standard – 12 mnd binding</option>
+                  <option value="HYTTE_BINDING">Hytte – 12 mnd binding</option>
+                  <option value="LALM_IL_UBIND">Lalm IL – uten binding</option>
+                  <option value="STANDARD_UBIND">Standard – uten binding</option>
+                  <option value="TEST_1KR">TEST – 1 kr</option>
+                </select>
+              </div>
+            </div>
 
-      <div id="membersError" class="mt-2 small tag-danger" style="display:none;"></div>
-    </section>
-
-<!-- HØYRE: Legg til medlem + Verktøy + SMS + Ordrer -->
-    <section class="card">
-      <!-- Legg til medlem -->
-      <div class="card-title-row">
-        <div>
-          <div class="card-title">Legg til medlem</div>
-          <div class="card-subtitle">
-            Registrer nytt medlem. Aktive medlemmer med telefon synkroniseres til TELL.
+            <div class="mt-1 small text-muted">
+              Nye medlemmer blir satt som <strong>aktiv</strong> som standard.
+            </div>
+            <div class="btn-row">
+              <button id="btnAddMember" class="btn-primary">+ Legg til medlem</button>
+            </div>
+            <div id="addMemberMsg" class="mt-1 small"></div>
           </div>
-        </div>
-      </div>
-
-      <div class="mt-2">
-        <div class="input-grid">
-          <div>
-            <label for="newName">Navn</label>
-            <input id="newName" type="text" placeholder="Fornavn Etternavn" />
-          </div>
-          <div>
-            <label for="newEmail">E-post</label>
-            <input id="newEmail" type="email" placeholder="epost@example.com" />
-          </div>
-          <div>
-            <label for="newPhone">Telefon (for TELL)</label>
-            <input id="newPhone" type="tel" placeholder="+47xxxxxxxx" />
-          </div>
-          <div>
-            <label for="newPlan">Abonnement / plan</label>
-            <select id="newPlan">
-              <option value="">Velg plan…</option>
-              <option value="LALM_IL_BINDING">Lalm IL – 12 mnd binding</option>
-              <option value="STANDARD_BINDING">Standard – 12 mnd binding</option>
-              <option value="HYTTE_BINDING">Hytte – 12 mnd binding</option>
-              <option value="LALM_IL_UBIND">Lalm IL – uten binding</option>
-              <option value="STANDARD_UBIND">Standard – uten binding</option>
-              <option value="TEST_1KR">TEST – 1 kr</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="mt-1 small text-muted">
-          Nye medlemmer blir satt som <strong>aktiv</strong> som standard.
-        </div>
-        <div class="btn-row">
-          <button id="btnAddMember" class="btn-primary">+ Legg til medlem</button>
-        </div>
-        <div id="addMemberMsg" class="mt-1 small"></div>
-      </div>
-
-      <!-- Verktøy -->
-      <div class="right-column-section">
-        <div class="card-subtitle" style="margin-bottom:6px;">Verktøy</div>
-        <div class="small text-muted">
-          Systemverktøy for TELL-synk og NIF-medlemsimport.
-        </div>
-        <div class="btn-row mt-2">
-          <button id="btnTellSync" class="btn-secondary">🔄 Synk alle aktive til TELL</button>
-          <button id="btnReloadMembers" class="btn-secondary">⟳ Oppdater liste</button>
-        </div>
-        <div id="toolsMsg" class="mt-1 small"></div>
-
-        <div class="mt-3">
-          <label for="nifTextarea">NIF medlemsimport (CSV fra Excel)</label>
-          <textarea id="nifTextarea" placeholder="Lim inn medlemslisten her…"></textarea>
-          <div class="btn-row mt-1">
-            <button id="btnNifImport" class="btn-secondary">📥 Importer NIF-liste</button>
-            <button id="btnClearNif" class="btn-ghost">Tøm felt</button>
-          </div>
-          <div id="nifMsg" class="mt-1 small"></div>
-        </div>
-      </div>
-
-
+        </section>
       </div>
     </section>
-      </div>
-    </div>
 
-    <div class="tab-panel" data-tab-panel="sms">
-<section class="card">
-      <!-- SMS til medlemmer -->
-      <div class="right-column-section">
-        <div class="card-title-row" style="margin-bottom:8px;">
+    <!-- TAB: SMS -->
+    <section id="tab-sms" class="tab-panel">
+      <section class="card">
+        <div class="card-title-row">
           <div>
             <div class="card-title">SMS til medlemmer</div>
             <div class="card-subtitle">
@@ -589,16 +538,16 @@
           <strong>Medlemsliste for avhuking</strong>
         </div>
 
-        <div style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; margin-top: 6px;">
+        <div style="max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; margin-top: 6px; background:#ffffff;">
           <table style="width:100%; border-collapse: collapse; font-size:0.75rem;">
-            <thead style="position: sticky; top:0; background: rgba(15,23,42,0.96);">
+            <thead style="position: sticky; top:0; background: #f3f4f6;">
               <tr>
-                <th style="padding:6px; border-bottom:1px solid #1f2937; text-align:center;">
+                <th style="padding:6px; border-bottom:1px solid #e5e7eb; text-align:center;">
                   <input type="checkbox" id="smsSelectAll" />
                 </th>
-                <th style="padding:6px; border-bottom:1px solid #1f2937; text-align:left;">Navn</th>
-                <th style="padding:6px; border-bottom:1px solid #1f2937; text-align:left;">Telefon</th>
-                <th style="padding:6px; border-bottom:1px solid #1f2937; text-align:left;">Status</th>
+                <th style="padding:6px; border-bottom:1px solid #e5e7eb; text-align:left;">Navn</th>
+                <th style="padding:6px; border-bottom:1px solid #e5e7eb; text-align:left;">Telefon</th>
+                <th style="padding:6px; border-bottom:1px solid #e5e7eb; text-align:left;">Status</th>
               </tr>
             </thead>
             <tbody id="smsMembersBody">
@@ -613,16 +562,12 @@
           <button id="sendSmsBtn" class="btn-secondary">📩 Send SMS</button>
           <span id="smsStatus" class="small" style="margin-left:8px;"></span>
         </div>
-      </div>
-
-
+      </section>
     </section>
-    </div>
 
-    <div class="tab-panel" data-tab-panel="orders">
-<section class="card">
-      <!-- Ordrer -->
-      <div class="right-column-section">
+    <!-- TAB: ORDRE -->
+    <section id="tab-orders" class="tab-panel">
+      <section class="card">
         <div class="card-title-row" style="margin-bottom:8px;">
           <div>
             <div class="card-title">Vipps-ordrer</div>
@@ -637,7 +582,7 @@
           </div>
         </div>
 
-        <div class="table-wrapper" style="max-height: 220px;">
+        <div class="table-wrapper" style="max-height: 360px;">
           <div class="scroll">
             <table>
               <thead>
@@ -659,28 +604,41 @@
           </div>
         </div>
         <div id="ordersError" class="mt-1 small tag-danger" style="display:none;"></div>
-      </div>
+      </section>
     </section>
-    </section>
-    </div>
 
+    <!-- TAB: VERKTØY / NIF -->
+    <section id="tab-tools" class="tab-panel">
+      <section class="card">
+        <div class="card-title-row">
+          <div>
+            <div class="card-title">Verktøy</div>
+            <div class="card-subtitle">
+              Systemverktøy for TELL-synk og NIF-medlemsimport.
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row mt-1">
+          <button id="btnTellSync" class="btn-secondary">🔄 Synk alle aktive til TELL</button>
+        </div>
+        <div id="toolsMsg" class="mt-1 small"></div>
+
+        <div class="right-column-section">
+          <label for="nifTextarea">NIF medlemsimport (CSV fra Excel)</label>
+          <textarea id="nifTextarea" placeholder="Lim inn medlemslisten her…"></textarea>
+          <div class="btn-row mt-1">
+            <button id="btnNifImport" class="btn-secondary">📥 Importer NIF-liste</button>
+            <button id="btnClearNif" class="btn-ghost">Tøm felt</button>
+          </div>
+          <div id="nifMsg" class="mt-1 small"></div>
+        </div>
+      </section>
+    </section>
   </main>
 </div>
 
 <script>
-  const tabButtons = document.querySelectorAll('.tab-button');
-  const tabPanels = document.querySelectorAll('.tab-panel');
-
-  tabButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tab = btn.getAttribute('data-tab');
-      tabButtons.forEach(b => b.classList.toggle('active', b === btn));
-      tabPanels.forEach(panel => {
-        panel.classList.toggle('active', panel.getAttribute('data-tab-panel') === tab);
-      });
-    });
-  });
-
   const serverStatusEl = document.getElementById('serverStatus');
   const membersTableBody = document.getElementById('membersTableBody');
   const membersErrorEl = document.getElementById('membersError');
@@ -819,10 +777,9 @@
       return;
     }
 
-    // Sorter nyeste først
     const sorted = [...allOrders].sort((a, b) => {
       return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-    }).slice(0, 50); // maks 50
+    }).slice(0, 50);
 
     ordersTableBody.innerHTML = '';
     sorted.forEach(o => {
@@ -1013,7 +970,6 @@
   }
 
   // ---------- SMS-funksjoner ----------
-
   function getSmsMode() {
     const checked = document.querySelector('input[name="smsMode"]:checked');
     return checked ? checked.value : 'segment';
@@ -1057,16 +1013,16 @@
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td style="padding:4px; border-bottom:1px solid #111827; text-align:center;">
+        <td style="padding:4px; border-bottom:1px solid #e5e7eb; text-align:center;">
           <input
             type="checkbox"
             class="smsMemberCheckbox"
             data-phone="${phone}"
           />
         </td>
-        <td style="padding:4px; border-bottom:1px solid #111827;">${name}</td>
-        <td style="padding:4px; border-bottom:1px solid #111827;">${phone}</td>
-        <td style="padding:4px; border-bottom:1px solid #111827;">${statusLabel}</td>
+        <td style="padding:4px; border-bottom:1px solid #e5e7eb;">${name}</td>
+        <td style="padding:4px; border-bottom:1px solid #e5e7eb;">${phone}</td>
+        <td style="padding:4px; border-bottom:1px solid #e5e7eb;">${statusLabel}</td>
       `;
       smsMembersBodyEl.appendChild(tr);
     });
@@ -1082,7 +1038,7 @@
 
     if (!message) {
       smsStatusEl.textContent = 'Meldingen kan ikke være tom.';
-      smsStatusEl.style.color = '#f97373';
+      smsStatusEl.style.color = '#b91c1c';
       return;
     }
 
@@ -1103,7 +1059,7 @@
 
       if (!selectedPhones.length) {
         smsStatusEl.textContent = 'Ingen medlemmer er huket av.';
-        smsStatusEl.style.color = '#f97373';
+        smsStatusEl.style.color = '#b91c1c';
         return;
       }
       payload.phones = selectedPhones;
@@ -1113,7 +1069,7 @@
 
     try {
       smsStatusEl.textContent = 'Sender...';
-      smsStatusEl.style.color = '#9ca3af';
+      smsStatusEl.style.color = '#6b7280';
 
       const res = await fetch(SMS_API_URL, {
         method: 'POST',
@@ -1128,12 +1084,12 @@
 
       smsStatusEl.textContent =
         `Sendt til ${data.sent} av ${data.attempted} numre. Feil: ${data.failed}.`;
-      smsStatusEl.style.color = '#22c55e';
+      smsStatusEl.style.color = '#15803d';
       smsMessageEl.value = '';
     } catch (e) {
       console.error('Feil ved SMS-utsending:', e);
       smsStatusEl.textContent = 'Feil ved sending av SMS: ' + e.message;
-      smsStatusEl.style.color = '#f97373';
+      smsStatusEl.style.color = '#b91c1c';
     }
   }
 
@@ -1178,6 +1134,22 @@
   if (sendSmsBtn) {
     sendSmsBtn.addEventListener('click', sendSmsFromPanel);
   }
+
+  // FANER – enkel logikk
+  const tabButtons = document.querySelectorAll('.tab-button');
+  const tabPanels = document.querySelectorAll('.tab-panel');
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.getAttribute('data-tab');
+      tabButtons.forEach(b => b.classList.remove('active'));
+      tabPanels.forEach(p => p.classList.remove('active'));
+
+      btn.classList.add('active');
+      const panel = document.getElementById('tab-' + target);
+      if (panel) panel.classList.add('active');
+    });
+  });
 
   // Init
   (async function init() {
