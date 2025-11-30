@@ -1362,7 +1362,7 @@ app.post('/vipps/checkout', async (req, res) => {
 
     const cleanPhone = digits; // 8 siffer
 
-        // Sjekk: finnes det allerede et aktivt medlem med samme tlf / e-post?
+    // Sjekk: finnes det allerede et aktivt medlem med samme tlf / e-post?
     const existingMember = findMemberByPhoneOrEmail(phoneFull, email);
 
     if (existingMember && existingMember.active) {
@@ -1370,15 +1370,15 @@ app.post('/vipps/checkout', async (req, res) => {
         `[${new Date().toISOString()}] VIPPS_CHECKOUT_BLOCKED_EXISTING_MEMBER phone=${phoneFull} email=${(email || '').toLowerCase()} memberId=${existingMember.id}\n`
       );
 
-return res.status(400).json({
-  ok: false,
-  error: 'member_already_active',
-  title: 'Allerede aktivt medlemskap',
-  message:
-    'Det finnes allerede et aktivt medlemskap registrert på dette telefonnummeret eller denne e-postadressen. ' +
-    'Hvis du mener dette er en feil, ta kontakt med Lalm Treningssenter for hjelp.',
-});
-
+      return res.status(400).json({
+        ok: false,
+        error: 'member_already_active',
+        title: 'Allerede aktivt medlemskap',
+        message:
+          'Det finnes allerede et aktivt medlemskap registrert på dette telefonnummeret eller denne e-postadressen. ' +
+          'Hvis du mener dette er en feil, ta kontakt med Lalm Treningssenter for hjelp.',
+      });
+    }
 
     // Dag-proratering første måned
     const now = new Date();
@@ -1546,6 +1546,7 @@ return res.status(400).json({
     }
   }
 });
+
 
 // -----------------------------------------------------
 // Vipps helpers: access token + auto-capture
