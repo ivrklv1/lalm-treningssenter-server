@@ -2002,16 +2002,17 @@ async function vippsAutoCapture(orderId, amountInOre, transactionText) {
   };
 
   const headers = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${accessToken}`,
-    'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY,
-    'Merchant-Serial-Number': process.env.VIPPS_MSN,
-    'Vipps-System-Name': 'lalm-treningssenter',
-    'Vipps-System-Version': '1.0.0',
-    'Vipps-System-Plugin-Name': 'lalm-app',
-    'Vipps-System-Plugin-Version': '1.0.0',
-    'X-Request-Id': `capture-${orderId}-${Date.now()}`, // idempotency
-  };
+  'Content-Type': 'application/json',
+  Authorization: `Bearer ${accessToken}`,
+  'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY,
+  'Merchant-Serial-Number': process.env.VIPPS_MSN,
+  'Vipps-System-Name': 'lalm-treningssenter',
+  'Vipps-System-Version': '1.0.0',
+  'Vipps-System-Plugin-Name': 'lalm-app',
+  'Vipps-System-Plugin-Version': '1.0.0',
+  // Må være <= 40 tegn:
+  'X-Request-Id': `capture-${orderId}`,
+};
 
   appendAccessLog(
     `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_START orderId=${orderId} amount=${amountInOre}\n`
