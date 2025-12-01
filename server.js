@@ -1684,7 +1684,7 @@ app.post('/vipps/checkout', async (req, res) => {
 
         // 🧪 TESTMEDLEMSKAP 1 kr
         TEST_1KR: {
-          amount: 100,
+          amount: 300,
           text: 'TEST – 1 kr (ingen innmeldingsavgift)',
           prorate: false,
         },
