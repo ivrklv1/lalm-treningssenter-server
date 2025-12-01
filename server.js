@@ -1644,7 +1644,7 @@ app.post('/vipps/checkout', async (req, res) => {
     // 2) returnUrl som peker til backend -> /vipps/return
     const returnUrl = `${process.env.SERVER_URL}/vipps/return?orderId=${orderId}`;
 
-    // Medlemskap og full månedspris (i øre)
+    // 3) Finn plan (fra plans.json eller fallback-tabell)
     const plans = getPlans();
     let selected = null;
 
@@ -1666,47 +1666,47 @@ app.post('/vipps/checkout', async (req, res) => {
 
     if (!selected) {
       const membershipMap = {
-            LALM_IL_BINDING: {
-              amount: 34900,
-              text: 'Lalm IL-medlem – 12 mnd binding',
-              prorate: true,
-            },
-            STANDARD_BINDING: {
-              amount: 44900,
-              text: 'Standard – 12 mnd binding',
-              prorate: true,
-            },
-            HYTTE_BINDING: {
-              amount: 16900,
-              text: 'Hyttemedlemskap – 12 mnd binding',
-              prorate: true,
-            },
-      
-            // 🧪 TESTMEDLEMSKAP 1 kr
-            TEST_1KR: {
-              amount: 100,
-              text: 'TEST – 1 kr (ingen innmeldingsavgift)',
-              prorate: false,
-            },
-      
-            LALM_IL_UBIND: {
-              amount: 44900,
-              text: 'Lalm IL-medlem – uten binding',
-              prorate: true,
-            },
-            STANDARD_UBIND: {
-              amount: 54900,
-              text: 'Standard – uten binding',
-              prorate: true,
-            },
-            DROPIN: {
-              amount: 14900, // 149 kr i øre (juster pris)
-              text: 'Drop-in adgang (gyldig i dag)',
-              prorate: false,
-            },
-          };
+        LALM_IL_BINDING: {
+          amount: 34900,
+          text: 'Lalm IL-medlem – 12 mnd binding',
+          prorate: true,
+        },
+        STANDARD_BINDING: {
+          amount: 44900,
+          text: 'Standard – 12 mnd binding',
+          prorate: true,
+        },
+        HYTTE_BINDING: {
+          amount: 16900,
+          text: 'Hyttemedlemskap – 12 mnd binding',
+          prorate: true,
+        },
 
-      selected = membershipMap[membershipKey];
+        // 🧪 TESTMEDLEMSKAP 1 kr
+        TEST_1KR: {
+          amount: 100,
+          text: 'TEST – 1 kr (ingen innmeldingsavgift)',
+          prorate: false,
+        },
+
+        LALM_IL_UBIND: {
+          amount: 44900,
+          text: 'Lalm IL-medlem – uten binding',
+          prorate: true,
+        },
+        STANDARD_UBIND: {
+          amount: 54900,
+          text: 'Standard – uten binding',
+          prorate: true,
+        },
+        DROPIN: {
+          amount: 14900, // 149 kr i øre (juster pris)
+          text: 'Drop-in adgang (gyldig i dag)',
+          prorate: false,
+        },
+      };
+
+      selected = membershipMap[membershipKey] || null;
     }
 
     if (!selected) {
@@ -1717,13 +1717,12 @@ app.post('/vipps/checkout', async (req, res) => {
       });
     }
 
-// Telefon-normalisering
+    // 4) Telefon-normalisering
     const phoneFull = normalizePhone(phone); // f.eks. +4790000000
     if (!phoneFull) {
       return res.status(400).json({ ok: false, error: 'invalid_phone' });
     }
 
-    // Vipps forventer 8-sifret norsk mobil i dette oppsettet
     let digits = String(phoneFull).replace(/\D/g, ''); // f.eks. 4790000000
     if (digits.length === 10 && digits.startsWith('47')) {
       digits = digits.slice(2); // ta siste 8 sifre
@@ -1735,12 +1734,10 @@ app.post('/vipps/checkout', async (req, res) => {
         phoneSent: phone,
       });
     }
-
     const cleanPhone = digits; // 8 siffer
 
-    // Sjekk: finnes det allerede et aktivt medlem med samme tlf / e-post?
+    // 5) Sjekk om det finnes aktivt medlem med samme tlf/e-post
     const existingMember = findMemberByPhoneOrEmail(phoneFull, email);
-
     if (existingMember && existingMember.active) {
       appendAccessLog(
         `[${new Date().toISOString()}] VIPPS_CHECKOUT_BLOCKED_EXISTING_MEMBER phone=${phoneFull} email=${(email || '').toLowerCase()} memberId=${existingMember.id}\n`
@@ -1756,7 +1753,7 @@ app.post('/vipps/checkout', async (req, res) => {
       });
     }
 
-    // Dag-proratering første måned
+    // 6) Dag-proratering første måned
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
@@ -1775,20 +1772,42 @@ app.post('/vipps/checkout', async (req, res) => {
       prorationLabel = ` – første måned: ${remainingDays} av ${daysInMonth} dager`;
     }
 
-    // Innmeldingsavgift 199,-
+    // 7) Innmeldingsavgift 199,- (ikke for TEST_1KR og DROPIN)
     let SIGNUP_FEE = 19900;
     if (membershipKey === 'TEST_1KR' || membershipKey === 'DROPIN') {
       SIGNUP_FEE = 0;
     }
 
-    const finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
+    let finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
+
+    // Sikkerhet: Vipps krever minst 1 kr (100 øre)
+    if (finalAmount < 100) {
+      console.warn(
+        'finalAmount < 100, justerer opp til 100. membershipKey=',
+        membershipKey,
+        'beregnet=',
+        finalAmount
+      );
+      finalAmount = 100;
+    }
+
+    console.log('VIPPS BELØP', {
+      membershipKey,
+      selectedAmount: selected.amount,
+      firstMonthTrainingAmount,
+      SIGNUP_FEE,
+      finalAmount,
+    });
+    appendAccessLog(
+      `[${new Date().toISOString()}] VIPPS_AMOUNT_CALC orderId=${orderId} membershipKey=${membershipKey} full=${selected.amount} firstMonth=${firstMonthTrainingAmount} signupFee=${SIGNUP_FEE} final=${finalAmount}\n`
+    );
 
     const apiBase =
       process.env.VIPPS_ENV === 'test'
         ? 'https://apitest.vipps.no'
         : 'https://api.vipps.no';
 
-    // 1. Hent access token (Checkout)
+    // 8) Hent access token (eCom)
     const tokenRes = await axios.post(
       `${apiBase}/accesstoken/get`,
       {},
@@ -1808,6 +1827,7 @@ app.post('/vipps/checkout', async (req, res) => {
       throw new Error('Mangler access_token fra Vipps');
     }
 
+    // 9) Initier betaling hos Vipps (reservasjon)
     const paymentBody = {
       customerInfo: {
         mobileNumber: cleanPhone,
@@ -1816,7 +1836,6 @@ app.post('/vipps/checkout', async (req, res) => {
         merchantSerialNumber: process.env.VIPPS_MSN,
         callbackPrefix: process.env.VIPPS_CALLBACK_URL,
         // Vipps åpner denne URL-en etter betaling (fullført / avbrutt)
-        // Her peker vi til backend, som igjen redirecter videre inn i appen via deeplink.
         fallBack: returnUrl,
       },
       transaction: {
@@ -1864,7 +1883,7 @@ app.post('/vipps/checkout', async (req, res) => {
       });
     }
 
-    // Lagre ordren i orders.json
+    // 10) Lagre ordren i orders.json
     const nowIso = new Date().toISOString();
     upsertOrder({
       orderId,
@@ -1891,6 +1910,7 @@ app.post('/vipps/checkout', async (req, res) => {
       updatedAt: nowIso,
     });
 
+    // 11) Svar til app/nettside
     return res.json({
       ok: true,
       url: redirectUrl,
