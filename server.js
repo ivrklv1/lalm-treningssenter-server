@@ -1990,12 +1990,12 @@ async function vippsAutoCapture(orderId, amountInOre, transactionText) {
 
   const url = `${apiBase}/ecomm/v2/payments/${orderId}/capture`;
 
+  // For full capture: IKKE send amount – Vipps tar hele reservert beløp
   const body = {
     merchantInfo: {
       merchantSerialNumber: process.env.VIPPS_MSN,
     },
     transaction: {
-      amount: amountInOre,
       transactionText:
         transactionText || 'Lalm Treningssenter medlemskap',
     },
@@ -2010,25 +2010,40 @@ async function vippsAutoCapture(orderId, amountInOre, transactionText) {
     'Vipps-System-Version': '1.0.0',
     'Vipps-System-Plugin-Name': 'lalm-app',
     'Vipps-System-Plugin-Version': '1.0.0',
-    'X-Request-Id': `capture-${orderId}-${Date.now()}`, // idempotent-ish
+    'X-Request-Id': `capture-${orderId}-${Date.now()}`, // idempotency
   };
 
   appendAccessLog(
     `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_START orderId=${orderId} amount=${amountInOre}\n`
   );
 
-  const res = await axios.post(url, body, { headers });
+  try {
+    const res = await axios.post(url, body, { headers });
 
-  if (res.status === 200) {
-    appendAccessLog(
-      `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_OK orderId=${orderId}\n`
+    if (res.status === 200) {
+      appendAccessLog(
+        `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_OK orderId=${orderId}\n`
+      );
+      return true;
+    } else {
+      appendAccessLog(
+        `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_BAD_STATUS orderId=${orderId} httpStatus=${res.status} body=${JSON.stringify(
+          res.data
+        )}\n`
+      );
+      return false;
+    }
+  } catch (e) {
+    console.error(
+      'Feil ved auto-capture for orderId',
+      orderId,
+      e.response?.status,
+      e.response?.data || e.message
     );
-    return true;
-  } else {
     appendAccessLog(
-      `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_BAD_STATUS orderId=${orderId} httpStatus=${res.status} body=${JSON.stringify(
-        res.data
-      )}\n`
+      `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_ERROR orderId=${orderId} httpStatus=${
+        e.response?.status
+      } data=${JSON.stringify(e.response?.data || {})}\n`
     );
     return false;
   }
