@@ -1601,11 +1601,34 @@ app.post('/auth/verify-code', async (req, res) => {
 app.get('/vipps/return', (req, res) => {
   const { orderId, status } = req.query;
 
-  // Base deeplink kan evt. ligge i .env
   const deeplinkBase =
     process.env.APP_RETURN_URL || 'lalmtreningssenter://payment-result';
 
-  const finalStatus = (status && String(status)) || 'success';
+  let finalStatus = 'success';
+
+  if (status) {
+    // Hvis vi en gang i fremtiden sender inn ?status=... eksplisitt, bruk den
+    finalStatus = String(status);
+  } else if (orderId) {
+    const order = findOrder(String(orderId));
+
+    if (!order) {
+      finalStatus = 'unknown';
+    } else {
+      const os = order.status || order.vippsTransactionStatus || '';
+
+      if (['CAPTURED', 'SALE'].includes(os)) {
+        finalStatus = 'success';
+      } else if (['CANCELLED', 'CANCELED', 'FAILED'].includes(os)) {
+        finalStatus = 'cancelled';
+      } else {
+        // PENDING / RESERVED / annet → ikke vis som fullført
+        finalStatus = 'pending';
+      }
+    }
+  } else {
+    finalStatus = 'unknown';
+  }
 
   const deepLink =
     `${deeplinkBase}?status=${encodeURIComponent(finalStatus)}` +
