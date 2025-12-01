@@ -609,51 +609,102 @@
     </section>
 
     <!-- TAB: MEDLEMSKAP & PRISER (plans.json) -->
-    <section id="tab-plans" class="tab-panel">
-      <section class="card">
-        <div class="card-title-row">
-          <div>
-            <div class="card-title">Medlemskap & priser</div>
-            <div class="card-subtitle">
-              Administrer hvilke medlemskap som finnes, pris per måned, innmeldingsavgift og binding (lagres i plans.json).
-            </div>
-          </div>
-          <div>
-            <span class="badge-small">
-              Antall: <span id="plansCount">0</span>
-            </span>
-          </div>
+<section id="tab-plans" class="tab-panel">
+  <section class="card">
+    <div class="card-title-row">
+      <div>
+        <div class="card-title">Medlemskap & priser</div>
+        <div class="card-subtitle">
+          Administrer hvilke medlemskap som vises i app og på nettsiden. Pris, innhold, kampanjer og korttidsmedlemskap styres her.
         </div>
+      </div>
+      <div>
+        <span class="badge-small">
+          Antall: <span id="plansCount">0</span>
+        </span>
+      </div>
+    </div>
 
-        <div class="table-wrapper" style="max-height: 400px;">
-          <div class="scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Nøkkel</th>
-                  <th>Navn (vises for bruker)</th>
-                  <th>Pris / mnd (kr)</th>
-                  <th>Innmeldingsavgift (kr)</th>
-                  <th>Binding (mnd)</th>
-                  <th>Aktiv</th>
-                </tr>
-              </thead>
-              <tbody id="plansTableBody">
-                <tr>
-                  <td colspan="6" class="text-muted">Laster medlemskap...</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+    <div class="table-wrapper" style="max-height: 360px;">
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Nøkkel</th>
+              <th>Navn</th>
+              <th>Type</th>
+              <th>Pris (kr)</th>
+              <th>Innmeldingsavg. (kr)</th>
+              <th>Binding (mnd)</th>
+              <th>Korttidsdager</th>
+              <th>Web</th>
+              <th>App</th>
+              <th>Aktiv</th>
+              <th>Sort</th>
+              <th>Tekst</th>
+            </tr>
+          </thead>
+          <tbody id="plansTableBody">
+            <tr>
+              <td colspan="12" class="text-muted">Laster medlemskap...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-        <div class="btn-row mt-2">
-          <button id="btnAddPlanRow" class="btn-secondary">+ Ny linje</button>
-          <button id="btnSavePlans" class="btn-primary">💾 Lagre endringer</button>
+    <div class="btn-row mt-2">
+      <button id="btnAddPlanRow" class="btn-secondary">+ Ny plan</button>
+      <button id="btnSavePlans" class="btn-primary">💾 Lagre alle</button>
+    </div>
+    <div id="plansMsg" class="mt-1 small"></div>
+
+    <!-- Detaljer for valgt plan (tekst/bullets/kampanje) -->
+    <div id="planDetail" class="mt-3" style="display:none;">
+      <div class="small text-muted">
+        Rediger tekst for: <strong id="planDetailId"></strong>
+      </div>
+      <div class="input-grid mt-1">
+        <div>
+          <label for="planDetailName">Navn (kort tittel)</label>
+          <input id="planDetailName" type="text" />
         </div>
-        <div id="plansMsg" class="mt-1 small"></div>
-      </section>
-    </section>
+        <div>
+          <label for="planDetailTagline">Tagline (kort linje under overskrift)</label>
+          <input id="planDetailTagline" type="text" />
+        </div>
+      </div>
+
+      <div class="mt-2">
+        <label for="planDetailDescription">Beskrivelse (kort tekst i boksen)</label>
+        <textarea id="planDetailDescription" rows="2"></textarea>
+      </div>
+
+      <div class="mt-2">
+        <label for="planDetailBullets">Punktliste (ett punkt per linje)</label>
+        <textarea id="planDetailBullets" rows="4"></textarea>
+      </div>
+
+      <div class="input-grid mt-2">
+        <div>
+          <label for="planDetailCampaignLabel">Kampanje-label (valgfri, f.eks. "Januarkampanje")</label>
+          <input id="planDetailCampaignLabel" type="text" />
+        </div>
+        <div>
+          <label for="planDetailCampaignFrom">Kampanje fra (YYYY-MM-DD)</label>
+          <input id="planDetailCampaignFrom" type="text" placeholder="2025-01-01" />
+        </div>
+      </div>
+      <div class="input-grid mt-1">
+        <div>
+          <label for="planDetailCampaignTo">Kampanje til (YYYY-MM-DD)</label>
+          <input id="planDetailCampaignTo" type="text" placeholder="2025-01-31" />
+        </div>
+      </div>
+    </div>
+  </section>
+</section>
+
 
     <!-- TAB: SMS -->
     <section id="tab-sms" class="tab-panel">
@@ -845,10 +896,35 @@
   const plansMsg = document.getElementById('plansMsg');
   const plansCountEl = document.getElementById('plansCount');
 
+  const planDetailEl = document.getElementById('planDetail');
+const planDetailIdEl = document.getElementById('planDetailId');
+const planDetailNameEl = document.getElementById('planDetailName');
+const planDetailTaglineEl = document.getElementById('planDetailTagline');
+const planDetailDescriptionEl = document.getElementById('planDetailDescription');
+const planDetailBulletsEl = document.getElementById('planDetailBullets');
+const planDetailCampaignLabelEl = document.getElementById('planDetailCampaignLabel');
+const planDetailCampaignFromEl = document.getElementById('planDetailCampaignFrom');
+const planDetailCampaignToEl = document.getElementById('planDetailCampaignTo');
+
   let allMembers = [];
   let allOrders = [];
   let allPlans = [];
   let smsMembers = [];
+  let currentDetailIndex = null;
+
+function krFromOre(øre) {
+  if (typeof øre !== 'number') return '';
+  return (øre / 100).toFixed(0); // hele kroner
+}
+
+function oreFromKrStr(value) {
+  const v = String(value || '').replace(',', '.').trim();
+  if (!v) return 0;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 100);
+}
+
 
   function setServerStatus(ok, text) {
     serverStatusEl.classList.toggle('badge-error', !ok);
