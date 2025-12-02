@@ -2,7 +2,7 @@
   {
     "id": "lalm_il_12mnd_binding",
     "name": "Lalm IL-medlem",
-    "text": "Lalm IL-medlem – 12 mnd binding",
+    "text": "Lalm IL-medlem - 12 mnd binding",
     "type": "standard",
     "amount": 34900,
     "signupFee": 0,
@@ -12,7 +12,7 @@
     "description": "12 måneders bindingstid. Deretter løpende medlemskap med ordinær oppsigelsestid.",
     "bullets": [
       "Rabattert pris for medlemmer i Lalm IL",
-      "Full tilgang i åpningstiden 05:00–23:00",
+      "Full tilgang i åpningstiden 05:00-23:00",
       "Støtter lokalt idrettsarbeid på Lalm"
     ],
     "campaignLabel": null,
@@ -27,7 +27,7 @@
   {
     "id": "standard_12mnd_binding",
     "name": "Standard",
-    "text": "Standard – 12 mnd binding",
+    "text": "Standard - 12 mnd binding",
     "type": "standard",
     "amount": 44900,
     "signupFee": 0,
@@ -52,7 +52,7 @@
   {
     "id": "hytte_12mnd_binding",
     "name": "Hyttemedlemskap",
-    "text": "Hyttemedlemskap – 12 mnd binding",
+    "text": "Hyttemedlemskap - 12 mnd binding",
     "type": "standard",
     "amount": 16900,
     "signupFee": 0,
@@ -69,15 +69,15 @@
     "campaignFrom": null,
     "campaignTo": null,
     "showOnWeb": true,
-    "showOnApp": true,
+    "showInApp": true,
     "prorate": true,
     "active": true,
     "sortOrder": 3
   },
   {
     "id": "lalm_il_uten_binding",
-    "name": "Lalm IL-medlem – uten binding",
-    "text": "Lalm IL-medlem – uten binding",
+    "name": "Lalm IL-medlem - uten binding",
+    "text": "Lalm IL-medlem - uten binding",
     "type": "standard",
     "amount": 44900,
     "signupFee": 0,
@@ -101,8 +101,8 @@
   },
   {
     "id": "standard_uten_binding",
-    "name": "Standard – uten binding",
-    "text": "Standard – uten binding",
+    "name": "Standard - uten binding",
+    "text": "Standard - uten binding",
     "type": "standard",
     "amount": 54900,
     "signupFee": 0,
@@ -113,7 +113,7 @@
     "bullets": [
       "Passer for deg som vil teste senteret over tid",
       "Kan avsluttes når behovet endrer seg",
-      "Tilgang i hele åpningstiden 05:00–23:00"
+      "Tilgang i hele åpningstiden 05:00-23:00"
     ],
     "campaignLabel": null,
     "campaignFrom": null,

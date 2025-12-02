@@ -788,46 +788,46 @@ app.post('/admin/plans', basicAuth, (req, res) => {
     return res.status(400).json({ ok: false, error: 'amount_invalid' });
   }
 
-  const signupFeeNum = Number(body.signupFee ?? 0);
-  const bindingMonths = Number(body.bindingMonths ?? 0) || 0;
-  const shortTermDays =
-    body.shortTermDays == null ? null : (Number(body.shortTermDays) || 0);
+  const signupFeeNum =
+    body.signupFee != null ? Number(body.signupFee) || 0 : 0;
+  const bindingMonthsNum =
+    body.bindingMonths != null ? Number(body.bindingMonths) || 0 : 0;
+  const shortTermDaysNum =
+    body.shortTermDays != null && body.shortTermDays !== ''
+      ? Number(body.shortTermDays) || 0
+      : null;
 
   const sortOrder =
     typeof body.sortOrder === 'number'
       ? body.sortOrder
       : plans.length + 1;
 
-  const bullets = Array.isArray(body.bullets)
-    ? body.bullets.map((s) => String(s)).filter(Boolean)
-    : typeof body.bullets === 'string'
-      ? body.bullets
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : [];
-
   const plan = {
     id,
     key: id,
     name: body.name || body.text || id,
     text: body.text || body.name || id,
+    type: body.type || 'standard',
+
     amount: amountNum,
     signupFee: signupFeeNum,
-    bindingMonths,
-    shortTermDays,
-    prorate: body.prorate !== false,
-    active: body.active !== false,
-    sortOrder,
-    description: body.description || '',
+    bindingMonths: bindingMonthsNum,
+    shortTermDays: shortTermDaysNum,
+
     tagline: body.tagline || '',
-    type: body.type || 'standard', // standard | short_term | dropin
-    bullets,
+    description: body.description || '',
+    bullets: Array.isArray(body.bullets) ? body.bullets : [],
+
     campaignLabel: body.campaignLabel || null,
     campaignFrom: body.campaignFrom || null,
     campaignTo: body.campaignTo || null,
+
     showOnWeb: body.showOnWeb !== false,
     showInApp: body.showInApp !== false,
+    prorate: body.prorate !== false,
+    active: body.active !== false,
+
+    sortOrder,
   };
 
   plans.push(plan);
@@ -835,7 +835,6 @@ app.post('/admin/plans', basicAuth, (req, res) => {
 
   res.json({ ok: true, plan });
 });
-
 
 // Admin: oppdater eksisterende medlemskap
 app.put('/admin/plans/:id', basicAuth, (req, res) => {
@@ -850,6 +849,7 @@ app.put('/admin/plans/:id', basicAuth, (req, res) => {
 
   const plan = plans[idx];
 
+  // Tallfelt
   if (Object.prototype.hasOwnProperty.call(body, 'amount')) {
     const amountNum = Number(body.amount);
     if (!Number.isFinite(amountNum) || amountNum < 0) {
@@ -857,15 +857,23 @@ app.put('/admin/plans/:id', basicAuth, (req, res) => {
     }
     plan.amount = amountNum;
   }
-
   if (Object.prototype.hasOwnProperty.call(body, 'signupFee')) {
-    const signupFeeNum = Number(body.signupFee ?? 0);
-    if (!Number.isFinite(signupFeeNum) || signupFeeNum < 0) {
-      return res.status(400).json({ ok: false, error: 'signupFee_invalid' });
-    }
-    plan.signupFee = signupFeeNum;
+    plan.signupFee = Number(body.signupFee) || 0;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'bindingMonths')) {
+    plan.bindingMonths = Number(body.bindingMonths) || 0;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'shortTermDays')) {
+    plan.shortTermDays =
+      body.shortTermDays != null && body.shortTermDays !== ''
+        ? Number(body.shortTermDays) || 0
+        : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'sortOrder')) {
+    plan.sortOrder = Number(body.sortOrder) || 0;
   }
 
+  // Tekstfelter
   if (Object.prototype.hasOwnProperty.call(body, 'name')) {
     plan.name = body.name;
   }
@@ -873,48 +881,20 @@ app.put('/admin/plans/:id', basicAuth, (req, res) => {
     plan.text = body.text;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'description')) {
-    plan.description = body.description;
+    plan.description = body.description || '';
   }
   if (Object.prototype.hasOwnProperty.call(body, 'tagline')) {
-    plan.tagline = body.tagline;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, 'bindingMonths')) {
-    plan.bindingMonths = Number(body.bindingMonths || 0);
-  }
-  if (Object.prototype.hasOwnProperty.call(body, 'shortTermDays')) {
-    const v =
-      body.shortTermDays == null
-        ? null
-        : (Number(body.shortTermDays) || 0);
-    plan.shortTermDays = v;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, 'prorate')) {
-    plan.prorate = !!body.prorate;
-  }
-  if (Object.prototype.hasOwnProperty.call(body, 'active')) {
-    plan.active = !!body.active;
-  }
-  if (Object.prototype.hasOwnProperty.call(body, 'sortOrder')) {
-    plan.sortOrder = Number(body.sortOrder);
+    plan.tagline = body.tagline || '';
   }
   if (Object.prototype.hasOwnProperty.call(body, 'type')) {
-    plan.type = body.type;
+    plan.type = body.type || 'standard';
   }
 
   if (Object.prototype.hasOwnProperty.call(body, 'bullets')) {
-    const bullets = Array.isArray(body.bullets)
-      ? body.bullets.map((s) => String(s)).filter(Boolean)
-      : typeof body.bullets === 'string'
-        ? body.bullets
-            .split('\n')
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : [];
-    plan.bullets = bullets;
+    plan.bullets = Array.isArray(body.bullets) ? body.bullets : [];
   }
 
+  // Kampanjefelt
   if (Object.prototype.hasOwnProperty.call(body, 'campaignLabel')) {
     plan.campaignLabel = body.campaignLabel || null;
   }
@@ -923,6 +903,14 @@ app.put('/admin/plans/:id', basicAuth, (req, res) => {
   }
   if (Object.prototype.hasOwnProperty.call(body, 'campaignTo')) {
     plan.campaignTo = body.campaignTo || null;
+  }
+
+  // Boolean-felt
+  if (Object.prototype.hasOwnProperty.call(body, 'prorate')) {
+    plan.prorate = !!body.prorate;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'active')) {
+    plan.active = !!body.active;
   }
   if (Object.prototype.hasOwnProperty.call(body, 'showOnWeb')) {
     plan.showOnWeb = !!body.showOnWeb;
