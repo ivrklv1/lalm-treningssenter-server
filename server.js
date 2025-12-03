@@ -694,6 +694,37 @@ app.get('/admin/members', basicAuth, (req, res) => {
   res.json(members);
 });
 
+app.post('/admin/members', basicAuth, (req, res) => {
+  const body = req.body || {};
+  const members = getMembers();
+
+  if (!body.email) {
+    return res.status(400).json({ error: 'email må være satt' });
+  }
+
+  const emailNorm = normalizeEmail(body.email);
+let existing = members.find((m) => normalizeEmail(m.email) === emailNorm);
+
+if (existing) {
+  // Oppdater eksisterende, men behold id hvis den finnes
+  Object.assign(existing, body);
+  if (!existing.id) {
+    existing.id = `mem_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+  }
+} else {
+  // Nytt medlem → sørg for id
+  const newMember = {
+    id: body.id || `mem_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+    ...body,
+  };
+  members.push(newMember);
+}
+
+  saveMembers(members);
+  res.json({ ok: true });
+});
+
+
 // Hent alle Vipps-ordrer (vises i admin)
 app.get('/admin/orders', basicAuth, (req, res) => {
   const orders = getOrders();
@@ -1020,13 +1051,14 @@ app.post('/api/admin/members', basicAuth, async (req, res) => {
   const phoneNormalized = normalizePhone(phone);
 
   const member = {
-    email: email.toLowerCase(),
-    active: !!active,
-    name,
-    phone: phoneNormalized,
-    plan: plan || null,
-    clubMember: false, // settes via NIF-import eller manuelt
-  };
+  id: `mem_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+  email: email.toLowerCase(),
+  active: !!active,
+  name,
+  phone: phoneNormalized,
+  plan: plan || null,
+  clubMember: false,
+};
 
   members.push(member);
   saveMembers(members);
