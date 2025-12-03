@@ -265,6 +265,10 @@
       background: #f9fafb;
     }
 
+    tbody tr.row-selected {
+      background: #e0f2fe !important;
+    }
+
     tbody tr:hover {
       background: #eef2ff;
     }
@@ -286,6 +290,10 @@
       width: 7px;
       height: 7px;
       border-radius: 50%;
+    }
+
+    .status-pill span:first-child {
+      display: none;
     }
 
     .status-active {
@@ -530,6 +538,26 @@
               <button id="btnReloadMembers" class="btn-secondary">⟳ Oppdater liste</button>
             </div>
           </div>
+          <div id="memberActions" class="mt-2" style="display:none;">
+            <div class="small text-muted">
+              Valgt medlem: <span id="selectedMemberLabel">Ingen</span>
+            </div>
+            <div class="btn-row mt-1">
+              <button id="btnToggleActive" class="btn-secondary">Pause / aktiver</button>
+              <select id="changePlanSelect">
+                <option value="">Endre plan…</option>
+                <option value="LALM_IL_BINDING">Lalm IL – 12 mnd binding</option>
+                <option value="STANDARD_BINDING">Standard – 12 mnd binding</option>
+                <option value="HYTTE_BINDING">Hytte – 12 mnd binding</option>
+                <option value="LALM_IL_UBIND">Lalm IL – uten binding</option>
+                <option value="STANDARD_UBIND">Standard – uten binding</option>
+                <option value="TEST_1KR">TEST – 1 kr</option>
+              </select>
+              <button id="btnChangePlan" class="btn-secondary">Lagre ny plan</button>
+              <button id="btnDeleteMember" class="btn-secondary" style="background:#fef2f2; border:1px solid #fecaca; color:#b91c1c;">🗑 Slett medlem</button>
+            </div>
+            <div id="memberActionsMsg" class="mt-1 small"></div>
+          </div>
 
           <div class="table-wrapper mt-2">
             <div class="scroll">
@@ -646,7 +674,7 @@
               </thead>
               <tbody id="plansTableBody">
               <tr>
-                <td colspan="12" class="text-muted">Laster medlemskap...</td>
+                <td colspan="12" class="text-muted">Ingen medlemskap funnet.</td>
               </tr>
               </tbody>
             </table>
@@ -865,6 +893,14 @@
   const btnAddMember = document.getElementById('btnAddMember');
   const addMemberMsg = document.getElementById('addMemberMsg');
 
+  const memberActionsEl = document.getElementById('memberActions');
+  const selectedMemberLabelEl = document.getElementById('selectedMemberLabel');
+  const btnToggleActiveMember = document.getElementById('btnToggleActive');
+  const btnDeleteMember = document.getElementById('btnDeleteMember');
+  const changePlanSelect = document.getElementById('changePlanSelect');
+  const btnChangePlan = document.getElementById('btnChangePlan');
+  const memberActionsMsg = document.getElementById('memberActionsMsg');
+
   // Vipps-ordrer
   const ordersTableBody = document.getElementById('ordersTableBody');
   const ordersCountEl = document.getElementById('ordersCount');
@@ -910,6 +946,7 @@
   let allPlans = [];
   let smsMembers = [];
   let currentDetailIndex = null;
+  let selectedMember = null;
 
   function krFromOre(øre) {
     if (typeof øre !== 'number') return '';
@@ -922,6 +959,23 @@
     const n = Number(v);
     if (!Number.isFinite(n)) return 0;
     return Math.round(n * 100);
+  }
+
+  function copyPlanOptionsFromNewPlan() {
+    if (!changePlanSelect || !newPlan) return;
+    changePlanSelect.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Endre plan…';
+    changePlanSelect.appendChild(placeholder);
+
+    Array.from(newPlan.options).forEach((opt) => {
+      if (!opt.value) return;
+      const o = document.createElement('option');
+      o.value = opt.value;
+      o.textContent = opt.textContent;
+      changePlanSelect.appendChild(o);
+    });
   }
 
   function setServerStatus(ok, text) {
@@ -988,6 +1042,15 @@
         const statusClass = m.active ? 'status-active' : 'status-inactive';
         const statusLabel = m.active ? 'Aktiv' : 'Inaktiv';
 
+        tr.dataset.email = m.email || '';
+        tr.dataset.name = m.name || '';
+        tr.dataset.plan = m.plan || '';
+        tr.dataset.active = m.active ? '1' : '0';
+
+        if (selectedMember && selectedMember.email && selectedMember.email === (m.email || '')) {
+          tr.classList.add('row-selected');
+        }
+
         tr.innerHTML = `
           <td>${m.name || '–'}</td>
           <td>${m.email || '–'}</td>
@@ -1009,6 +1072,9 @@
     }
 
     renderSmsMembers();
+    if (typeof updateMemberActionsUi === 'function') {
+      updateMemberActionsUi();
+    }
   }
 
   async function loadMembers() {
@@ -1020,6 +1086,20 @@
       }
       const data = await res.json();
       allMembers = Array.isArray(data) ? data : [];
+
+      if (selectedMember && selectedMember.email) {
+        const updated = allMembers.find(
+          (m) => (m.email || '') === selectedMember.email
+        );
+        if (updated) {
+          selectedMember.name = updated.name || selectedMember.name;
+          selectedMember.plan = updated.plan || selectedMember.plan;
+          selectedMember.active = !!updated.active;
+        } else {
+          selectedMember = null;
+        }
+      }
+
       renderMembers();
       setServerStatus(true, 'OK');
     } catch (e) {
@@ -1049,6 +1129,146 @@
       await loadMembers();
     } catch (e) {
       alert('Kunne ikke endre status for medlem: ' + e.message);
+    }
+  }
+
+  function updateMemberActionsUi() {
+    if (!memberActionsEl) return;
+    if (!selectedMember || !selectedMember.email) {
+      memberActionsEl.style.display = 'none';
+      if (memberActionsMsg) memberActionsMsg.textContent = '';
+      return;
+    }
+    memberActionsEl.style.display = 'block';
+    if (selectedMemberLabelEl) {
+      selectedMemberLabelEl.textContent =
+        (selectedMember.name || 'Uten navn') + ' (' + selectedMember.email + ')';
+    }
+    if (btnToggleActiveMember) {
+      btnToggleActiveMember.textContent = selectedMember.active
+        ? 'Sett som inaktiv (pause)'
+        : 'Aktiver medlem';
+    }
+    if (changePlanSelect) {
+      changePlanSelect.value = selectedMember.plan || '';
+    }
+  }
+
+  function selectMemberFromRow(row) {
+    if (!row || !row.dataset) return;
+    const email = row.dataset.email;
+    if (!email) return;
+    const m = allMembers.find((mm) => (mm.email || '') === email);
+    if (!m) return;
+
+    selectedMember = {
+      email: m.email || '',
+      name: m.name || '',
+      plan: m.plan || '',
+      active: !!m.active,
+    };
+
+    membersTableBody.querySelectorAll('tr').forEach((tr) => {
+      tr.classList.remove('row-selected');
+    });
+    row.classList.add('row-selected');
+    updateMemberActionsUi();
+  }
+
+  async function changeMemberPlan() {
+    if (!selectedMember || !selectedMember.email || !changePlanSelect) return;
+    const newPlanKey = changePlanSelect.value;
+    if (!newPlanKey) {
+      if (memberActionsMsg) {
+        memberActionsMsg.textContent = 'Velg en plan først.';
+        memberActionsMsg.className = 'mt-1 small tag-danger';
+      }
+      return;
+    }
+
+    if (
+      !confirm(
+        'Endre plan for medlemmet til "' + newPlanKey + '"?'
+      )
+    ) {
+      return;
+    }
+
+    if (btnChangePlan) btnChangePlan.disabled = true;
+    if (memberActionsMsg) {
+      memberActionsMsg.textContent = 'Lagrer ny plan...';
+      memberActionsMsg.className = 'mt-1 small text-muted';
+    }
+
+    try {
+      const res = await fetch('/api/admin/members/update-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: selectedMember.email, plan: newPlanKey }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'Ukjent feil');
+      }
+      if (memberActionsMsg) {
+        memberActionsMsg.textContent = 'Plan oppdatert.';
+        memberActionsMsg.className = 'mt-1 small tag-success';
+      }
+      await loadMembers();
+    } catch (e) {
+      console.error('Feil ved endring av plan:', e);
+      if (memberActionsMsg) {
+        memberActionsMsg.textContent = 'Feil ved endring av plan: ' + e.message;
+        memberActionsMsg.className = 'mt-1 small tag-danger';
+      }
+    } finally {
+      if (btnChangePlan) btnChangePlan.disabled = false;
+    }
+  }
+
+  async function deleteMember() {
+    if (!selectedMember || !selectedMember.email) return;
+    if (
+      !confirm(
+        'Slette medlemmet "' +
+          (selectedMember.name || selectedMember.email) +
+          '"? Dette kan ikke angres.'
+      )
+    ) {
+      return;
+    }
+
+    if (memberActionsMsg) {
+      memberActionsMsg.textContent = 'Sletter medlem...';
+      memberActionsMsg.className = 'mt-1 small text-muted';
+    }
+    if (btnDeleteMember) btnDeleteMember.disabled = true;
+
+    try {
+      const res = await fetch('/api/admin/members/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: selectedMember.email }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'Ukjent feil');
+      }
+      if (memberActionsMsg) {
+        memberActionsMsg.textContent = 'Medlem slettet.';
+        memberActionsMsg.className = 'mt-1 small tag-success';
+      }
+      selectedMember = null;
+      await loadMembers();
+      updateMemberActionsUi();
+    } catch (e) {
+      console.error('Feil ved sletting av medlem:', e);
+      if (memberActionsMsg) {
+        memberActionsMsg.textContent = 'Feil ved sletting: ' + e.message;
+        memberActionsMsg.className = 'mt-1 small tag-danger';
+      }
+    } finally {
+      if (btnDeleteMember) btnDeleteMember.disabled = false;
     }
   }
 
@@ -1302,6 +1522,7 @@
         </td>
         <td>
           <button class="btn-ghost btn-plan-detail" data-index="${idx}">Rediger tekst</button>
+          <button class="btn-ghost btn-plan-delete" data-index="${idx}" style="color:#b91c1c;">Slett</button>
         </td>
       `;
 
@@ -1500,6 +1721,56 @@
     }
   }
 
+  async function deletePlan(index) {
+    const p = allPlans[index];
+    if (!p) return;
+
+    const id = p.id || p.key;
+    const name = p.name || id || '';
+
+    if (
+      !confirm(
+        'Slette medlemskap "' + name + '"?'
+      )
+    ) {
+      return;
+    }
+
+    plansMsg.textContent = 'Sletter...';
+    plansMsg.className = 'mt-1 small text-muted';
+
+    try {
+      if (p.__isNew || !id) {
+        allPlans.splice(index, 1);
+        renderPlans();
+        plansMsg.textContent =
+          'Plan fjernet fra listen (ikke lagret på server).';
+        plansMsg.className = 'mt-1 small tag-success';
+        return;
+      }
+
+      const res = await fetch(
+        '/admin/plans/' + encodeURIComponent(id),
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'Ukjent feil');
+      }
+
+      plansMsg.textContent = 'Plan slettet.';
+      plansMsg.className = 'mt-1 small tag-success';
+      await loadPlansAdmin();
+    } catch (err) {
+      console.error('Feil ved sletting av plan:', err);
+      plansMsg.textContent = 'Feil ved sletting: ' + err.message;
+      plansMsg.className = 'mt-1 small tag-danger';
+    }
+  }
+
   // ------- SMS -------
 
   function getSmsMode() {
@@ -1632,14 +1903,36 @@
 
   membersTableBody.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-email]');
-    if (!btn) return;
-    const email = btn.getAttribute('data-email');
-    if (!email) return;
-    toggleMemberActive(email);
+    if (btn) {
+      const email = btn.getAttribute('data-email');
+      if (email) {
+        toggleMemberActive(email);
+      }
+    }
+
+    const row = e.target.closest('tr');
+    if (row && row.dataset && row.dataset.email) {
+      selectMemberFromRow(row);
+    }
   });
 
   btnAddMember.addEventListener('click', addMember);
   btnTellSync.addEventListener('click', runTellSync);
+
+  if (btnToggleActiveMember) {
+    btnToggleActiveMember.addEventListener('click', () => {
+      if (selectedMember && selectedMember.email) {
+        toggleMemberActive(selectedMember.email);
+      }
+    });
+  }
+  if (btnChangePlan) {
+    btnChangePlan.addEventListener('click', changeMemberPlan);
+  }
+  if (btnDeleteMember) {
+    btnDeleteMember.addEventListener('click', deleteMember);
+  }
+
   btnReloadMembers.addEventListener('click', () => {
     loadMembers();
     loadOrders();
@@ -1675,12 +1968,19 @@
     btnSavePlans.addEventListener('click', savePlansAdmin);
   }
 
-  // åpne detaljkort når man klikker "Rediger tekst"
+  // åpne detaljkort / slett når man klikker i plan-lista
   plansTableBody.addEventListener('click', (e) => {
-    const btn = e.target.closest('.btn-plan-detail');
-    if (!btn) return;
-    const idx = Number(btn.getAttribute('data-index'));
-    openPlanDetail(idx);
+    const detailBtn = e.target.closest('.btn-plan-detail');
+    if (detailBtn) {
+      const idx = Number(detailBtn.getAttribute('data-index'));
+      openPlanDetail(idx);
+      return;
+    }
+    const deleteBtn = e.target.closest('.btn-plan-delete');
+    if (deleteBtn) {
+      const idx = Number(deleteBtn.getAttribute('data-index'));
+      deletePlan(idx);
+    }
   });
 
   // FANER
@@ -1701,6 +2001,9 @@
 
   // Init
   (async function init() {
+    if (typeof copyPlanOptionsFromNewPlan === 'function') {
+      copyPlanOptionsFromNewPlan();
+    }
     updateSmsModeUi && updateSmsModeUi();
     await loadMembers();
     await loadOrders();
