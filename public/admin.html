@@ -323,6 +323,24 @@
       background: #f97373;
     }
 
+         .status-text {
+       font-size: 0.8rem;
+       font-weight: 500;
+     }
+ 
+     .status-text-active {
+       color: #166534;
+     }
+ 
+     .status-text-inactive {
+       color: #4b5563;
+     }
+ 
+     .status-text-cancelled {
+       color: #b91c1c;
+     }
+
+
     .badge-small {
       border-radius: 999px;
       padding: 3px 9px;
@@ -468,6 +486,56 @@
       padding-top: 12px;
       border-top: 1px dashed #e5e7eb;
     }
+        /* Modal for medlem */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+
+    .modal-card {
+      background: #ffffff;
+      border-radius: 20px;
+      max-width: 430px;
+      width: 100%;
+      padding: 18px 20px 16px 20px;
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.5);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .modal-title {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .modal-body {
+      margin-top: 4px;
+    }
+
+    .modal-close-btn {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 1.2rem;
+      line-height: 1;
+      padding: 4px;
+      color: #6b7280;
+    }
+
+    .modal-close-btn:hover {
+      color: #111827;
+    }
   </style>
 </head>
 <body>
@@ -560,22 +628,19 @@
           </div>
 
           <div class="table-wrapper mt-2">
-            <div class="scroll">
-              <table>
-                <thead>
-                <tr>
-                  <th>Navn</th>
-                  <th>E-post</th>
-                  <th>Telefon</th>
-                  <th>Plan</th>
-                  <th>IL-medlem</th>
-                  <th>Status</th>
-                  <th>Handling</th>
-                </tr>
-                </thead>
-                <tbody id="membersTableBody">
-                <tr>
-                  <td colspan="7" class="text-muted">Laster medlemmer...</td>
+             <div class="scroll">
+               <table>
+                 <thead>
+                 <tr>
+                   <th>Navn</th>
+                   <th>Plan</th>
+                   <th>Lalm IL-medlem</th>
+                   <th>Status</th>
+                 </tr>
+                 </thead>
+                 <tbody id="membersTableBody">
+                 <tr>
+                   <td colspan="4" class="text-muted">Laster medlemmer...</td>
                 </tr>
                 </tbody>
               </table>
@@ -873,6 +938,34 @@
       </section>
     </section>
   </main>
+  
+   <!-- Modal for medlem -->
+   <div id="memberModal" class="modal-backdrop" style="display:none;">
+     <div class="modal-card">
+       <div class="modal-header">
+         <div>
+           <div class="modal-title" id="modalMemberName">Medlem</div>
+           <div class="small text-muted" id="modalMemberEmail">epost</div>
+         </div>
+         <button class="modal-close-btn" id="modalCloseBtn" aria-label="Lukk">&times;</button>
+       </div>
+       <div class="modal-body">
+         <div class="small">
+           <div><strong>Telefon:</strong> <span id="modalMemberPhone"></span></div>
+           <div class="mt-1"><strong>Plan:</strong></div>
+           <select id="modalMemberPlanSelect" class="mt-1"></select>
+           <div class="mt-1"><strong>Lalm IL-medlem:</strong> <span id="modalMemberIl"></span></div>
+           <div class="mt-1"><strong>Status:</strong> <span id="modalMemberStatus"></span></div>
+         </div>
+       </div>
+       <div class="btn-row mt-3">
+         <button id="modalToggleActiveBtn" class="btn-secondary">Pause / aktiver</button>
+         <button id="modalSavePlanBtn" class="btn-primary">Lagre plan</button>
+         <button id="modalDeleteBtn" class="btn-secondary" style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;">🗑 Slett</button>
+       </div>
+       <div id="modalMemberMsg" class="mt-1 small"></div>
+     </div>
+   </div>
 </div>
 
 <script>
@@ -892,6 +985,19 @@
   const newPlan = document.getElementById('newPlan');
   const btnAddMember = document.getElementById('btnAddMember');
   const addMemberMsg = document.getElementById('addMemberMsg');
+  const memberModal = document.getElementById('memberModal');
+  const modalMemberName = document.getElementById('modalMemberName');
+  const modalMemberEmail = document.getElementById('modalMemberEmail');
+  const modalMemberPhone = document.getElementById('modalMemberPhone');
+  const modalMemberPlanSelect = document.getElementById('modalMemberPlanSelect');
+  const modalMemberIl = document.getElementById('modalMemberIl');
+  const modalMemberStatus = document.getElementById('modalMemberStatus');
+  const modalToggleActiveBtn = document.getElementById('modalToggleActiveBtn');
+  const modalSavePlanBtn = document.getElementById('modalSavePlanBtn');
+  const modalDeleteBtn = document.getElementById('modalDeleteBtn');
+  const modalCloseBtn = document.getElementById('modalCloseBtn');
+  const modalMemberMsg = document.getElementById('modalMemberMsg');
+
 
   const memberActionsEl = document.getElementById('memberActions');
   const selectedMemberLabelEl = document.getElementById('selectedMemberLabel');
@@ -947,6 +1053,7 @@
   let smsMembers = [];
   let currentDetailIndex = null;
   let selectedMember = null;
+
 
   function krFromOre(øre) {
     if (typeof øre !== 'number') return '';
@@ -1032,39 +1139,28 @@
     statsActiveCount.textContent = allMembers.filter(m => m.active).length;
 
     if (!filtered.length) {
-      membersTableBody.innerHTML = '<tr><td colspan="7" class="text-muted">Ingen medlemmer funnet.</td></tr>';
+      membersTableBody.innerHTML = '<tr><td colspan="4" class="text-muted">Ingen medlemmer funnet.</td></tr>';
     } else {
       membersTableBody.innerHTML = '';
       filtered.forEach(m => {
         const tr = document.createElement('tr');
 
         const ilText = m.clubMember ? 'Ja' : 'Nei';
-        const statusClass = m.active ? 'status-active' : 'status-inactive';
         const statusLabel = m.active ? 'Aktiv' : 'Inaktiv';
+        const statusClass = m.active ? 'status-text-active' : 'status-text-inactive';
 
+        // brukes av modalen
         tr.dataset.email = m.email || '';
         tr.dataset.name = m.name || '';
         tr.dataset.plan = m.plan || '';
         tr.dataset.active = m.active ? '1' : '0';
 
-        if (selectedMember && selectedMember.email && selectedMember.email === (m.email || '')) {
-          tr.classList.add('row-selected');
-        }
-
         tr.innerHTML = `
           <td>${m.name || '–'}</td>
-          <td>${m.email || '–'}</td>
-          <td>${m.phone || '–'}</td>
           <td>${m.plan || '–'}</td>
           <td>${ilText}</td>
           <td class="status">
-            <div class="status-pill ${statusClass}">
-              <span></span>
-              <span>${statusLabel}</span>
-            </div>
-          </td>
-          <td>
-            <button class="btn-ghost" data-email="${m.email}">${m.active ? 'Deaktiver' : 'Aktiver'}</button>
+            <span class="status-text ${statusClass}">${statusLabel}</span>
           </td>
         `;
         membersTableBody.appendChild(tr);
@@ -1072,8 +1168,74 @@
     }
 
     renderSmsMembers();
-    if (typeof updateMemberActionsUi === 'function') {
-      updateMemberActionsUi();
+  }
+
+    function fillModalPlanOptions(currentPlan) {
+    if (!modalMemberPlanSelect || !newPlan) return;
+    modalMemberPlanSelect.innerHTML = '';
+    Array.from(newPlan.options).forEach(opt => {
+      if (!opt.value) return;
+      const o = document.createElement('option');
+      o.value = opt.value;
+      o.textContent = opt.textContent;
+      if (opt.value === currentPlan) {
+        o.selected = true;
+      }
+      modalMemberPlanSelect.appendChild(o);
+    });
+  }
+
+  function openMemberModal(member) {
+    if (!memberModal || !member) return;
+    selectedMember = member;
+
+    modalMemberName.textContent = member.name || 'Uten navn';
+    modalMemberEmail.textContent = member.email || 'Ingen e-post';
+    modalMemberPhone.textContent = member.phone || 'Ingen telefon';
+
+    fillModalPlanOptions(member.plan || '');
+    modalMemberIl.textContent = member.clubMember ? 'Ja' : 'Nei';
+
+    const statusLabel = member.active ? 'Aktiv' : 'Inaktiv';
+    const statusClass = member.active ? 'status-text-active' : 'status-text-inactive';
+    modalMemberStatus.textContent = statusLabel;
+    modalMemberStatus.className = 'status-text ' + statusClass;
+
+    modalMemberMsg.textContent = '';
+    modalToggleActiveBtn.textContent = member.active
+      ? 'Sett som inaktiv (pause)'
+      : 'Aktiver medlem';
+
+    memberModal.style.display = 'flex';
+  }
+
+  function closeMemberModal() {
+    if (memberModal) {
+      memberModal.style.display = 'none';
+    }
+  }
+
+  async function updateMemberPlan(email, plan) {
+    const res = await fetch('/api/admin/members/update-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, plan })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || ('HTTP ' + res.status));
+    }
+  }
+
+  async function deleteMemberByEmail(email) {
+    const res = await fetch('/api/admin/members/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || ('HTTP ' + res.status));
     }
   }
 
@@ -1105,7 +1267,7 @@
     } catch (e) {
       console.error('Feil ved henting av medlemmer:', e);
       membersTableBody.innerHTML =
-        '<tr><td colspan="7" class="text-muted">Kunne ikke laste medlemmer.</td></tr>';
+        '<tr><td colspan="4" class="text-muted">Kunne ikke laste medlemmer.</td></tr>';
       membersErrorEl.textContent = 'Feil ved henting av medlemmer: ' + e.message;
       membersErrorEl.style.display = 'block';
       setServerStatus(false, 'Feil');
@@ -1901,20 +2063,88 @@
   searchInput.addEventListener('input', () => renderMembers());
   filterPlan.addEventListener('change', () => renderMembers());
 
-  membersTableBody.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-email]');
-    if (btn) {
-      const email = btn.getAttribute('data-email');
-      if (email) {
-        toggleMemberActive(email);
-      }
-    }
-
+    membersTableBody.addEventListener('click', (e) => {
     const row = e.target.closest('tr');
-    if (row && row.dataset && row.dataset.email) {
-      selectMemberFromRow(row);
+    if (!row || !row.dataset || !row.dataset.email) return;
+    const email = row.dataset.email;
+    const member = allMembers.find(m => (m.email || '') === email);
+    if (member) {
+      openMemberModal(member);
     }
   });
+
+    // Modal events
+  if (modalCloseBtn) {
+    modalCloseBtn.addEventListener('click', closeMemberModal);
+  }
+  if (memberModal) {
+    memberModal.addEventListener('click', (e) => {
+      if (e.target === memberModal) {
+        closeMemberModal();
+      }
+    });
+  }
+  if (modalToggleActiveBtn) {
+    modalToggleActiveBtn.addEventListener('click', async () => {
+      if (!selectedMember || !selectedMember.email) return;
+      modalMemberMsg.textContent = 'Oppdaterer status...';
+      modalMemberMsg.className = 'mt-1 small text-muted';
+      try {
+        await toggleMemberActive(selectedMember.email);
+        modalMemberMsg.textContent = 'Status oppdatert.';
+        modalMemberMsg.className = 'mt-1 small tag-success';
+        await loadMembers();
+        closeMemberModal();
+      } catch (e) {
+        modalMemberMsg.textContent = 'Feil: ' + e.message;
+        modalMemberMsg.className = 'mt-1 small tag-danger';
+      }
+    });
+  }
+  if (modalSavePlanBtn) {
+    modalSavePlanBtn.addEventListener('click', async () => {
+      if (!selectedMember || !selectedMember.email) return;
+      const newPlanValue = modalMemberPlanSelect && modalMemberPlanSelect.value;
+      if (!newPlanValue) {
+        modalMemberMsg.textContent = 'Velg en plan først.';
+        modalMemberMsg.className = 'mt-1 small tag-danger';
+        return;
+      }
+      modalMemberMsg.textContent = 'Lagrer plan...';
+      modalMemberMsg.className = 'mt-1 small text-muted';
+      try {
+        await updateMemberPlan(selectedMember.email, newPlanValue);
+        modalMemberMsg.textContent = 'Plan oppdatert.';
+        modalMemberMsg.className = 'mt-1 small tag-success';
+        await loadMembers();
+        closeMemberModal();
+      } catch (e) {
+        modalMemberMsg.textContent = 'Feil: ' + e.message;
+        modalMemberMsg.className = 'mt-1 small tag-danger';
+      }
+    });
+  }
+  if (modalDeleteBtn) {
+    modalDeleteBtn.addEventListener('click', async () => {
+      if (!selectedMember || !selectedMember.email) return;
+      if (!confirm('Slette medlemmet "' + (selectedMember.name || selectedMember.email) + '"? Dette kan ikke angres.')) {
+        return;
+      }
+      modalMemberMsg.textContent = 'Sletter medlem...';
+      modalMemberMsg.className = 'mt-1 small text-muted';
+      try {
+        await deleteMemberByEmail(selectedMember.email);
+        modalMemberMsg.textContent = 'Medlem slettet.';
+        modalMemberMsg.className = 'mt-1 small tag-success';
+        await loadMembers();
+        closeMemberModal();
+      } catch (e) {
+        modalMemberMsg.textContent = 'Feil: ' + e.message;
+        modalMemberMsg.className = 'mt-1 small tag-danger';
+      }
+    });
+  }
+
 
   btnAddMember.addEventListener('click', addMember);
   btnTellSync.addEventListener('click', runTellSync);
@@ -2009,6 +2239,7 @@
     await loadOrders();
     await loadPlansAdmin();   // 👈 viktig
   })();
+
 </script>
 </body>
 </html>
