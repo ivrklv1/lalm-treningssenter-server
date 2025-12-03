@@ -717,6 +717,17 @@
         </span>
           </div>
         </div>
+        <div class="mt-2">
+  <div class="pill-row">
+    <button type="button" class="pill" data-plan-filter="all">Alle</button>
+    <button type="button" class="pill" data-plan-filter="binding">Med binding</button>
+    <button type="button" class="pill" data-plan-filter="no_binding">Uten binding</button>
+    <button type="button" class="pill" data-plan-filter="short_term">Korttid</button>
+    <button type="button" class="pill" data-plan-filter="dropin">Drop-in</button>
+    <button type="button" class="pill" data-plan-filter="campaign">Kampanje</button>
+  </div>
+</div>
+
 
         <div class="table-wrapper" style="max-height: 360px;">
           <div class="scroll">
@@ -794,9 +805,24 @@
               <input id="planDetailCampaignTo" type="text" placeholder="2025-01-31" />
             </div>
           </div>
+          <div class="mt-3">
+  <label class="small text-muted">Forhåndsvisning (som i kortet på nettsiden / i appen)</label>
+  <div id="planPreview" style="
+      margin-top:6px;
+      padding:14px 16px;
+      border-radius: 16px;
+      border:1px solid #e5e7eb;
+      background: linear-gradient(135deg, #ffffff, #f1f5f9);
+      box-shadow: 0 10px 25px rgba(15,23,42,0.06);
+      max-width:420px;
+    ">
+    <!-- fylles av JS -->
+  </div>
+</div>
         </div>
       </section>
     </section>
+
 
     <!-- TAB: SMS -->
     <section id="tab-sms" class="tab-panel">
@@ -1047,12 +1073,45 @@
   const planDetailCampaignFromEl = document.getElementById('planDetailCampaignFrom');
   const planDetailCampaignToEl = document.getElementById('planDetailCampaignTo');
 
+[planDetailNameEl,
+ planDetailTaglineEl,
+ planDetailDescriptionEl,
+ planDetailBulletsEl,
+ planDetailCampaignLabelEl,
+ planDetailCampaignFromEl,
+ planDetailCampaignToEl].forEach((el) => {
+  if (!el) return;
+  el.addEventListener('input', () => {
+    updatePlanPreview();
+  });
+});
+
+
+  // plan-filter knapper
+const planFilterButtons = document.querySelectorAll('[data-plan-filter]');
+
+planFilterButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    currentPlanFilter = btn.getAttribute('data-plan-filter') || 'all';
+    planFilterButtons.forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderPlans();
+  });
+});
+
+// sett "Alle" som aktiv ved start
+const defaultFilterBtn = document.querySelector('[data-plan-filter="all"]');
+if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
+
+
   let allMembers = [];
   let allOrders = [];
   let allPlans = [];
   let smsMembers = [];
   let currentDetailIndex = null;
+  let dragPlanIndex = null;
   let selectedMember = null;
+  let currentPlanFilter = 'all';
 
 
   function krFromOre(øre) {
@@ -1600,97 +1659,160 @@
   // ------- Plans / plans.json – NY MODELL -------
 
   function openPlanDetail(index) {
-    const p = allPlans[index];
-    if (!p) {
-      planDetailEl.style.display = 'none';
-      currentDetailIndex = null;
-      return;
-    }
-    currentDetailIndex = index;
-    planDetailEl.style.display = 'block';
-
-    planDetailIdEl.textContent = p.id || p.key || '';
-    planDetailNameEl.value = p.name || '';
-    planDetailTaglineEl.value = p.tagline || '';
-    planDetailDescriptionEl.value = p.description || '';
-    planDetailBulletsEl.value = Array.isArray(p.bullets)
-      ? p.bullets.join('\n')
-      : (p.bullets || '');
-    planDetailCampaignLabelEl.value = p.campaignLabel || '';
-    planDetailCampaignFromEl.value = p.campaignFrom || '';
-    planDetailCampaignToEl.value = p.campaignTo || '';
+  const p = allPlans[index];
+  if (!p) {
+    planDetailEl.style.display = 'none';
+    currentDetailIndex = null;
+    return;
   }
+  currentDetailIndex = index;
+  planDetailEl.style.display = 'block';
+
+  planDetailIdEl.textContent = p.id || p.key || '';
+  planDetailNameEl.value = p.name || '';
+  planDetailTaglineEl.value = p.tagline || '';
+  planDetailDescriptionEl.value = p.description || '';
+  planDetailBulletsEl.value = Array.isArray(p.bullets)
+    ? p.bullets.join('\n')
+    : (p.bullets || '');
+  planDetailCampaignLabelEl.value = p.campaignLabel || '';
+  planDetailCampaignFromEl.value = p.campaignFrom || '';
+  planDetailCampaignToEl.value = p.campaignTo || '';
+
+  updatePlanPreview();
+}
+
+  function updatePlanPreview() {
+  const previewEl = document.getElementById('planPreview');
+  if (!previewEl || currentDetailIndex == null) return;
+  const p = allPlans[currentDetailIndex];
+  if (!p) return;
+
+  // bruk verdier fra inputfelt (live) hvis de finnes
+  const name = planDetailNameEl.value.trim() || p.name || 'Medlemskap';
+  const tagline = planDetailTaglineEl.value.trim() || '';
+  const desc = planDetailDescriptionEl.value.trim() || '';
+  const bulletsText = planDetailBulletsEl.value || '';
+  const bullets = bulletsText
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const priceKr = p.amount ? (p.amount / 100).toFixed(0) : '';
+
+  previewEl.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+      <div>
+        <div style="font-weight:600; font-size:0.95rem;">${name}</div>
+        ${tagline ? `<div style="font-size:0.8rem; color:#6b7280; margin-top:2px;">${tagline}</div>` : ''}
+      </div>
+      ${priceKr ? `
+      <div style="text-align:right;">
+        <div style="font-weight:600; font-size:0.95rem;">${priceKr} kr/mnd</div>
+      </div>` : ''}
+    </div>
+    ${desc ? `<div style="font-size:0.8rem; color:#4b5563; margin-top:6px;">${desc}</div>` : ''}
+    ${bullets.length ? `
+      <ul style="margin-top:8px; padding-left:18px; font-size:0.8rem; color:#374151;">
+        ${bullets.map((b) => `<li>${b}</li>`).join('')}
+      </ul>
+    ` : ''}
+  `;
+}
 
   function renderPlans() {
-    if (!Array.isArray(allPlans) || !allPlans.length) {
-      plansTableBody.innerHTML =
-        '<tr><td colspan="12" class="text-muted">Ingen medlemskap funnet.</td></tr>';
-      plansCountEl.textContent = '0';
-      planDetailEl.style.display = 'none';
-      return;
-    }
-
-    allPlans.sort((a, b) => {
-      const ao = typeof a.sortOrder === 'number' ? a.sortOrder : 9999;
-      const bo = typeof b.sortOrder === 'number' ? b.sortOrder : 9999;
-      return ao - bo;
-    });
-    plansCountEl.textContent = String(allPlans.length);
-    plansTableBody.innerHTML = '';
-
-    allPlans.forEach((p, idx) => {
-      const tr = document.createElement('tr');
-      tr.dataset.index = idx;
-
-      const type = p.type || 'standard';
-
-      tr.innerHTML = `
-        <td>
-          <input type="text" data-field="id" value="${p.id || p.key || ''}" style="width:110px;" ${p.id ? 'readonly' : ''} />
-        </td>
-        <td>
-          <input type="text" data-field="shortName" value="${p.name || ''}" style="width:130px;" />
-        </td>
-        <td>
-          <select data-field="type">
-            <option value="standard" ${type === 'standard' ? 'selected' : ''}>Standard</option>
-            <option value="short_term" ${type === 'short_term' ? 'selected' : ''}>Korttids</option>
-            <option value="dropin" ${type === 'dropin' ? 'selected' : ''}>Drop-in</option>
-          </select>
-        </td>
-        <td>
-          <input type="number" min="0" step="1" data-field="amount" value="${krFromOre(p.amount)}" style="width:80px;" />
-        </td>
-        <td>
-          <input type="number" min="0" step="1" data-field="signupFee" value="${krFromOre(p.signupFee || 0)}" style="width:90px;" />
-        </td>
-        <td>
-          <input type="number" min="0" step="1" data-field="bindingMonths" value="${p.bindingMonths || 0}" style="width:70px;" />
-        </td>
-        <td>
-          <input type="number" min="0" step="1" data-field="shortTermDays" value="${p.shortTermDays || ''}" style="width:70px;" />
-        </td>
-        <td style="text-align:center;">
-          <input type="checkbox" data-field="showOnWeb" ${p.showOnWeb !== false ? 'checked' : ''} />
-        </td>
-        <td style="text-align:center;">
-          <input type="checkbox" data-field="showInApp" ${p.showInApp !== false ? 'checked' : ''} />
-        </td>
-        <td style="text-align:center;">
-          <input type="checkbox" data-field="active" ${p.active !== false ? 'checked' : ''} />
-        </td>
-        <td>
-          <input type="number" min="0" step="1" data-field="sortOrder" value="${p.sortOrder || idx + 1}" style="width:60px;" />
-        </td>
-        <td>
-          <button class="btn-ghost btn-plan-detail" data-index="${idx}">Rediger tekst</button>
-          <button class="btn-ghost btn-plan-delete" data-index="${idx}" style="color:#b91c1c;">Slett</button>
-        </td>
-      `;
-
-      plansTableBody.appendChild(tr);
-    });
+  if (!Array.isArray(allPlans) || !allPlans.length) {
+    plansTableBody.innerHTML =
+      '<tr><td colspan="12" class="text-muted">Ingen medlemskap funnet.</td></tr>';
+    plansCountEl.textContent = '0';
+    planDetailEl.style.display = 'none';
+    return;
   }
+
+  // filtrer først
+  let filtered = allPlans.filter((p) => {
+    const type = p.type || 'standard';
+    const hasBinding = (p.bindingMonths || 0) > 0;
+    const isShort = type === 'short_term' || (p.shortTermDays || 0) > 0;
+    const isDropin = type === 'dropin';
+    const hasCampaign = !!(p.campaignLabel || p.campaignFrom || p.campaignTo);
+
+    if (currentPlanFilter === 'binding') return hasBinding;
+    if (currentPlanFilter === 'no_binding') return !hasBinding && !isShort && !isDropin;
+    if (currentPlanFilter === 'short_term') return isShort;
+    if (currentPlanFilter === 'dropin') return isDropin;
+    if (currentPlanFilter === 'campaign') return hasCampaign;
+    return true; // 'all'
+  });
+
+  // sorter etter sortOrder
+  filtered.sort((a, b) => {
+    const ao = typeof a.sortOrder === 'number' ? a.sortOrder : 9999;
+    const bo = typeof b.sortOrder === 'number' ? b.sortOrder : 9999;
+    return ao - bo;
+  });
+
+  plansCountEl.textContent = String(filtered.length);
+  plansTableBody.innerHTML = '';
+
+  filtered.forEach((p) => {
+    const idx = allPlans.indexOf(p); // original index
+    const tr = document.createElement('tr');
+    tr.dataset.index = idx;
+    tr.setAttribute('draggable', 'true');
+    tr.classList.add('plan-row-draggable');
+
+    const type = p.type || 'standard';
+
+    tr.innerHTML = `
+      <td>
+        <input type="text" data-field="id" value="${p.id || p.key || ''}" style="width:110px;" ${p.id ? 'readonly' : ''} />
+      </td>
+      <td>
+        <input type="text" data-field="shortName" value="${p.name || ''}" style="width:130px;" />
+      </td>
+      <td>
+        <select data-field="type">
+          <option value="standard" ${type === 'standard' ? 'selected' : ''}>Standard</option>
+          <option value="short_term" ${type === 'short_term' ? 'selected' : ''}>Korttids</option>
+          <option value="dropin" ${type === 'dropin' ? 'selected' : ''}>Drop-in</option>
+        </select>
+      </td>
+      <td>
+        <input type="number" min="0" step="1" data-field="amount" value="${krFromOre(p.amount)}" style="width:80px;" />
+      </td>
+      <td>
+        <input type="number" min="0" step="1" data-field="signupFee" value="${krFromOre(p.signupFee || 0)}" style="width:90px;" />
+      </td>
+      <td>
+        <input type="number" min="0" step="1" data-field="bindingMonths" value="${p.bindingMonths || 0}" style="width:70px;" />
+      </td>
+      <td>
+        <input type="number" min="0" step="1" data-field="shortTermDays" value="${p.shortTermDays || ''}" style="width:70px;" />
+      </td>
+      <td style="text-align:center;">
+        <input type="checkbox" data-field="showOnWeb" ${p.showOnWeb !== false ? 'checked' : ''} />
+      </td>
+      <td style="text-align:center;">
+        <input type="checkbox" data-field="showInApp" ${p.showInApp !== false ? 'checked' : ''} />
+      </td>
+      <td style="text-align:center;">
+        <input type="checkbox" data-field="active" ${p.active !== false ? 'checked' : ''} />
+      </td>
+      <td>
+        <input type="number" min="0" step="1" data-field="sortOrder" value="${p.sortOrder || (idx + 1)}" style="width:60px;" />
+      </td>
+      <td>
+        <button class="btn-ghost btn-plan-detail" data-index="${idx}">Rediger tekst</button>
+        <button class="btn-ghost btn-plan-delete" data-index="${idx}" style="color:#b91c1c;">Slett</button>
+      </td>
+    `;
+
+    plansTableBody.appendChild(tr);
+  });
+
+  initPlanDragAndDrop(); // (del 3 under)
+}
 
   async function loadPlansAdmin() {
     try {
@@ -1809,6 +1931,49 @@
         }
       });
     });
+
+    function initPlanDragAndDrop() {
+  const rows = plansTableBody.querySelectorAll('tr.plan-row-draggable');
+
+  rows.forEach((row) => {
+    row.addEventListener('dragstart', (e) => {
+      dragPlanIndex = Number(row.dataset.index);
+      row.style.opacity = '0.4';
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    row.addEventListener('dragend', () => {
+      row.style.opacity = '';
+      dragPlanIndex = null;
+    });
+
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    });
+
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const targetIndex = Number(row.dataset.index);
+      if (dragPlanIndex == null || isNaN(targetIndex)) return;
+      if (dragPlanIndex === targetIndex) return;
+
+      const from = dragPlanIndex;
+      const to = targetIndex;
+
+      const item = allPlans.splice(from, 1)[0];
+      allPlans.splice(to, 0, item);
+
+      // re-nummerer sortOrder basert på ny rekkefølge
+      allPlans.forEach((p, i) => {
+        p.sortOrder = i + 1;
+      });
+
+      renderPlans();
+    });
+  });
+}
+
 
     // sync detaljkort
     syncDetailToPlan();
