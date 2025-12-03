@@ -1084,6 +1084,52 @@ app.post('/api/admin/members/toggle', basicAuth, async (req, res) => {
   res.json({ ok: true, active: members[idx].active });
 });
 
+// Oppdatere plan for medlem (brukes av nytt admin-UI, via e-post)
+app.post('/api/admin/members/update-plan', basicAuth, (req, res) => {
+  const { email, plan } = req.body || {};
+  if (!email || !plan) {
+    return res.status(400).json({ ok: false, error: 'email_and_plan_required' });
+  }
+
+  const members = getMembers();
+  const idx = members.findIndex(
+    (m) => (m.email || '').toLowerCase() === String(email).toLowerCase()
+  );
+
+  if (idx === -1) {
+    return res.status(404).json({ ok: false, error: 'member_not_found' });
+  }
+
+  members[idx].plan = plan;
+  members[idx].updatedAt = new Date().toISOString();
+  saveMembers(members);
+
+  return res.json({ ok: true, member: members[idx] });
+});
+
+// Slette medlem (nytt admin-UI, via POST med e-post i body)
+app.post('/api/admin/members/delete', basicAuth, (req, res) => {
+  const { email } = req.body || {};
+  if (!email) {
+    return res.status(400).json({ ok: false, error: 'email_required' });
+  }
+
+  const emailNorm = String(email).toLowerCase();
+  const members = getMembers();
+  const filtered = members.filter(
+    (m) => (m.email || '').toLowerCase() !== emailNorm
+  );
+
+  if (filtered.length === members.length) {
+    return res.status(404).json({ ok: false, error: 'member_not_found' });
+  }
+
+  // Vi fjerner ikke automatisk fra TELL her (samme praksis som delete-endpointet over)
+
+  saveMembers(filtered);
+  return res.json({ ok: true, deleted: 1 });
+});
+
 app.delete('/api/admin/members', basicAuth, async (req, res) => {
   const email = (req.query.email || '').toLowerCase();
   if (!email) return res.status(400).json({ error: 'email_required' });
