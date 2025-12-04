@@ -1727,11 +1727,22 @@ app.post('/vipps/checkout', async (req, res) => {
       });
     }
 
-    // 1) Lag orderId
-    const orderId = 'ORDER-' + Date.now();
+// 1) Lag orderId
+const orderId = 'ORDER-' + Date.now();
 
-    // 2) returnUrl som peker til backend -> /vipps/return
-    const returnUrl = `${process.env.SERVER_URL}/vipps/return?orderId=${orderId}`;
+// Finn kilde (app / web)
+const source = (req.body && req.body.source) || 'app';
+
+// 2) returnUrl
+// - App: gå via /vipps/return → deeplink til app
+// - Web: send brukeren tilbake til nettsiden
+let returnUrl;
+if (source === 'web') {
+  // Lag en enkel "takk"-side eller bruk forsiden med flagg
+  returnUrl = `https://lalmtreningssenter.no/?vipps=success`;
+} else {
+  returnUrl = `${process.env.SERVER_URL}/vipps/return?orderId=${orderId}`;
+}
 
     // 3) Finn plan (fra plans.json eller fallback-tabell)
     const plans = getPlans();
