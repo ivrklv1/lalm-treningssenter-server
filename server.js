@@ -2102,13 +2102,14 @@ if (src === 'web') {
     );
 
     if (!res.headersSent) {
-      return res
-        .status(500)
-        .json({ ok: false, error: 'vipps_checkout_failed' });
+      return res.status(500).json({
+        ok: false,
+        error: 'vipps_checkout_failed',
+        details: err.response?.data || err.message || null,
+      });
     }
-  }
+  }  
 });
-
 
 // -----------------------------------------------------
 // Vipps helpers: access token + auto-capture
