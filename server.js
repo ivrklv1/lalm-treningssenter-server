@@ -1726,7 +1726,7 @@ app.post('/vipps/checkout', async (req, res) => {
   );
 
   try {
-    const { membershipKey, phone, name, email } = req.body || {};
+    const { membershipKey, phone, name, email, source } = req.body || {};
 
     // E-post er påkrevd for alle andre enn DROPIN
     if (!membershipKey || !phone || (!email && membershipKey !== 'DROPIN')) {
