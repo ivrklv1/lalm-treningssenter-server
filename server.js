@@ -609,15 +609,27 @@ async function sendWelcomeMembershipSms(order, member) {
       return;
     }
 
-    const firstName =
-      (member?.name || order?.name || '')
-        .split(' ')[0]
-        .trim() || 'Hei';
+    // Finn et fornavn hvis vi har et ekte navn (ikke e-post)
+    let nameSource =
+      (member?.name || '').trim() || (order?.name || '').trim() || '';
+
+    // Hvis "navnet" ser ut som en e-post, dropp det
+    if (nameSource.includes('@')) {
+      nameSource = '';
+    }
+
+    let firstName = '';
+    if (nameSource) {
+      firstName = nameSource.split(/\s+/)[0].trim();
+    }
+
+    const greeting = firstName ? `Hei ${firstName}!` : 'Hei!';
 
     const message =
-      `Hei ${firstName}! Velkommen som medlem hos Lalm Treningssenter! 🎉 ` +
-      `Medlemskapet ditt er nå aktivt. Last ned appen for å få tilgang til treningssenteret. ` +
-      `Gi oss beskjed hvis du trenger hjelp - God trening! 💪`;
+      `${greeting} Velkommen som medlem hos Lalm Treningssenter! 🎉\n` +
+      `Medlemskapet ditt er nå aktivt.\n` +
+      `Last ned appen for å få tilgang til treningssenteret.\n` +
+      `Gi oss beskjed hvis du trenger hjelp – God trening! 💪`;
 
     await sendSms(phoneNormalized, message);
 
