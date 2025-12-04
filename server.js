@@ -1744,30 +1744,33 @@ app.post('/vipps/checkout', async (req, res) => {
           (p.id === membershipKey || p.key === membershipKey) &&
           p.active !== false
       );
-      if (planObj && typeof planObj.amount === 'number') {
-        selected = {
-          amount: planObj.amount,
-          text: planObj.text || planObj.name || membershipKey,
-          prorate: planObj.prorate !== false,
-        };
-      }
+          if (planObj && typeof planObj.amount === 'number') {
+      selected = {
+        amount: planObj.amount,
+        text: planObj.text || planObj.name || membershipKey,
+        prorate: planObj.prorate !== false,
+        type: planObj.type || null,
+        shortTermDays: planObj.shortTermDays || 0,
+        signupFee: planObj.signupFee || 0,
+      };
+    }
     }
 
     if (!selected) {
       const membershipMap = {
         LALM_IL_BINDING: {
           amount: 34900,
-          text: 'Lalm IL-medlem – 12 mnd binding',
+          text: 'Lalm IL-medlem - 12 mnd binding',
           prorate: true,
         },
         STANDARD_BINDING: {
           amount: 44900,
-          text: 'Standard – 12 mnd binding',
+          text: 'Standard - 12 mnd binding',
           prorate: true,
         },
         HYTTE_BINDING: {
           amount: 16900,
-          text: 'Hyttemedlemskap – 12 mnd binding',
+          text: 'Hyttemedlemskap - 12 mnd binding',
           prorate: true,
         },
 
@@ -1842,7 +1845,7 @@ app.post('/vipps/checkout', async (req, res) => {
       });
     }
 
-    // 6) Dag-proratering første måned
+    // 6) Dag-proratering første måned / korttid-dropin
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
@@ -1851,23 +1854,75 @@ app.post('/vipps/checkout', async (req, res) => {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const remainingDays = daysInMonth - day + 1; // inkl. innmeldingsdagen
 
+    // Korttid/drop-in = ikke prorasjon, ikke admin-gebyr
+    const isShortOrDropin =
+      (selected.type === 'short_term') ||
+      (selected.type === 'dropin') ||
+      (selected.shortTermDays && selected.shortTermDays > 0) ||
+      membershipKey === 'DROPIN';
+
     let fraction = 1;
     let prorationLabel = '';
     let firstMonthTrainingAmount = selected.amount;
 
-    if (selected.prorate) {
+    // 7) Innmeldingsavgift / admingebyr
+    // Standard-medlemskap: 199,- admin + ev. plan.signupFee
+    const ADMIN_FEE = 19900;
+    let SIGNUP_FEE = 0;
+
+    if (!isShortOrDropin) {
+      SIGNUP_FEE = (selected.signupFee || 0) + ADMIN_FEE;
+
+      // Spesial-test: TEST_1KR uten admin-gebyr
+      if (membershipKey === 'TEST_1KR') {
+        SIGNUP_FEE = 0;
+      }
+    }
+
+    // Prorasjon kun for "vanlige" medlemskap der selected.prorate = true
+    if (!isShortOrDropin && selected.prorate) {
       fraction = remainingDays / daysInMonth;
       firstMonthTrainingAmount = Math.round(selected.amount * fraction);
       prorationLabel = ` – første måned: ${remainingDays} av ${daysInMonth} dager`;
+    } else {
+      // Korttid / dropin → ingen prorasjon
+      fraction = 1;
+      firstMonthTrainingAmount = selected.amount;
+      prorationLabel = '';
     }
 
-    // 7) Innmeldingsavgift 199,- (ikke for TEST_1KR og DROPIN)
-    let SIGNUP_FEE = 19900;
-    if (membershipKey === 'TEST_1KR' || membershipKey === 'DROPIN') {
-      SIGNUP_FEE = 0;
+    // Sluttbeløp
+    let finalAmount;
+    if (isShortOrDropin) {
+      // Kun selve beløpet for korttid/dropin
+      finalAmount = selected.amount;
+      SIGNUP_FEE = 0; // for sikkerhets skyld
+    } else {
+      finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
     }
 
-    let finalAmount = firstMonthTrainingAmount + SIGNUP_FEE;
+    // Sikkerhet: Vipps krever minst 1 kr (100 øre)
+    if (finalAmount < 100) {
+      console.warn(
+        'finalAmount < 100, justerer opp til 100. membershipKey=',
+        membershipKey,
+        'beregnet=',
+        finalAmount
+      );
+      finalAmount = 100;
+    }
+
+    console.log('VIPPS BELØP', {
+      membershipKey,
+      selectedAmount: selected.amount,
+      firstMonthTrainingAmount,
+      SIGNUP_FEE,
+      finalAmount,
+      isShortOrDropin,
+    });
+    appendAccessLog(
+      `[${new Date().toISOString()}] VIPPS_AMOUNT_CALC orderId=${orderId} membershipKey=${membershipKey} full=${selected.amount} firstMonth=${firstMonthTrainingAmount} signupFee=${SIGNUP_FEE} final=${finalAmount} shortOrDropin=${isShortOrDropin}\n`
+    );
 
     // Sikkerhet: Vipps krever minst 1 kr (100 øre)
     if (finalAmount < 100) {
