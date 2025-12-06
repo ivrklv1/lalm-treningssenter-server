@@ -1745,7 +1745,7 @@ app.post('/vipps/checkout', async (req, res) => {
             : 'membershipKey_phone_email_required',
       });
     }
-    
+
 // 1) Lag orderId
 const orderId = 'ORDER-' + Date.now();
 
@@ -1804,9 +1804,9 @@ if (src === 'web') {
         },
 
         // 🧪 TESTMEDLEMSKAP 1 kr
-        TEST_1KR: {
+        Test_3kr: {
           amount: 300,
-          text: 'TEST – 1 kr (ingen innmeldingsavgift)',
+          text: 'TEST – 3 kr (ingen innmeldingsavgift)',
           prorate: false,
         },
 
@@ -1903,7 +1903,7 @@ if (src === 'web') {
       SIGNUP_FEE = (selected.signupFee || 0) + ADMIN_FEE;
 
       // Spesial-test: TEST_1KR uten admin-gebyr
-      if (membershipKey === 'TEST_1KR') {
+      if (membershipKey === 'Test_3kr') {
         SIGNUP_FEE = 0;
       }
     }
