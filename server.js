@@ -492,11 +492,21 @@ async function tellRemoveUser(phone) {
   }
 }
 
-// Åpne dør via TELL
+// Åpne dør via TELL (gc/open)
 async function gcOpen(gateIndex) {
   const headers = tellHeaders();
-  const data = { hwId: TELL.hwId, appId: TELL.appId, gateIndex };
-  const r = await axios.post(`${TELL.base}/gc/open`, data, { headers });
+
+  const body = {
+    // TELL forventer feltet "hwid" (lowercase), men vi lagrer det som hwId
+    hwid: TELL.hwId,
+    appId: TELL.appId,
+    // Gate-indeksen skal sendes som "data" i henhold til docs
+    data: gateIndex,
+  };
+
+  const r = await axios.post(`${TELL.base}/gc/open`, body, { headers });
+  console.log('[TELL] gc/open response:', r.data);
+
   return r.data;
 }
 
@@ -518,13 +528,17 @@ async function tellSyncAll() {
   }
 }
 
-// Test-endepunkt for TELL: sjekk at API-nøkkel, hwid og appId fungerer
+// Test-endepunkt for TELL: sjekk at API-nøkkel, hwId og appId fungerer
 app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
   try {
     const headers = tellHeaders();
-    const data = { hwId: TELL.hwId, appId: TELL.appId, gateIndex: 1 };
+    const body = {
+      hwid: TELL.hwId,
+      appId: TELL.appId,
+      data: 1,           // åpne utgang 1
+    };
 
-    const r = await axios.post(`${TELL.base}/gc/open`, data, { headers });
+    const r = await axios.post(`${TELL.base}/gc/open`, body, { headers });
     console.log('[TELL TEST] gc/open result:', r.data);
 
     return res.json({ ok: true, response: r.data });
