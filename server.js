@@ -371,6 +371,11 @@ const TELL = {
     .map(s => s.trim())
     .filter(Boolean),
 };
+console.log("TELL CONFIG CHECK:", {
+  apiKey: !!TELL.apiKey,
+  hwid: !!TELL.hwid,
+  appId: !!TELL.appId
+});
 
 // Hjelpefunksjon: lage auth-headere
 function tellHeaders() {
