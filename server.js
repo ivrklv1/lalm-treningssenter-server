@@ -1482,7 +1482,7 @@ app.post('/dropin/verify', (req, res) => {
   return res.json({ ok: true, phone: entry.phone, expiresAt: entry.expiresAt });
 });
 
-// Åpne dør via token / medlem – støtter både e-post og telefon
+// Åpne dør via token / medlem – bruker activeDropins
 app.post('/door/open', async (req, res) => {
   try {
     const { token, email, phone, doorId = 'styrkerom' } = req.body || {};
@@ -1491,45 +1491,27 @@ app.post('/door/open', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'invalid_doorId' });
     }
 
-    const members = getMembers();
-
+    // Finn medlem basert på telefon eller e-post
     let member = null;
-
-    // 1) Prøv e-post hvis sendt inn
-    if (email) {
-      const emailLc = String(email).toLowerCase();
-      member = members.find(
-        (m) =>
-          (m.email || '').toLowerCase() === emailLc &&
-          m.active
-      );
-    }
-
-    // 2) Hvis ikke funnet på e-post – prøv telefon
-    if (!member && phone) {
-      const phoneNorm = normalizePhone(phone);
-      if (phoneNorm) {
-        member = members.find(
-          (m) =>
-            normalizePhone(m.phone) === phoneNorm &&
-            m.active
-        );
+    if (phone || email) {
+      member = findMemberByPhoneOrEmail(phone || null, email || null);
+      if (member && !member.active) {
+        member = null;
       }
     }
 
     const now = new Date();
     const dropin = activeDropins.find(
-      (d) => d.token === token && new Date(d.validUntil) >= now
+      d => d.token === token && new Date(d.validUntil) >= now,
     );
 
     if (!member && !dropin) {
-      // Litt ekstra logging for debugging
-      console.log('[DOOR_NO_ACCESS]', {
-        email,
-        phone,
-        hasMember: !!member,
-        hasDropin: !!dropin,
-      });
+      console.log('[DOOR_NO_ACCESS] {',
+        '\n  email:', email,
+        '\n  phone:', phone,
+        '\n  hasMember:', !!member,
+        '\n  hasDropin:', !!dropin,
+        '\n}');
       return res.status(403).json({ ok: false, error: 'no_access' });
     }
 
@@ -1541,10 +1523,13 @@ app.post('/door/open', async (req, res) => {
     await gcOpen(doorConfig[doorId].gateIndex);
 
     const source = member ? 'MEMBER' : 'DROPIN';
-    const who = member ? member.email || member.phone : `${dropin.email} (dropin)`;
+    const who = member
+      ? (member.email || member.phone || 'ukjent')
+      : `${dropin.email} (dropin)`;
     const ts = new Date().toLocaleString('nb-NO', { timeZone: 'Europe/Oslo' });
+
     appendAccessLog(
-      `${ts} email=${who} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=OPEN_${source}\n`
+      `${ts} email=${who} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=OPEN_${source}\n`,
     );
 
     return res.json({ ok: true, source });
@@ -1553,6 +1538,7 @@ app.post('/door/open', async (req, res) => {
     return res.status(500).json({ ok: false, error: 'internal_error' });
   }
 });
+
 
 // =====================================================
 // Enkel innlogging (gammel epost/passord – beholdes)
