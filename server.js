@@ -1482,25 +1482,54 @@ app.post('/dropin/verify', (req, res) => {
   return res.json({ ok: true, phone: entry.phone, expiresAt: entry.expiresAt });
 });
 
-// Åpne dør via token (app) – bruker activeDropins
+// Åpne dør via token / medlem – støtter både e-post og telefon
 app.post('/door/open', async (req, res) => {
   try {
-    const { token, email, doorId = 'styrkerom' } = req.body || {};
+    const { token, email, phone, doorId = 'styrkerom' } = req.body || {};
 
     if (!doorConfig[doorId]) {
       return res.status(400).json({ ok: false, error: 'invalid_doorId' });
     }
 
-    const member = getMembers().find(
-      m => (m.email || '').toLowerCase() === (email || '').toLowerCase() && m.active,
-    );
+    const members = getMembers();
+
+    let member = null;
+
+    // 1) Prøv e-post hvis sendt inn
+    if (email) {
+      const emailLc = String(email).toLowerCase();
+      member = members.find(
+        (m) =>
+          (m.email || '').toLowerCase() === emailLc &&
+          m.active
+      );
+    }
+
+    // 2) Hvis ikke funnet på e-post – prøv telefon
+    if (!member && phone) {
+      const phoneNorm = normalizePhone(phone);
+      if (phoneNorm) {
+        member = members.find(
+          (m) =>
+            normalizePhone(m.phone) === phoneNorm &&
+            m.active
+        );
+      }
+    }
 
     const now = new Date();
     const dropin = activeDropins.find(
-      d => d.token === token && new Date(d.validUntil) >= now,
+      (d) => d.token === token && new Date(d.validUntil) >= now
     );
 
     if (!member && !dropin) {
+      // Litt ekstra logging for debugging
+      console.log('[DOOR_NO_ACCESS]', {
+        email,
+        phone,
+        hasMember: !!member,
+        hasDropin: !!dropin,
+      });
       return res.status(403).json({ ok: false, error: 'no_access' });
     }
 
@@ -1512,9 +1541,11 @@ app.post('/door/open', async (req, res) => {
     await gcOpen(doorConfig[doorId].gateIndex);
 
     const source = member ? 'MEMBER' : 'DROPIN';
-    const who = member ? member.email : `${dropin.email} (dropin)`;
+    const who = member ? member.email || member.phone : `${dropin.email} (dropin)`;
     const ts = new Date().toLocaleString('nb-NO', { timeZone: 'Europe/Oslo' });
-    appendAccessLog(`${ts} email=${who} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=OPEN_${source}\n`);
+    appendAccessLog(
+      `${ts} email=${who} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=OPEN_${source}\n`
+    );
 
     return res.json({ ok: true, source });
   } catch (e) {
