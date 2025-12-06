@@ -1909,15 +1909,16 @@ if (src === 'web') {
     }
 
     // Prorasjon kun for "vanlige" medlemskap der selected.prorate = true
-    if (!isShortOrDropin && selected.prorate) {
+    // UNNTAK: 'Test_3kr' skal ALDRI prorateres
+    if (!isShortOrDropin && selected.prorate && selected.key !== 'Test_3kr') {
       fraction = remainingDays / daysInMonth;
-      firstMonthTrainingAmount = Math.round(selected.amount * fraction);
+     firstMonthTrainingAmount = Math.round(selected.amount * fraction);
       prorationLabel = ` – første måned: ${remainingDays} av ${daysInMonth} dager`;
     } else {
-      // Korttid / dropin → ingen prorasjon
-      fraction = 1;
-      firstMonthTrainingAmount = selected.amount;
-      prorationLabel = '';
+     // Korttid / dropin / Test_3kr → ingen prorasjon
+     fraction = 1;
+     firstMonthTrainingAmount = selected.amount;
+     prorationLabel = '';
     }
 
     // Sluttbeløp
