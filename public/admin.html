@@ -1552,9 +1552,9 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       return;
     }
 
-    const sorted = [...allOrders].sort((a, b) => {
-      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-    }).slice(0, 50);
+      const sorted = [...allOrders]
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    .slice(0, 50);
 
     ordersTableBody.innerHTML = '';
     sorted.forEach(o => {
@@ -1882,7 +1882,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     p.campaignTo = planDetailCampaignToEl.value.trim() || null;
   }
 
-  async function savePlansAdmin() {
+    async function savePlansAdmin() {
     if (!Array.isArray(allPlans) || !allPlans.length) {
       plansMsg.textContent = 'Ingen medlemskap å lagre.';
       plansMsg.className = 'mt-1 small tag-danger';
@@ -1931,13 +1931,11 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         }
       });
     });
-}
 
-
-    // sync detaljkort
+    // sync detaljkort → allPlans
     syncDetailToPlan();
 
-    plansMsg.textContent = 'Lagrer...';
+    plansMsg.textContent = 'Lagrer.';
     plansMsg.className = 'mt-1 small text-muted';
     btnSavePlans.disabled = true;
 
@@ -1967,7 +1965,6 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         };
 
         if (p.__isNew) {
-          // ny plan → POST
           const res = await fetch('/admin/plans', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1979,7 +1976,6 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
           }
           p.__isNew = false;
         } else {
-          // eksisterende → PUT
           const res = await fetch(
             '/admin/plans/' + encodeURIComponent(p.id || p.key),
             {
@@ -2005,6 +2001,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     } finally {
       btnSavePlans.disabled = false;
     }
+  }
 
   async function deletePlan(index) {
     const p = allPlans[index];
