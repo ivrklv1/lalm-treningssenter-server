@@ -373,7 +373,7 @@ const TELL = {
 };
 console.log("TELL CONFIG CHECK:", {
   apiKey: !!TELL.apiKey,
-  hwid: !!TELL.hwid,
+  hwId: !!TELL.hwId,
   appId: !!TELL.appId
 });
 
@@ -481,7 +481,7 @@ async function tellRemoveUser(phone) {
 
   try {
     const headers = tellHeaders();
-    const data = { hwid: TELL.hwid, appId: TELL.appId, phone: phoneNormalized };
+    const data = { hwId: TELL.hwId, appId: TELL.appId, phone: phoneNormalized };
     await axios.post(`${TELL.base}/gc/removeuser`, data, { headers });
     console.log(`🗑️ [TELL] Fjernet ${phoneNormalized}`);
   } catch (e) {
@@ -495,7 +495,7 @@ async function tellRemoveUser(phone) {
 // Åpne dør via TELL
 async function gcOpen(gateIndex) {
   const headers = tellHeaders();
-  const data = { hwid: TELL.hwid, appId: TELL.appId, gateIndex };
+  const data = { hwId: TELL.hwId, appId: TELL.appId, gateIndex };
   const r = await axios.post(`${TELL.base}/gc/open`, data, { headers });
   return r.data;
 }
@@ -522,7 +522,7 @@ async function tellSyncAll() {
 app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
   try {
     const headers = tellHeaders();
-    const data = { hwid: TELL.hwid, appId: TELL.appId, gateIndex: 1 };
+    const data = { hwId: TELL.hwId, appId: TELL.appId, gateIndex: 1 };
 
     const r = await axios.post(`${TELL.base}/gc/open`, data, { headers });
     console.log('[TELL TEST] gc/open result:', r.data);
@@ -1362,7 +1362,7 @@ app.post('/access', async (req, res) => {
       });
     }
 
-    if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
+    if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
       console.warn('TELL-konfig ikke komplett – avviser /access');
       return res.status(503).json({
         status: 'error',
@@ -1520,7 +1520,7 @@ app.post('/door/open', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'no_access' });
     }
 
-    if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
+    if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
       console.warn('TELL-konfig ikke komplett – kan ikke åpne dør via /door/open');
       return res.status(503).json({ ok: false, error: 'tell_not_ready' });
     }
