@@ -1725,8 +1725,15 @@ app.post('/vipps/checkout', async (req, res) => {
     `[${ts}] VIPPS_CHECKOUT_REQUEST body=${JSON.stringify(req.body)}\n`
   );
 
-  try {
-    const { membershipKey, phone, name, email, source } = req.body || {};
+    try {
+    // HENT UT BEGGE FELT
+    let { membershipKey, membershipId, phone, name, email, source } =
+      req.body || {};
+
+    // TILLAT AT APPEN SENDER membershipId I STEDET FOR membershipKey
+    if (!membershipKey && membershipId) {
+      membershipKey = membershipId;
+    }
 
     // E-post er påkrevd for alle andre enn DROPIN
     if (!membershipKey || !phone || (!email && membershipKey !== 'DROPIN')) {
@@ -1738,7 +1745,7 @@ app.post('/vipps/checkout', async (req, res) => {
             : 'membershipKey_phone_email_required',
       });
     }
-
+    
 // 1) Lag orderId
 const orderId = 'ORDER-' + Date.now();
 
