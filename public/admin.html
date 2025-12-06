@@ -1931,47 +1931,6 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         }
       });
     });
-
-    function initPlanDragAndDrop() {
-  console.log("initPlanDragAndDrop: Drag & drop ikke aktivert (placeholder).");
-
-  rows.forEach((row) => {
-    row.addEventListener('dragstart', (e) => {
-      dragPlanIndex = Number(row.dataset.index);
-      row.style.opacity = '0.4';
-      e.dataTransfer.effectAllowed = 'move';
-    });
-
-    row.addEventListener('dragend', () => {
-      row.style.opacity = '';
-      dragPlanIndex = null;
-    });
-
-    row.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-    });
-
-    row.addEventListener('drop', (e) => {
-      e.preventDefault();
-      const targetIndex = Number(row.dataset.index);
-      if (dragPlanIndex == null || isNaN(targetIndex)) return;
-      if (dragPlanIndex === targetIndex) return;
-
-      const from = dragPlanIndex;
-      const to = targetIndex;
-
-      const item = allPlans.splice(from, 1)[0];
-      allPlans.splice(to, 0, item);
-
-      // re-nummerer sortOrder basert på ny rekkefølge
-      allPlans.forEach((p, i) => {
-        p.sortOrder = i + 1;
-      });
-
-      renderPlans();
-    });
-  });
 }
 
 
@@ -2046,7 +2005,6 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     } finally {
       btnSavePlans.disabled = false;
     }
-  }
 
   async function deletePlan(index) {
     const p = allPlans[index];
@@ -2097,6 +2055,60 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       plansMsg.className = 'mt-1 small tag-danger';
     }
   }
+
+  function initPlanDragAndDrop() {
+  // Finn alle rader som kan dras
+  const rows = plansTableBody.querySelectorAll('tr.plan-row-draggable');
+
+  rows.forEach((row) => {
+    row.addEventListener('dragstart', (e) => {
+      dragPlanIndex = Number(row.dataset.index);
+      row.style.opacity = '0.4';
+
+      // Noen nettlesere krever at vi setter litt data
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(dragPlanIndex));
+      }
+    });
+
+    row.addEventListener('dragend', () => {
+      row.style.opacity = '';
+      dragPlanIndex = null;
+    });
+
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+      }
+    });
+
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+
+      const targetIndex = Number(row.dataset.index);
+      if (dragPlanIndex == null || isNaN(targetIndex)) return;
+      if (dragPlanIndex === targetIndex) return;
+
+      const from = dragPlanIndex;
+      const to = targetIndex;
+
+      // Flytt elementet i allPlans
+      const item = allPlans.splice(from, 1)[0];
+      allPlans.splice(to, 0, item);
+
+      // Oppdater sortOrder basert på ny rekkefølge
+      allPlans.forEach((p, i) => {
+        p.sortOrder = i + 1;
+      });
+
+      // Rerender tabellen (nye rader får nye lyttere)
+      renderPlans();
+    });
+  });
+}
+
 
   // ------- SMS -------
 
