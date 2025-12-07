@@ -561,20 +561,18 @@ app.get('/debug/tell-open', async (req, res) => {
 
 app.get('/debug/tell-addappid', async (req, res) => {
   try {
-    const url = 'https://api.tell.hu/gc/addappid';
+    const baseUrl = 'https://api.tell.hu/gc/addappid';
 
-    const body = {
+    const params = new URLSearchParams({
       hwid: process.env.TELL_HWID,
       password: process.env.TELL_MASTER_PASSWORD,
-    };
+    });
+
+    const url = `${baseUrl}?${params.toString()}`;
 
     const r = await fetch(url, {
-      method: 'POST', // vi bruker POST for å få lov til å ha body
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': process.env.TELL_API_KEY, // VIKTIG: riktig header-navn
-      },
-      body: JSON.stringify(body),
+      method: 'GET',
+      // ingen body, ingen spesielle headers
     });
 
     const text = await r.text();
@@ -590,6 +588,7 @@ app.get('/debug/tell-addappid', async (req, res) => {
     });
   }
 });
+
 
 
 
