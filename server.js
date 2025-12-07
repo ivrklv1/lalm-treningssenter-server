@@ -560,6 +560,37 @@ app.get('/debug/tell-open', async (req, res) => {
   }
 });
 
+app.get('/debug/tell-addappid', async (req, res) => {
+  try {
+    const baseUrl = 'https://api.tell.hu/gc/addappid';
+
+    const params = new URLSearchParams({
+      hwid: process.env.TELL_HWID,
+      password: process.env.TELL_MASTER_PASSWORD,
+    });
+
+    const url = `${baseUrl}?${params.toString()}`;
+
+    const r = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const text = await r.text();
+    console.log('[TELL_ADDAPPID] status=', r.status, 'body=', text);
+
+    return res.status(200).send(text);
+  } catch (err) {
+    console.error('[TELL_ADDAPPID_ERROR]', err);
+    return res.status(500).json({
+      ok: false,
+      name: err.name,
+      message: err.message,
+    });
+  }
+});
 
 
 
@@ -2631,39 +2662,6 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
       .json({ error: 'Kunne ikke sende SMS. Sjekk server-loggen.' });
   }
 });
-
-app.get('/debug/tell-addappid', async (req, res) => {
-  try {
-    const baseUrl = 'https://api.tell.hu/gc/addappid';
-
-    const params = new URLSearchParams({
-      hwid: process.env.TELL_HWID,
-      password: process.env.TELL_MASTER_PASSWORD,
-    });
-
-    const url = `${baseUrl}?${params.toString()}`;
-
-    const r = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const text = await r.text();
-    console.log('[TELL_ADDAPPID] status=', r.status, 'body=', text);
-
-    return res.status(200).send(text);
-  } catch (err) {
-    console.error('[TELL_ADDAPPID_ERROR]', err);
-    return res.status(500).json({
-      ok: false,
-      name: err.name,
-      message: err.message,
-    });
-  }
-});
-
 
 // ----------------------------
 // Start server
