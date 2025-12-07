@@ -360,27 +360,28 @@ const doorConfig = {
 // TELL-konfig (Gate Control PRO)
 // ----------------------------
 const TELL = {
-  base: 'https://api.tell.hu',
+  base: process.env.TELL_BASE_URL || 'https://api.tell.hu',
   apiKey: process.env.TELL_API_KEY,
-  hwid: process.env.TELL_HWID,                // f.eks. "11:22:33:44:55:D1"
-  appId: process.env.TELL_APP_ID,             // 40-tegns appId fra /gc/addappid
+  hwId: process.env.TELL_HWID, // f.eks. "FC:0F:E7:CA:63:93"
+  appId: process.env.TELL_APP_ID, // AppId fra TELL
   hwName: process.env.TELL_HW_NAME || 'Lalm Treningssenter',
   inserter: process.env.TELL_INSERTER || 'Lalm Treningssenter admin',
   schemes: (process.env.TELL_SCHEMES || '')
     .split(',')
-    .map(s => s.trim())
+    .map((s) => s.trim())
     .filter(Boolean),
 };
-console.log("TELL CONFIG CHECK:", {
+
+console.log('TELL CONFIG CHECK:', {
   apiKey: !!TELL.apiKey,
-  hwId: !!TELL.hwid,
-  appId: !!TELL.appId
+  hwId: !!TELL.hwId,
+  appId: !!TELL.appId,
 });
 
 // Hjelpefunksjon: lage auth-headere
 function tellHeaders() {
-  if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
-    console.warn('TELL-konfig ikke komplett (API key / hwid / appId mangler).');
+  if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
+    console.warn('TELL-konfig ikke komplett (API key / hwId / appId mangler).');
   }
   return {
     'Content-Type': 'application/json',
@@ -388,10 +389,7 @@ function tellHeaders() {
   };
 }
 
-// ----------------------------
-// Legg til bruker i TELL (adgang) – /gc/adduser
-// NB: Denne funksjonen blir ikke lenger brukt automatisk i systemet
-// ----------------------------
+// Legg til bruker i TELL (ikke i bruk automatisk nå)
 async function tellAddUser(phone, name) {
   const phoneNormalized = normalizePhone(phone);
   if (!phoneNormalized) {
@@ -399,7 +397,6 @@ async function tellAddUser(phone, name) {
     return;
   }
 
-  // Kun sifre til TELL (ingen + eller mellomrom)
   const phoneDigits = phoneNormalized.replace(/\D/g, '');
   if (!phoneDigits) {
     console.warn('[TELL] tellAddUser: klarte ikke å hente siffer fra telefon:', phone);
@@ -408,43 +405,29 @@ async function tellAddUser(phone, name) {
 
   const headers = tellHeaders();
 
-  // Body bygget etter "ADD USER" i dokumentasjonen
   const body = {
     hwId: TELL.hwId,
     hwName: TELL.hwName,
     appId: TELL.appId,
 
-    // Brukernavn + visningsnavn
-    name: phoneDigits,                // "username"
-    fname: name || phoneDigits,       // "full name / comment"
+    name: phoneDigits,
+    fname: name || phoneDigits,
     phoneNumber: phoneDigits,
 
-    // Tilgangsskjema – kan være tom array hvis dere ikke bruker templates enda
     schemes: TELL.schemes,
 
-    // Hva brukeren får lov til
-    go1: true,       // kan styre utgang 1
-    go2: false,      // ingen utgang 2
+    go1: true,
+    go2: false,
     out1: true,
     out2: false,
 
-    // Varslinger – slått av til å begynne med
     pushD: false,
     smsD: false,
     call: false,
     sms: false,
-    pushE: false,
-    doorBell: false,
-    cam1: false,
-    cam2: false,
 
-    // Hvem som la inn brukeren
     inserter: TELL.inserter,
-
-    // Rolle: U = vanlig bruker
     role: 'U',
-
-    // Ingen spesialregel
     specificRuleType: '',
   };
 
@@ -453,35 +436,24 @@ async function tellAddUser(phone, name) {
   try {
     const r = await axios.post(`${TELL.base}/gc/adduser`, body, { headers });
     console.log(`✅ [TELL] La til ${name} (${phoneDigits})`, r.data);
-    fs.appendFileSync(
-      ACCESS_LOG,
-      `[${new Date().toISOString()}] [TELL SYNC] La til bruker ${name} ${phoneDigits}\n`
-    );
     return r.data;
   } catch (e) {
     console.error(
       `❌ [TELL] Feil ved legg til ${phoneDigits}:`,
       e?.response?.data || e.message
     );
-    fs.appendFileSync(
-      ACCESS_LOG,
-      `[${new Date().toISOString()}] [TELL SYNC ERROR] Klarte ikke legge til ${name} ${phoneDigits}: ${
-        JSON.stringify(e?.response?.data || e.message)
-      }\n`
-    );
     throw e;
   }
 }
 
 // Fjern bruker i TELL
-// NB: Ikke lenger brukt automatisk
 async function tellRemoveUser(phone) {
   const phoneNormalized = normalizePhone(phone);
   if (!phoneNormalized) return;
 
   try {
     const headers = tellHeaders();
-    const data = { hwid: TELL.hwid, appId: TELL.appId, phone: phoneNormalized };
+    const data = { hwId: TELL.hwId, appId: TELL.appId, phone: phoneNormalized };
     await axios.post(`${TELL.base}/gc/removeuser`, data, { headers });
     console.log(`🗑️ [TELL] Fjernet ${phoneNormalized}`);
   } catch (e) {
@@ -492,28 +464,19 @@ async function tellRemoveUser(phone) {
   }
 }
 
-// Åpne dør via TELL (gc/open)
+// Åpne dør via TELL
 async function gcOpen(gateIndex) {
   const headers = tellHeaders();
-
-  const body = {
-    hwid: TELL.hwid,
-    appId: TELL.appId,
-    data: gateIndex,        // ← TELL forventer dette feltet
-  };
-
-  const r = await axios.post(`${TELL.base}/gc/open`, body, { headers, timeout: 5000 });
+  const data = { hwId: TELL.hwId, appId: TELL.appId, gateIndex };
+  const r = await axios.post(`${TELL.base}/gc/open`, data, { headers });
   console.log('[TELL gc/open]', r.data);
   return r.data;
 }
 
-// Registrer appId på denne enheten hos TELL (må gjøres én gang)
+// Registrer appId på enheten hos TELL – må typisk gjøres én gang
 async function tellRegisterAppId() {
   const headers = tellHeaders();
-  const body = {
-    hwid: TELL.hwid,
-    appId: TELL.appId,
-  };
+  const body = { hwId: TELL.hwId, appId: TELL.appId };
 
   const r = await axios.post(`${TELL.base}/gc/addappid`, body, {
     headers,
@@ -524,31 +487,13 @@ async function tellRegisterAppId() {
   return r.data;
 }
 
-// Synk alle aktive medlemmer til TELL
-// NB: Ikke lenger brukt via admin-API (endpoint er deaktivert)
-async function tellSyncAll() {
-  const members = getMembers();
-  for (const m of members) {
-    if (!m.phone) continue;
-    try {
-      if (m.active) {
-        await tellAddUser(m.phone, m.name || m.email);
-      } else {
-        await tellRemoveUser(m.phone);
-      }
-    } catch (e) {
-      console.error('[TELL SYNC ALL] Feil for', m.email, e?.response?.data || e.message);
-    }
-  }
-}
-
 // Test-endepunkt for TELL: sjekk at API-nøkkel, hwId og appId fungerer
 app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
   try {
     const headers = tellHeaders();
-    const body = { hwid: TELL.hwid, appId: TELL.appId, data: 1 };
+    const data = { hwId: TELL.hwId, appId: TELL.appId, gateIndex: 1 };
 
-    const r = await axios.post(`${TELL.base}/gc/open`, body, { headers });
+    const r = await axios.post(`${TELL.base}/gc/open`, data, { headers });
     console.log('[TELL TEST] gc/open result:', r.data);
 
     return res.json({ ok: true, response: r.data });
@@ -570,10 +515,11 @@ app.get('/api/admin/tell-register-app', basicAuth, async (req, res) => {
     console.error('[TELL REGISTER APP] error:', e?.response?.data || e.message);
     return res.status(500).json({
       ok: false,
-      error: e?.response?.data || e.message
+      error: e?.response?.data || e.message,
     });
   }
 });
+
 
 
 // ----------------------------
@@ -1401,7 +1347,7 @@ app.post('/access', async (req, res) => {
       });
     }
 
-    if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
+    if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
       console.warn('TELL-konfig ikke komplett – avviser /access');
       return res.status(503).json({
         status: 'error',
@@ -1559,7 +1505,7 @@ app.post('/door/open', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'no_access' });
     }
 
-    if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
+    if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
       console.warn('TELL-konfig ikke komplett – kan ikke åpne dør via /door/open');
       return res.status(503).json({ ok: false, error: 'tell_not_ready' });
     }
