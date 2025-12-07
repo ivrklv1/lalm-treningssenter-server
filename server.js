@@ -385,7 +385,7 @@ function tellHeaders() {
   }
   return {
     'Content-Type': 'application/json',
-    ApiKey: TELL.apiKey,
+    'api-key': TELL.apiKey,  // 👈 viktig: riktig navn
   };
 }
 
@@ -522,41 +522,20 @@ app.get('/api/admin/tell-register-app', basicAuth, async (req, res) => {
 
 app.get('/debug/tell-open', async (req, res) => {
   try {
-    const url = 'https://api.tell.hu/gc/open';
-
-    const body = {
-      hwid: process.env.TELL_HWID,
-      appId: process.env.TELL_APP_ID,
-      data: 1, // output 1
-    };
-
-    const r = await fetch(url, {
-      method: 'POST', // samme “hack” her
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': process.env.TELL_API_KEY,
-      },
-      body: JSON.stringify(body),
-    });
-
-    const text = await r.text();
-    console.log('[TELL_DEBUG_OPEN] status=', r.status, 'body=', text);
-
+    const data = await gcOpen(1);   // bruker samme kall som /door/open
     return res.status(200).json({
       ok: true,
-      httpStatus: r.status,
-      raw: text,
+      response: data,
     });
   } catch (err) {
-    console.error('[TELL_DEBUG_ERROR]', err);
+    console.error('[TELL_DEBUG_ERROR]', err?.response?.data || err.message);
     return res.status(500).json({
       ok: false,
-      name: err.name,
-      message: err.message,
-      cause: err.cause,
+      error: err?.response?.data || err.message,
     });
   }
 });
+
 
 
 app.get('/debug/tell-addappid', async (req, res) => {
