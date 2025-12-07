@@ -493,7 +493,6 @@ async function tellRemoveUser(phone) {
 }
 
 // Åpne dør via TELL (gc/open)
-// Åpne dør via TELL (gc/open)
 async function gcOpen(gateIndex) {
   const headers = tellHeaders();
 
@@ -505,6 +504,23 @@ async function gcOpen(gateIndex) {
 
   const r = await axios.post(`${TELL.base}/gc/open`, body, { headers, timeout: 5000 });
   console.log('[TELL gc/open]', r.data);
+  return r.data;
+}
+
+// Registrer appId på denne enheten hos TELL (må gjøres én gang)
+async function tellRegisterAppId() {
+  const headers = tellHeaders();
+  const body = {
+    hwid: TELL.hwid,
+    appId: TELL.appId,
+  };
+
+  const r = await axios.post(`${TELL.base}/gc/addappid`, body, {
+    headers,
+    timeout: 5000,
+  });
+
+  console.log('[TELL addappid]', r.data);
   return r.data;
 }
 
@@ -541,6 +557,20 @@ app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: e?.response?.data || e.message,
+    });
+  }
+});
+
+// Admin: registrer appId på TELL-enheten via nettleser (GET)
+app.get('/api/admin/tell-register-app', basicAuth, async (req, res) => {
+  try {
+    const data = await tellRegisterAppId();
+    return res.json({ ok: true, response: data });
+  } catch (e) {
+    console.error('[TELL REGISTER APP] error:', e?.response?.data || e.message);
+    return res.status(500).json({
+      ok: false,
+      error: e?.response?.data || e.message
     });
   }
 });
