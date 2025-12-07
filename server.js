@@ -524,17 +524,20 @@ app.get('/debug/tell-open', async (req, res) => {
   try {
     const url = 'https://api.tell.hu/gc/open';
 
-    const params = new URLSearchParams({
-      hwid: process.env.TELL_HWID,      // hardware ID til TELL-modulen
-      appId: process.env.TELL_APP_ID,  // app-id du fikk på login
-      data: '1'                        // 1 = trigger utgang 1
-    });
+    const body = {
+      hwid: process.env.TELL_HWID,      // HWID til Gate Control PRO
+      appId: process.env.TELL_APP_ID,  // AppID (40 tegn) for denne enheten
+      data: 1                          // 1 = utgang 1
+    };
 
-    const r = await fetch(`${url}?${params.toString()}`, {
+    const r = await fetch(url, {
       method: 'GET',
       headers: {
-        'ApiKey': process.env.TELL_API_KEY,
-      }
+        'Content-Type': 'application/json',
+        // Merk: docs sier ikke noe om ApiKey-header for gc/open,
+        // så vi lar den være ute her.
+      },
+      body: JSON.stringify(body),
     });
 
     const text = await r.text();
