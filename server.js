@@ -362,7 +362,7 @@ const doorConfig = {
 const TELL = {
   base: 'https://api.tell.hu',
   apiKey: process.env.TELL_API_KEY,
-  hwId: process.env.TELL_HWID,                // f.eks. "11:22:33:44:55:D1"
+  hwid: process.env.TELL_HWID,                // f.eks. "11:22:33:44:55:D1"
   appId: process.env.TELL_APP_ID,             // 40-tegns appId fra /gc/addappid
   hwName: process.env.TELL_HW_NAME || 'Lalm Treningssenter',
   inserter: process.env.TELL_INSERTER || 'Lalm Treningssenter admin',
@@ -373,18 +373,18 @@ const TELL = {
 };
 console.log("TELL CONFIG CHECK:", {
   apiKey: !!TELL.apiKey,
-  hwId: !!TELL.hwId,
+  hwId: !!TELL.hwid,
   appId: !!TELL.appId
 });
 
 // Hjelpefunksjon: lage auth-headere
 function tellHeaders() {
-  if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
-    console.warn('TELL-konfig ikke komplett (API key / hwId / appId mangler).');
+  if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
+    console.warn('TELL-konfig ikke komplett (API key / hwid / appId mangler).');
   }
   return {
     'Content-Type': 'application/json',
-    'ApiKey': TELL.apiKey,
+    ApiKey: TELL.apiKey,
   };
 }
 
@@ -481,7 +481,7 @@ async function tellRemoveUser(phone) {
 
   try {
     const headers = tellHeaders();
-    const data = { hwId: TELL.hwId, appId: TELL.appId, phone: phoneNormalized };
+    const data = { hwid: TELL.hwid, appId: TELL.appId, phone: phoneNormalized };
     await axios.post(`${TELL.base}/gc/removeuser`, data, { headers });
     console.log(`🗑️ [TELL] Fjernet ${phoneNormalized}`);
   } catch (e) {
@@ -493,20 +493,18 @@ async function tellRemoveUser(phone) {
 }
 
 // Åpne dør via TELL (gc/open)
+// Åpne dør via TELL (gc/open)
 async function gcOpen(gateIndex) {
   const headers = tellHeaders();
 
   const body = {
-    // TELL forventer feltet "hwid" (lowercase), men vi lagrer det som hwId
-    hwid: TELL.hwId,
+    hwid: TELL.hwid,
     appId: TELL.appId,
-    // Gate-indeksen skal sendes som "data" i henhold til docs
-    data: gateIndex,
+    data: gateIndex,        // ← TELL forventer dette feltet
   };
 
-  const r = await axios.post(`${TELL.base}/gc/open`, body, { headers });
-  console.log('[TELL] gc/open response:', r.data);
-
+  const r = await axios.post(`${TELL.base}/gc/open`, body, { headers, timeout: 5000 });
+  console.log('[TELL gc/open]', r.data);
   return r.data;
 }
 
@@ -532,11 +530,7 @@ async function tellSyncAll() {
 app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
   try {
     const headers = tellHeaders();
-    const body = {
-      hwid: TELL.hwId,
-      appId: TELL.appId,
-      data: 1,           // åpne utgang 1
-    };
+    const body = { hwid: TELL.hwid, appId: TELL.appId, data: 1 };
 
     const r = await axios.post(`${TELL.base}/gc/open`, body, { headers });
     console.log('[TELL TEST] gc/open result:', r.data);
@@ -550,6 +544,7 @@ app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
     });
   }
 });
+
 
 // ----------------------------
 // Eurobate SMS-konfig
@@ -1376,7 +1371,7 @@ app.post('/access', async (req, res) => {
       });
     }
 
-    if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
+    if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
       console.warn('TELL-konfig ikke komplett – avviser /access');
       return res.status(503).json({
         status: 'error',
@@ -1534,7 +1529,7 @@ app.post('/door/open', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'no_access' });
     }
 
-    if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
+    if (!TELL.apiKey || !TELL.hwid || !TELL.appId) {
       console.warn('TELL-konfig ikke komplett – kan ikke åpne dør via /door/open');
       return res.status(503).json({ ok: false, error: 'tell_not_ready' });
     }
