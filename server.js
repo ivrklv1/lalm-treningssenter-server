@@ -545,12 +545,14 @@ app.get('/debug/tell-open', async (req, res) => {
       raw: text,
     });
   } catch (err) {
-    console.error('[TELL_DEBUG_ERROR]', err);
-    return res.status(500).json({
-      ok: false,
-      error: err.message || String(err),
-    });
-  }
+  console.error('[TELL_DEBUG_ERROR]', err);
+  res.status(500).json({
+    ok: false,
+    name: err.name,
+    message: err.message,
+    cause: err.cause
+  });
+}
 });
 
 
