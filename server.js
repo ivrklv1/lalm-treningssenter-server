@@ -522,27 +522,25 @@ app.get('/api/admin/tell-register-app', basicAuth, async (req, res) => {
 
 app.get('/debug/tell-open', async (req, res) => {
   try {
-    const baseUrl = 'https://api.tell.hu/gc/open';
+    const url = 'https://api.tell.hu/gc/open';
 
-    const params = new URLSearchParams({
-      hwid: process.env.TELL_HWID,      // HWID til Gate Control PRO
-      appId: process.env.TELL_APP_ID,   // appId for denne enheten
-      data: '1',                        // 1 = utgang 1
-    });
-
-    const url = `${baseUrl}?${params.toString()}`;
+    const body = {
+      hwid: process.env.TELL_HWID,
+      appId: process.env.TELL_APP_ID,
+      data: 1, // output 1
+    };
 
     const r = await fetch(url, {
-      method: 'GET',
+      method: 'POST', // samme “hack” her
       headers: {
-        // Hvis TELL krever ApiKey i header:
-        'ApiKey': process.env.TELL_API_KEY,
+        'Content-Type': 'application/json',
+        'api-key': process.env.TELL_API_KEY,
       },
-      // ⚠️ INGEN body her
+      body: JSON.stringify(body),
     });
 
     const text = await r.text();
-    console.log('[TELL_DEBUG] status=', r.status, 'body=', text);
+    console.log('[TELL_DEBUG_OPEN] status=', r.status, 'body=', text);
 
     return res.status(200).json({
       ok: true,
@@ -560,22 +558,23 @@ app.get('/debug/tell-open', async (req, res) => {
   }
 });
 
+
 app.get('/debug/tell-addappid', async (req, res) => {
   try {
-    const baseUrl = 'https://api.tell.hu/gc/addappid';
+    const url = 'https://api.tell.hu/gc/addappid';
 
-    const params = new URLSearchParams({
+    const body = {
       hwid: process.env.TELL_HWID,
       password: process.env.TELL_MASTER_PASSWORD,
-    });
-
-    const url = `${baseUrl}?${params.toString()}`;
+    };
 
     const r = await fetch(url, {
-      method: 'GET',
+      method: 'POST', // vi bruker POST for å få lov til å ha body
       headers: {
         'Content-Type': 'application/json',
+        'api-key': process.env.TELL_API_KEY, // VIKTIG: riktig header-navn
       },
+      body: JSON.stringify(body),
     });
 
     const text = await r.text();
@@ -591,6 +590,7 @@ app.get('/debug/tell-addappid', async (req, res) => {
     });
   }
 });
+
 
 
 
