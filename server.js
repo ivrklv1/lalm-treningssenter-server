@@ -383,11 +383,12 @@ function tellHeaders() {
   if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
     console.warn('TELL-konfig ikke komplett (API key / hwId / appId mangler).');
   }
-  return {
+    return {
     'Content-Type': 'application/json',
-    'api-key': TELL.apiKey,  // 👈 viktig: riktig navn
+    'api-key': TELL.apiKey, // <- nøyaktig slik Zoltan skrev
   };
 }
+
 
 // Legg til bruker i TELL (ikke i bruk automatisk nå)
 async function tellAddUser(phone, name) {
@@ -467,8 +468,15 @@ async function tellRemoveUser(phone) {
 // Åpne dør via TELL
 async function gcOpen(gateIndex) {
   const headers = tellHeaders();
-  const data = { hwId: TELL.hwId, appId: TELL.appId, gateIndex };
-  const r = await axios.post(`${TELL.base}/gc/open`, data, { headers });
+
+  // TELL-docs: hwid + appId + data
+  const body = {
+    hwid: TELL.hwId,          // hwid (liten i), men vi gjenbruker verdien fra TELL.hwId
+    appId: TELL.appId,
+    data: gateIndex,          // 1 = utgang 1, 2 = utgang 2
+  };
+
+  const r = await axios.post(`${TELL.base}/gc/open`, body, { headers });
   console.log('[TELL gc/open]', r.data);
   return r.data;
 }
@@ -491,9 +499,14 @@ async function tellRegisterAppId() {
 app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
   try {
     const headers = tellHeaders();
-    const data = { hwId: TELL.hwId, appId: TELL.appId, gateIndex: 1 };
 
-    const r = await axios.post(`${TELL.base}/gc/open`, data, { headers });
+    const body = {
+      hwid: TELL.hwId,
+      appId: TELL.appId,
+      data: 1,       // test: åpne utgang 1
+    };
+
+    const r = await axios.post(`${TELL.base}/gc/open`, body, { headers });
     console.log('[TELL TEST] gc/open result:', r.data);
 
     return res.json({ ok: true, response: r.data });
@@ -505,6 +518,7 @@ app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
     });
   }
 });
+
 
 // Admin: registrer appId på TELL-enheten via nettleser (GET)
 app.get('/api/admin/tell-register-app', basicAuth, async (req, res) => {
