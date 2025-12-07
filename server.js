@@ -383,11 +383,12 @@ function tellHeaders() {
   if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
     console.warn('TELL-konfig ikke komplett (API key / hwId / appId mangler).');
   }
-    return {
+  return {
     'Content-Type': 'application/json',
-    'api-key': TELL.apiKey, // <- nøyaktig slik Zoltan skrev
+    'api-key': TELL.apiKey, // NØYAKTIG slik Zoltan skrev
   };
 }
+
 
 
 // Legg til bruker i TELL (ikke i bruk automatisk nå)
@@ -469,17 +470,17 @@ async function tellRemoveUser(phone) {
 async function gcOpen(gateIndex) {
   const headers = tellHeaders();
 
-  // TELL-docs: hwid + appId + data
   const body = {
-    hwid: TELL.hwId,          // hwid (liten i), men vi gjenbruker verdien fra TELL.hwId
+    hwid: TELL.hwId,      // merk: hwid, ikke hwId
     appId: TELL.appId,
-    data: gateIndex,          // 1 = utgang 1, 2 = utgang 2
+    data: gateIndex,      // 1 = utgang 1
   };
 
   const r = await axios.post(`${TELL.base}/gc/open`, body, { headers });
   console.log('[TELL gc/open]', r.data);
   return r.data;
 }
+
 
 // Registrer appId på enheten hos TELL – må typisk gjøres én gang
 async function tellRegisterAppId() {
@@ -503,7 +504,7 @@ app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
     const body = {
       hwid: TELL.hwId,
       appId: TELL.appId,
-      data: 1,       // test: åpne utgang 1
+      data: 1,
     };
 
     const r = await axios.post(`${TELL.base}/gc/open`, body, { headers });
@@ -518,6 +519,7 @@ app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
     });
   }
 });
+
 
 
 // Admin: registrer appId på TELL-enheten via nettleser (GET)
@@ -536,11 +538,8 @@ app.get('/api/admin/tell-register-app', basicAuth, async (req, res) => {
 
 app.get('/debug/tell-open', async (req, res) => {
   try {
-    const data = await gcOpen(1);   // bruker samme kall som /door/open
-    return res.status(200).json({
-      ok: true,
-      response: data,
-    });
+    const data = await gcOpen(1);  // åpner utgang 1 med samme logikk som /door/open
+    return res.json({ ok: true, response: data });
   } catch (err) {
     console.error('[TELL_DEBUG_ERROR]', err?.response?.data || err.message);
     return res.status(500).json({
