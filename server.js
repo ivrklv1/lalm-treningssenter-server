@@ -522,38 +522,40 @@ app.get('/api/admin/tell-register-app', basicAuth, async (req, res) => {
 
 app.get('/debug/tell-open', async (req, res) => {
   try {
-    const url = 'https://tellwebremote.com/api/openGate';
-    const body = {
-      apiKey: process.env.TELL_API_KEY,
-      appId: process.env.TELL_APP_ID,
-      gateIndex: 1, // styrkerom-døra
-    };
+    const url = 'https://api.tell.hu/gc/open';
 
-    const r = await fetch(url, {
-      method: 'POST', // ev. 'GET' hvis vi må tilbake til gammel versjon
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+    const params = new URLSearchParams({
+      hwid: process.env.TELL_HWID,      // hardware ID til TELL-modulen
+      appId: process.env.TELL_APP_ID,  // app-id du fikk på login
+      data: '1'                        // 1 = trigger utgang 1
+    });
+
+    const r = await fetch(`${url}?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        'ApiKey': process.env.TELL_API_KEY,
+      }
     });
 
     const text = await r.text();
-
     console.log('[TELL_DEBUG] status=', r.status, 'body=', text);
 
     return res.status(200).json({
       ok: true,
-      status: r.status,
+      httpStatus: r.status,
       raw: text,
     });
   } catch (err) {
-  console.error('[TELL_DEBUG_ERROR]', err);
-  res.status(500).json({
-    ok: false,
-    name: err.name,
-    message: err.message,
-    cause: err.cause
-  });
-}
+    console.error('[TELL_DEBUG_ERROR]', err);
+    return res.status(500).json({
+      ok: false,
+      name: err.name,
+      message: err.message,
+      cause: err.cause,
+    });
+  }
 });
+
 
 
 // ----------------------------
