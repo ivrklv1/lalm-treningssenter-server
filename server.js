@@ -520,6 +520,38 @@ app.get('/api/admin/tell-register-app', basicAuth, async (req, res) => {
   }
 });
 
+app.get('/debug/tell-open', async (req, res) => {
+  try {
+    const url = 'https://tellwebremote.com/api/openGate';
+    const body = {
+      apiKey: process.env.TELL_API_KEY,
+      appId: process.env.TELL_APP_ID,
+      gateIndex: 1, // styrkerom-døra
+    };
+
+    const r = await fetch(url, {
+      method: 'POST', // ev. 'GET' hvis vi må tilbake til gammel versjon
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const text = await r.text();
+
+    console.log('[TELL_DEBUG] status=', r.status, 'body=', text);
+
+    return res.status(200).json({
+      ok: true,
+      status: r.status,
+      raw: text,
+    });
+  } catch (err) {
+    console.error('[TELL_DEBUG_ERROR]', err);
+    return res.status(500).json({
+      ok: false,
+      error: err.message || String(err),
+    });
+  }
+});
 
 
 // ----------------------------
