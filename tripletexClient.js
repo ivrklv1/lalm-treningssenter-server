@@ -187,29 +187,22 @@ async function createMembershipOrder(customerId, plan) {
   const today = new Date().toISOString().slice(0, 10);
 
   const order = {
-    order: {
-      customer: { id: customerId },
-      orderDate: today,
-      deliveryDate: today,
-      invoiceDate: today,
+    customer: { id: customerId },
+    orderDate: today,
+    deliveryDate: today,
+    invoiceDate: today,
+    isPrioritizeAmountsIncludingVat: true,
 
-      // Antar at prisene dine er INKL. mva (vanlig oppsett).
-      // Hvis du får validation-feil om ex/inkl mva, kan du flippe denne + bytte til unitPriceExcludingVatCurrency.
-      isPrioritizeAmountsIncludingVat: true,
-
-      orderLines: [
-        {
-          description: `Medlemskap ${plan.name}`,
-          count: 1,
-          unitPriceIncludingVatCurrency: plan.amount,
-
-          // Hvis du legger inn Tripletex-produkt-ID på planen, bruk den:
-          ...(plan.tripletexProductId
-            ? { product: { id: plan.tripletexProductId } }
-            : {}),
-        },
-      ],
-    },
+    orderLines: [
+      {
+        description: `Medlemskap ${plan.name}`,
+        count: 1,
+        unitPriceIncludingVatCurrency: plan.amount,
+        ...(plan.tripletexProductId
+          ? { product: { id: plan.tripletexProductId } }
+          : {}),
+      },
+    ],
   };
 
   const json = await tripletexRequest('/order', {
@@ -217,9 +210,8 @@ async function createMembershipOrder(customerId, plan) {
     body: order,
   });
 
-  const createdOrder = json.value || json.order || json;
-  console.log('[TRIPLETEX] Opprettet ordre id=', createdOrder.id, 'for kunde=', customerId);
-
+  const createdOrder = json.value || json;
+  console.log('[TRIPLETEK] Opprettet ordre id=', createdOrder.id);
   return createdOrder;
 }
 
