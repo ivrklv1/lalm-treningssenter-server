@@ -202,8 +202,8 @@ async function createMembershipOrder(customerId, plan) {
     customer: { id: customerId },
     orderDate: today,
     deliveryDate: today,
-    invoiceDate: today,
     isPrioritizeAmountsIncludingVat: true,
+
     orderLines: [
       {
         description: `Medlemskap ${plan.name}`,
