@@ -32,7 +32,10 @@ async function createSessionToken() {
     `&expirationDate=${encodeURIComponent(expirationDate)}` +
     `&appName=${encodeURIComponent(APP_NAME)}`;
 
-  console.log('[TRIPLETEX] Oppretter session token med expirationDate=', expirationDate);
+  console.log(
+    '[TRIPLETEX] Oppretter session token med expirationDate=',
+    expirationDate
+  );
 
   const res = await fetch(url, { method: 'PUT' });
   const text = await res.text();
@@ -85,13 +88,12 @@ async function tripletexRequest(path, options = {}) {
   const token = await getSessionToken();
 
   const auth = Buffer.from(`0:${token}`).toString('base64'); // 0 = eget selskap
-
   const url = `${TRIPLETEX_BASE}${path}`;
 
   const res = await fetch(url, {
     method: options.method || 'GET',
     headers: {
-      'Authorization': `Basic ${auth}`,
+      Authorization: `Basic ${auth}`,
       'Content-Type': 'application/json',
       ...(options.headers || {}),
     },
@@ -135,31 +137,37 @@ async function findOrCreateCustomer(member) {
     throw new Error('findOrCreateCustomer: member.name mangler');
   }
 
-  // Finn kunde på e-post hvis mulig
+  // 4.1 Finn kunde på e-post hvis mulig
   if (email) {
     try {
       const query = `/customer?email=${encodeURIComponent(email)}&pageSize=1`;
       const existing = await tripletexRequest(query, { method: 'GET' });
       const found = firstValueFromList(existing);
       if (found) {
-        console.log('[TRIPLETEX] Fant eksisterende kunde via e-post:', email, 'id=', found.id);
+        console.log(
+          '[TRIPLETEX] Fant eksisterende kunde via e-post:',
+          email,
+          'id=',
+          found.id
+        );
         return found;
       }
     } catch (e) {
-      console.warn('[TRIPLETEX] Klarte ikke å søke kunde på e-post:', e.message);
+      console.warn(
+        '[TRIPLETEX] Klarte ikke å søke kunde på e-post:',
+        e.message
+      );
     }
   }
 
-  // Hvis ikke, opprett ny kunde
+  // 4.2 Hvis ikke, opprett ny kunde
   const body = {
-    customer: {
-      name,
-      email: email || undefined,
-      phoneNumber: phone || undefined,
-      isPrivateIndividual: true,
-      // invoiceSendMethod kan vanligvis styres via konto/GUI,
-      // så vi lar Tripletex sine egne regler gjelde for eFaktura/Avtalegiro.
-    },
+    name,
+    email: email || undefined,
+    phoneNumber: phone || undefined,
+    isPrivateIndividual: true,
+    // invoiceSendMethod kan vanligvis styres via konto/GUI,
+    // så vi lar Tripletex sine egne regler gjelde for eFaktura/Avtalegiro.
   };
 
   const created = await tripletexRequest('/customer', {
@@ -167,16 +175,20 @@ async function findOrCreateCustomer(member) {
     body,
   });
 
-  const customer = created.value || created.customer || created;
+  // Respons kan være { value: { ... } } eller direkte objekt
+  const customer = created.value || created;
 
-  console.log('[TRIPLETEX] Opprettet ny kunde id=', customer.id, 'navn=', customer.name);
+  console.log(
+    '[TRIPLETEX] Opprettet ny kunde id=',
+    customer.id,
+    'navn=',
+    customer.name
+  );
   return customer;
 }
 
 // --------------------------------------------------
 // 5) Opprett enkel ordre for medlemskap (1 mnd)
-//    → dette kan senere brukes som grunnlag for
-//      fast fakturering i Tripletex
 // --------------------------------------------------
 async function createMembershipOrder(customerId, plan) {
   if (!customerId) throw new Error('createMembershipOrder: customerId mangler');
@@ -192,7 +204,6 @@ async function createMembershipOrder(customerId, plan) {
     deliveryDate: today,
     invoiceDate: today,
     isPrioritizeAmountsIncludingVat: true,
-
     orderLines: [
       {
         description: `Medlemskap ${plan.name}`,
@@ -211,7 +222,7 @@ async function createMembershipOrder(customerId, plan) {
   });
 
   const createdOrder = json.value || json;
-  console.log('[TRIPLETEK] Opprettet ordre id=', createdOrder.id);
+  console.log('[TRIPLETEX] Opprettet ordre id=', createdOrder.id);
   return createdOrder;
 }
 
