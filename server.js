@@ -17,6 +17,10 @@ const axios = require('axios');
 const path = require('path');
 const crypto = require('crypto');
 require('dotenv').config();
+const {
+  syncMembershipToTripletex,
+} = require('./tripletexClient');
+
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -2495,22 +2499,130 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           processedAt: new Date().toISOString(),
         });
       }
-            // 4.3) Send velkommen-SMS én gang (ikke for DROPIN)
+
+      // 4.3) Tripletex-sync (ikke for DROPIN) – kun én gang
       try {
         const orderAfter = findOrder(orderId);
 
         if (
           orderAfter &&
-          orderAfter.membershipKey !== 'DROPIN' &&          // ikke send SMS for drop-in
-          !orderAfter.welcomeSmsSent &&                     // bare én gang
+          orderAfter.membershipKey !== 'DROPIN' && // ikke synk drop-in
+          !orderAfter.tripletexSynced &&          // bare én gang
+          (newStatus === 'SALE' || newStatus === 'CAPTURED' || newStatus === 'RESERVED')
+        ) {
+          // Finn plan / pris til Tripletex
+          const allPlans = getPlans() || [];
+          let planForTripletex = null;
+
+          if (allPlans.length) {
+            const p = allPlans.find(
+              (pl) =>
+                pl &&
+                (pl.id === orderAfter.membershipKey ||
+                  pl.key === orderAfter.membershipKey)
+            );
+            if (p && typeof p.amount === 'number') {
+              planForTripletex = {
+                name: p.name || p.text || orderAfter.membershipKey,
+                amount: p.amount, // månedspris i øre
+                tripletexProductId: p.tripletexProductId || null,
+              };
+            }
+          }
+
+          // Fallback for gamle membershipKey-verdier uten plans.json
+          if (!planForTripletex) {
+            const fallbackMap = {
+              LALM_IL_BINDING: {
+                name: 'Lalm IL-medlem - 12 mnd binding',
+                amount: 34900,
+              },
+              STANDARD_BINDING: {
+                name: 'Standard - 12 mnd binding',
+                amount: 44900,
+              },
+              HYTTE_BINDING: {
+                name: 'Hyttemedlemskap - 12 mnd binding',
+                amount: 16900,
+              },
+              LALM_IL_UBIND: {
+                name: 'Lalm IL-medlem – uten binding',
+                amount: 44900,
+              },
+              STANDARD_UBIND: {
+                name: 'Standard – uten binding',
+                amount: 54900,
+              },
+              Test_3kr: {
+                name: 'TEST – 3 kr',
+                amount: orderAfter.fullMonthAmount || orderAfter.amount,
+              },
+            };
+
+            if (fallbackMap[orderAfter.membershipKey]) {
+              planForTripletex = fallbackMap[orderAfter.membershipKey];
+            }
+          }
+
+          if (planForTripletex) {
+            // Finn medlem-objekt
+            const allMembers = getMembers();
+            const memberObj =
+              (orderAfter.memberId &&
+                allMembers.find((m) => m.id === orderAfter.memberId)) || null;
+
+            const tripMember = memberObj || {
+              name: orderAfter.name || orderAfter.email || '',
+              email: orderAfter.email || null,
+              phone:
+                orderAfter.phoneFull ||
+                normalizePhone(orderAfter.phone) ||
+                null,
+            };
+
+            const tripResult = await syncMembershipToTripletex({
+              member: tripMember,
+              plan: planForTripletex,
+            });
+
+            updateOrderStatus(orderId, orderAfter.status || newStatus, {
+              tripletexSynced: true,
+              tripletexCustomerId: tripResult.customer?.id || null,
+              tripletexOrderId: tripResult.order?.id || null,
+              tripletexSyncedAt: new Date().toISOString(),
+            });
+
+            appendAccessLog(
+              `[${new Date().toISOString()}] TRIPLETEX_SYNC_OK orderId=${orderId} customerId=${tripResult.customer?.id || '?'} orderId=${tripResult.order?.id || '?'}\n`
+            );
+          } else {
+            appendAccessLog(
+              `[${new Date().toISOString()}] TRIPLETEX_SYNC_SKIPPED_NO_PLAN orderId=${orderId} membershipKey=${orderAfter?.membershipKey}\n`
+            );
+          }
+        }
+      } catch (e) {
+        console.error('[TRIPLETEX_SYNC_ERROR] orderId', orderId, e.message);
+        appendAccessLog(
+          `[${new Date().toISOString()}] TRIPLETEX_SYNC_ERROR orderId=${orderId} err=${e.message}\n`
+        );
+      }
+
+      // 4.4) Send velkommen-SMS én gang (ikke for DROPIN)
+      try {
+        const orderAfter = findOrder(orderId);
+
+        if (
+          orderAfter &&
+          orderAfter.membershipKey !== 'DROPIN' && // ikke send SMS for drop-in
+          !orderAfter.welcomeSmsSent && // bare én gang
           (newStatus === 'SALE' || newStatus === 'CAPTURED') // kun når faktisk belastet
         ) {
           // Finn medlem-objekt (hvis vi har memberId)
           const allMembers = getMembers();
           const memberObj =
             (orderAfter.memberId &&
-              allMembers.find((m) => m.id === orderAfter.memberId)) ||
-            null;
+              allMembers.find((m) => m.id === orderAfter.memberId)) || null;
 
           await sendWelcomeMembershipSms(orderAfter, memberObj);
 
