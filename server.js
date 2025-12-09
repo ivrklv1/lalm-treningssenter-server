@@ -902,33 +902,47 @@ app.post('/admin/plans', basicAuth, (req, res) => {
       ? body.sortOrder
       : plans.length + 1;
 
-  const plan = {
-    id,
-    key: id,
-    name: body.name || body.text || id,
-    text: body.text || body.name || id,
-    type: body.type || 'standard',
+   // Nytt: Tripletex produkt-ID (valgfritt felt)
+  let tripletexProductId = null;
+  if (
+    body.tripletexProductId !== undefined &&
+    body.tripletexProductId !== null &&
+    body.tripletexProductId !== ''
+  ) {
+    const pidNum = Number(body.tripletexProductId);
+    tripletexProductId = Number.isFinite(pidNum) ? pidNum : null;
+  }
 
-    amount: amountNum,
-    signupFee: signupFeeNum,
-    bindingMonths: bindingMonthsNum,
-    shortTermDays: shortTermDaysNum,
+const plan = {
+  id,
+  key: id,
+  name: body.name || body.text || id,
+  text: body.text || body.name || id,
+  type: body.type || 'standard',
 
-    tagline: body.tagline || '',
-    description: body.description || '',
-    bullets: Array.isArray(body.bullets) ? body.bullets : [],
+  amount: amountNum,
+  signupFee: signupFeeNum,
+  bindingMonths: bindingMonthsNum,
+  shortTermDays: shortTermDaysNum,
 
-    campaignLabel: body.campaignLabel || null,
-    campaignFrom: body.campaignFrom || null,
-    campaignTo: body.campaignTo || null,
+  tagline: body.tagline || '',
+  description: body.description || '',
+  bullets: Array.isArray(body.bullets) ? body.bullets : [],
 
-    showOnWeb: body.showOnWeb !== false,
-    showInApp: body.showInApp !== false,
-    prorate: body.prorate !== false,
-    active: body.active !== false,
+  campaignLabel: body.campaignLabel || null,
+  campaignFrom: body.campaignFrom || null,
+  campaignTo: body.campaignTo || null,
 
-    sortOrder,
-  };
+  showOnWeb: body.showOnWeb !== false,
+  showInApp: body.showInApp !== false,
+  prorate: body.prorate !== false,
+  active: body.active !== false,
+
+  sortOrder,
+
+  // Nytt felt som blir lagret til plans.json
+  tripletexProductId,
+};
 
   plans.push(plan);
   savePlans(plans);
