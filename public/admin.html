@@ -1932,7 +1932,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         } else if (field === 'active') {
           p.active = input.checked;
         } else if (field === 'tripletexProductId') {
-          p.tripletexProductId = input.value ? Number(input.value) || 0 : null;
+           const raw = input.value.trim();
+           p.tripletexProductId = raw ? (Number(raw) || null) : null;
         } else if (field === 'sortOrder') {
           p.sortOrder = Number(input.value || 0);
         }
