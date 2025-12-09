@@ -22,7 +22,8 @@
     "showInApp": true,
     "prorate": true,
     "active": true,
-    "sortOrder": 1
+    "sortOrder": 1,
+    "tripletexProductId": 80515508
   },
   {
     "id": "standard_12mnd_binding",
@@ -47,7 +48,8 @@
     "showInApp": true,
     "prorate": true,
     "active": true,
-    "sortOrder": 2
+    "sortOrder": 2,
+    "tripletexProductId": 80515521
   },
   {
     "id": "hytte_12mnd_binding",
@@ -72,7 +74,8 @@
     "showInApp": true,
     "prorate": true,
     "active": true,
-    "sortOrder": 3
+    "sortOrder": 3,
+    "tripletexProductId": 80515519
   },
   {
     "id": "lalm_il_uten_binding",
@@ -97,7 +100,8 @@
     "showInApp": true,
     "prorate": true,
     "active": true,
-    "sortOrder": 4
+    "sortOrder": 4,
+    "tripletexProductId": 80515520
   },
   {
     "id": "standard_uten_binding",
@@ -122,7 +126,8 @@
     "showInApp": true,
     "prorate": true,
     "active": true,
-    "sortOrder": 5
+    "sortOrder": 5,
+    "tripletexProductId": 80515521
   },
   {
     "id": "dropin",
@@ -147,6 +152,7 @@
     "showInApp": true,
     "prorate": false,
     "active": true,
-    "sortOrder": 6
+    "sortOrder": 6,
+    "tripletexProductId": null
   }
 ]
