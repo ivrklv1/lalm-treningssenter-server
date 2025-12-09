@@ -745,12 +745,13 @@
                 <th>App</th>
                 <th>Aktiv</th>
                 <th>Sort</th>
+                <th>Tripletex ID</th>
                 <th>Tekst</th>
               </tr>
               </thead>
               <tbody id="plansTableBody">
               <tr>
-                <td colspan="12" class="text-muted">Ingen medlemskap funnet.</td>
+                <td colspan="13" class="text-muted">Ingen medlemskap funnet.</td>
               </tr>
               </tbody>
             </table>
@@ -1723,7 +1724,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   function renderPlans() {
   if (!Array.isArray(allPlans) || !allPlans.length) {
     plansTableBody.innerHTML =
-      '<tr><td colspan="12" class="text-muted">Ingen medlemskap funnet.</td></tr>';
+      '<tr><td colspan="13" class="text-muted">Ingen medlemskap funnet.</td></tr>';
     plansCountEl.textContent = '0';
     planDetailEl.style.display = 'none';
     return;
@@ -1803,6 +1804,9 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         <input type="number" min="0" step="1" data-field="sortOrder" value="${p.sortOrder || (idx + 1)}" style="width:60px;" />
       </td>
       <td>
+        <input type="number" min="0" step="1" data-field="tripletexProductId" value="${p.tripletexProductId || ''}" style="width:90px;" />
+      </td>
+      <td>
         <button class="btn-ghost btn-plan-detail" data-index="${idx}">Rediger tekst</button>
         <button class="btn-ghost btn-plan-delete" data-index="${idx}" style="color:#b91c1c;">Slett</button>
       </td>
@@ -1825,7 +1829,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     } catch (err) {
       console.error('Feil ved henting av planer:', err);
       plansTableBody.innerHTML =
-        '<tr><td colspan="12" class="text-muted">Kunne ikke laste medlemskap.</td></tr>';
+        '<tr><td colspan="13" class="text-muted">Kunne ikke laste medlemskap.</td></tr>';
       plansMsg.textContent = 'Feil ved henting av medlemskap: ' + err.message;
       plansMsg.className = 'mt-1 small tag-danger';
     }
@@ -1856,6 +1860,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       prorate: true,
       active: true,
       sortOrder: nextSort,
+      tripletexProductId: null,
       __isNew: true,
     });
 
@@ -1926,6 +1931,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
           p.showInApp = input.checked;
         } else if (field === 'active') {
           p.active = input.checked;
+        } else if (field === 'tripletexProductId') {
+          p.tripletexProductId = input.value ? Number(input.value) || 0 : null;
         } else if (field === 'sortOrder') {
           p.sortOrder = Number(input.value || 0);
         }
@@ -1962,6 +1969,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
           prorate: p.prorate !== false,
           active: p.active !== false,
           sortOrder: p.sortOrder || 0,
+          tripletexProductId: p.tripletexProductId || null,
         };
 
         if (p.__isNew) {
