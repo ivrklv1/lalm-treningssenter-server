@@ -198,13 +198,16 @@ async function createMembershipOrder(customerId, plan) {
 
   const today = new Date().toISOString().slice(0, 10);
 
+  // plan.amount er i øre → konverter til NOK
+  const unitPriceNok = plan.amount / 100;
+
   const order = {
     customer: { id: customerId },
     orderDate: today,
     deliveryDate: today,
     isPrioritizeAmountsIncludingVat: true,
 
-    // Abonnement-felter – kopiert fra ordren du laget i Tripletex
+    // Abonnement-felter – som før
     isSubscription: true,
     subscriptionDuration: 1,
     subscriptionDurationType: 'MONTHS',
@@ -213,15 +216,13 @@ async function createMembershipOrder(customerId, plan) {
     subscriptionInvoicingTimeInAdvanceOrArrears: 'ADVANCE',
     subscriptionInvoicingTime: 0,
     subscriptionInvoicingTimeType: 'MONTHS',
-    // Vi lar auto-fakturering være av (samme som manuelt skjermbilde).
-    // Hvis du senere aktiverer auto-fakturering i Tripletex, kan vi sette denne til true.
     isSubscriptionAutoInvoicing: false,
 
     orderLines: [
       {
         description: `Medlemskap ${plan.name}`,
         count: 1,
-        unitPriceIncludingVatCurrency: plan.amount,
+        unitPriceIncludingVatCurrency: unitPriceNok,
         ...(plan.tripletexProductId
           ? { product: { id: plan.tripletexProductId } }
           : {}),
@@ -238,6 +239,7 @@ async function createMembershipOrder(customerId, plan) {
   console.log('[TRIPLETEX] Opprettet ordre id=', createdOrder.id);
   return createdOrder;
 }
+
 
 // --------------------------------------------------
 // 6) Hovedfunksjon: kall denne etter Vipps-betaling
