@@ -19,6 +19,7 @@ const crypto = require('crypto');
 require('dotenv').config();
 const {
   syncMembershipToTripletex,
+  approveSubscriptionForOrder,
 } = require('./tripletexClient');
 
 
@@ -44,6 +45,10 @@ const MEMBERS_FILE = path.join(DATA_DIR, 'members.json');
 const ORDERS_FILE  = path.join(DATA_DIR, 'orders.json');
 const PLANS_FILE   = path.join(DATA_DIR, 'plans.json');
 
+const TRIPLETEX_SUBSCRIPTION_ENABLED =
+  (process.env.TRIPLETEX_SUBSCRIPTION_ENABLED || 'true')
+    .toString()
+    .toLowerCase() === 'true';
 
 // ----------------------------
 // Global state
@@ -986,6 +991,20 @@ app.put('/admin/plans/:id', basicAuth, (req, res) => {
   if (Object.prototype.hasOwnProperty.call(body, 'sortOrder')) {
     plan.sortOrder = Number(body.sortOrder) || 0;
   }
+  if (Object.prototype.hasOwnProperty.call(body, 'tripletexProductId')) {
+  const raw = body.tripletexProductId;
+  if (raw === null || raw === '' || raw === undefined) {
+    plan.tripletexProductId = null;
+  } else {
+    const pidNum = Number(raw);
+    if (!Number.isFinite(pidNum) || pidNum <= 0) {
+      return res
+        .status(400)
+        .json({ ok: false, error: 'tripletexProductId_invalid' });
+    }
+    plan.tripletexProductId = pidNum;
+  }
+}
 
   // Tekstfelter
   if (Object.prototype.hasOwnProperty.call(body, 'name')) {
@@ -2313,6 +2332,19 @@ async function vippsAutoCapture(orderId, amountInOre, transactionText) {
   }
 }
 
+function getFirstDayOfNextMonth() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth(); // 0–11
+
+  const nextMonthDate = new Date(year, month + 1, 1);
+  const yyyy = nextMonthDate.getFullYear();
+  const mm = String(nextMonthDate.getMonth() + 1).padStart(2, '0');
+  const dd = '01';
+
+  return `${yyyy}-${mm}-${dd}`; // YYYY-MM-DD
+}
+
 // =====================================================
 // Vipps callback – idempotent + auto-capture
 // =====================================================
@@ -2521,25 +2553,32 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         if (
           orderAfter &&
           orderAfter.membershipKey !== 'DROPIN' && // ikke synk drop-in
-          !orderAfter.tripletexSynced &&          // bare én gang
-          (newStatus === 'SALE' || newStatus === 'CAPTURED' || newStatus === 'RESERVED')
+          !orderAfter.tripletexSynced && // bare én gang
+          (newStatus === 'SALE' ||
+            newStatus === 'CAPTURED' ||
+            newStatus === 'RESERVED')
         ) {
           // Finn plan / pris til Tripletex
           const allPlans = getPlans() || [];
           let planForTripletex = null;
+          let originalPlan = null;
 
           if (allPlans.length) {
-            const p = allPlans.find(
+            originalPlan = allPlans.find(
               (pl) =>
                 pl &&
                 (pl.id === orderAfter.membershipKey ||
                   pl.key === orderAfter.membershipKey)
             );
-            if (p && typeof p.amount === 'number') {
+
+            if (originalPlan && typeof originalPlan.amount === 'number') {
               planForTripletex = {
-                name: p.name || p.text || orderAfter.membershipKey,
-                amount: p.amount, // månedspris i øre
-                tripletexProductId: p.tripletexProductId || null,
+                name:
+                  originalPlan.name ||
+                  originalPlan.text ||
+                  orderAfter.membershipKey,
+                amount: originalPlan.amount, // månedspris i øre
+                tripletexProductId: originalPlan.tripletexProductId || null,
               };
             }
           }
@@ -2583,7 +2622,8 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
             const allMembers = getMembers();
             const memberObj =
               (orderAfter.memberId &&
-                allMembers.find((m) => m.id === orderAfter.memberId)) || null;
+                allMembers.find((m) => m.id === orderAfter.memberId)) ||
+              null;
 
             const tripMember = memberObj || {
               name: orderAfter.name || orderAfter.email || '',
@@ -2609,6 +2649,59 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
             appendAccessLog(
               `[${new Date().toISOString()}] TRIPLETEX_SYNC_OK orderId=${orderId} customerId=${tripResult.customer?.id || '?'} orderId=${tripResult.order?.id || '?'}\n`
             );
+
+            // -----------------------------
+            // NY DEL: abonnementsfakturering
+            // -----------------------------
+            try {
+              // Bestem om dette er et "gjentakende" medlemskap
+              let isRecurring = true;
+              const planType = (originalPlan?.type || '').toLowerCase();
+
+              if (
+                planType === 'dropin' ||
+                planType === 'short' ||
+                planType === 'korttid'
+              ) {
+                isRecurring = false;
+              }
+
+              if (
+                TRIPLETEX_SUBSCRIPTION_ENABLED &&
+                isRecurring &&
+                tripResult?.order?.id
+              ) {
+                const invoiceDate = getFirstDayOfNextMonth();
+
+                await approveSubscriptionForOrder(
+                  tripResult.order.id,
+                  invoiceDate
+                );
+
+                updateOrderStatus(orderId, orderAfter.status || newStatus, {
+                  tripletexSubscriptionApproved: true,
+                  tripletexSubscriptionInvoiceDate: invoiceDate,
+                  tripletexSubscriptionApprovedAt: new Date().toISOString(),
+                });
+
+                appendAccessLog(
+                  `[${new Date().toISOString()}] TRIPLETEX_SUBSCRIPTION_APPROVED orderId=${tripResult.order.id} invoiceDate=${invoiceDate}\n`
+                );
+              } else {
+                appendAccessLog(
+                  `[${new Date().toISOString()}] TRIPLETEX_SUBSCRIPTION_SKIPPED orderId=${orderId} recurring=${isRecurring} enabled=${TRIPLETEX_SUBSCRIPTION_ENABLED}\n`
+                );
+              }
+            } catch (eSub) {
+              console.error(
+                'Feil ved abonnement-godkjenning i Tripletex for orderId',
+                orderId,
+                eSub.message
+              );
+              appendAccessLog(
+                `[${new Date().toISOString()}] TRIPLETEX_SUBSCRIPTION_ERROR orderId=${orderId} err=${eSub.message}\n`
+              );
+            }
           } else {
             appendAccessLog(
               `[${new Date().toISOString()}] TRIPLETEX_SYNC_SKIPPED_NO_PLAN orderId=${orderId} membershipKey=${orderAfter?.membershipKey}\n`
@@ -2669,6 +2762,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     if (!res.headersSent) return res.status(200).send('OK');
   }
 });
+
 
 // =====================================================
 // Vipps – status-endepunkt for appen (polling)

@@ -198,6 +198,9 @@ async function createMembershipOrder(customerId, plan) {
 
   const today = new Date().toISOString().slice(0, 10);
 
+  // plan.amount er i øre → konverter til NOK
+  const unitPriceNok = plan.amount / 100;
+
   const order = {
     customer: { id: customerId },
     orderDate: today,
@@ -208,7 +211,7 @@ async function createMembershipOrder(customerId, plan) {
       {
         description: `Medlemskap ${plan.name}`,
         count: 1,
-        unitPriceIncludingVatCurrency: plan.amount,
+        unitPriceIncludingVatCurrency: unitPriceNok,
         ...(plan.tripletexProductId
           ? { product: { id: plan.tripletexProductId } }
           : {}),
@@ -216,14 +219,53 @@ async function createMembershipOrder(customerId, plan) {
     ],
   };
 
+  console.log('[TRIPLETEX] Oppretter medlemskapsordre', {
+    customerId,
+    planName: plan.name,
+    unitPriceNok,
+    tripletexProductId: plan.tripletexProductId || null,
+  });
+
   const json = await tripletexRequest('/order', {
     method: 'POST',
     body: order,
   });
 
-  const createdOrder = json.value || json;
-  console.log('[TRIPLETEX] Opprettet ordre id=', createdOrder.id);
-  return createdOrder;
+  const created = firstValueFromList(json);
+  if (!created || !created.id) {
+    console.error('[TRIPLETEX] Klarte ikke å lese opprettet ordre fra svar', json);
+    throw new Error('Tripletex: mangler ordre.id i svar');
+  }
+
+  return created;
+}
+
+// --------------------------------------------------
+// 5b) Godkjenn ordre som abonnementsordre
+//     → Tripletex lager da abonnementsfakturaer
+// --------------------------------------------------
+async function approveSubscriptionForOrder(orderId, invoiceDate) {
+  if (!orderId) {
+    throw new Error('approveSubscriptionForOrder: orderId mangler');
+  }
+  if (!invoiceDate) {
+    throw new Error('approveSubscriptionForOrder: invoiceDate mangler');
+  }
+
+  const path =
+    `/order/${encodeURIComponent(orderId)}` +
+    `/approveSubscriptionInvoice` +
+    `?invoiceDate=${encodeURIComponent(invoiceDate)}`;
+
+  console.log(
+    '[TRIPLETEX] Godkjenner abonnement for ordre',
+    orderId,
+    'invoiceDate=',
+    invoiceDate
+  );
+
+  const json = await tripletexRequest(path, { method: 'PUT' });
+  return json;
 }
 
 // --------------------------------------------------
@@ -239,4 +281,6 @@ module.exports = {
   syncMembershipToTripletex,
   findOrCreateCustomer,
   createMembershipOrder,
+  approveSubscriptionForOrder,
 };
+
