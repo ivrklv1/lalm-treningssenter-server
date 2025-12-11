@@ -20,7 +20,7 @@ let cachedSessionExpires = null; // 'YYYY-MM-DD'
 //    PUT /token/session/:create
 // -----------------------------
 async function createSessionToken() {
-  // Sett utløpsdato f.eks. 3 måneder frem i tid (må være frem i tid)
+  // Sett utløpsdato f.eks. 3 måneder fram i tid (må være fram i tid)
   const d = new Date();
   d.setMonth(d.getMonth() + 3);
   const expirationDate = d.toISOString().slice(0, 10); // YYYY-MM-DD
@@ -87,7 +87,8 @@ async function getSessionToken() {
 async function tripletexRequest(path, options = {}) {
   const token = await getSessionToken();
 
-  const auth = Buffer.from(`0:${token}`).toString('base64'); // 0 = eget selskap
+  // 0 = "mitt selskap" jf. Tripletex-dokumentasjon
+  const auth = Buffer.from(`0:${token}`).toString('base64');
   const url = `${TRIPLETEX_BASE}${path}`;
 
   const res = await fetch(url, {
@@ -117,7 +118,7 @@ async function tripletexRequest(path, options = {}) {
   return json;
 }
 
-// Hjelper for å hente første value fra svar {value: [...]} eller {values: [...]}
+// Hjelper for å hente første value fra svar {value: [.]} eller {values: [.]}
 function firstValueFromList(json) {
   if (!json) return undefined;
   if (Array.isArray(json.value) && json.value.length > 0) return json.value[0];
@@ -166,8 +167,7 @@ async function findOrCreateCustomer(member) {
     email: email || undefined,
     phoneNumber: phone || undefined,
     isPrivateIndividual: true,
-    // invoiceSendMethod kan vanligvis styres via konto/GUI,
-    // så vi lar Tripletex sine egne regler gjelde for eFaktura/Avtalegiro.
+    // Hvordan eFaktura/Avtalegiro sendes styres primært i Tripletex-oppsettet.
   };
 
   const created = await tripletexRequest('/customer', {
@@ -188,7 +188,7 @@ async function findOrCreateCustomer(member) {
 }
 
 // --------------------------------------------------
-// 5) Opprett enkel ordre for medlemskap (1 mnd)
+// 5) Opprett abonnementsordre for medlemskap
 // --------------------------------------------------
 async function createMembershipOrder(customerId, plan) {
   if (!customerId) throw new Error('createMembershipOrder: customerId mangler');
@@ -198,20 +198,30 @@ async function createMembershipOrder(customerId, plan) {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  // plan.amount er i øre → konverter til NOK
-  const unitPriceNok = plan.amount / 100;
-
   const order = {
     customer: { id: customerId },
     orderDate: today,
     deliveryDate: today,
     isPrioritizeAmountsIncludingVat: true,
 
+    // Abonnement-felter – kopiert fra ordren du laget i Tripletex
+    isSubscription: true,
+    subscriptionDuration: 1,
+    subscriptionDurationType: 'MONTHS',
+    subscriptionPeriodsOnInvoice: 1,
+    subscriptionPeriodsOnInvoiceType: 'MONTHS',
+    subscriptionInvoicingTimeInAdvanceOrArrears: 'ADVANCE',
+    subscriptionInvoicingTime: 0,
+    subscriptionInvoicingTimeType: 'MONTHS',
+    // Vi lar auto-fakturering være av (samme som manuelt skjermbilde).
+    // Hvis du senere aktiverer auto-fakturering i Tripletex, kan vi sette denne til true.
+    isSubscriptionAutoInvoicing: false,
+
     orderLines: [
       {
         description: `Medlemskap ${plan.name}`,
         count: 1,
-        unitPriceIncludingVatCurrency: unitPriceNok,
+        unitPriceIncludingVatCurrency: plan.amount,
         ...(plan.tripletexProductId
           ? { product: { id: plan.tripletexProductId } }
           : {}),
@@ -219,53 +229,14 @@ async function createMembershipOrder(customerId, plan) {
     ],
   };
 
-  console.log('[TRIPLETEX] Oppretter medlemskapsordre', {
-    customerId,
-    planName: plan.name,
-    unitPriceNok,
-    tripletexProductId: plan.tripletexProductId || null,
-  });
-
   const json = await tripletexRequest('/order', {
     method: 'POST',
     body: order,
   });
 
-  const created = firstValueFromList(json);
-  if (!created || !created.id) {
-    console.error('[TRIPLETEX] Klarte ikke å lese opprettet ordre fra svar', json);
-    throw new Error('Tripletex: mangler ordre.id i svar');
-  }
-
-  return created;
-}
-
-// --------------------------------------------------
-// 5b) Godkjenn ordre som abonnementsordre
-//     → Tripletex lager da abonnementsfakturaer
-// --------------------------------------------------
-async function approveSubscriptionForOrder(orderId, invoiceDate) {
-  if (!orderId) {
-    throw new Error('approveSubscriptionForOrder: orderId mangler');
-  }
-  if (!invoiceDate) {
-    throw new Error('approveSubscriptionForOrder: invoiceDate mangler');
-  }
-
-  const path =
-    `/order/${encodeURIComponent(orderId)}` +
-    `/approveSubscriptionInvoice` +
-    `?invoiceDate=${encodeURIComponent(invoiceDate)}`;
-
-  console.log(
-    '[TRIPLETEX] Godkjenner abonnement for ordre',
-    orderId,
-    'invoiceDate=',
-    invoiceDate
-  );
-
-  const json = await tripletexRequest(path, { method: 'PUT' });
-  return json;
+  const createdOrder = json.value || json;
+  console.log('[TRIPLETEX] Opprettet ordre id=', createdOrder.id);
+  return createdOrder;
 }
 
 // --------------------------------------------------
@@ -281,6 +252,4 @@ module.exports = {
   syncMembershipToTripletex,
   findOrCreateCustomer,
   createMembershipOrder,
-  approveSubscriptionForOrder,
 };
-

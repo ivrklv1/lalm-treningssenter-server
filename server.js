@@ -2332,17 +2332,18 @@ async function vippsAutoCapture(orderId, amountInOre, transactionText) {
   }
 }
 
-function getFirstDayOfNextMonth() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth(); // 0–11
+// -----------------------------------------------------
+// Hjelpefunksjon: første dag i neste måned (YYYY-MM-DD)
+// -----------------------------------------------------
+function firstDayOfNextMonth(fromDate = new Date()) {
+  const year = fromDate.getFullYear();
+  const month = fromDate.getMonth(); // 0–11
 
-  const nextMonthDate = new Date(year, month + 1, 1);
-  const yyyy = nextMonthDate.getFullYear();
-  const mm = String(nextMonthDate.getMonth() + 1).padStart(2, '0');
-  const dd = '01';
+  const nextMonth = (month + 1) % 12;
+  const nextYear = year + (month === 11 ? 1 : 0);
 
-  return `${yyyy}-${mm}-${dd}`; // YYYY-MM-DD
+  const d = new Date(nextYear, nextMonth, 1);
+  return d.toISOString().slice(0, 10); // 'YYYY-MM-DD'
 }
 
 // =====================================================
