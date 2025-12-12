@@ -19,7 +19,7 @@ const crypto = require('crypto');
 require('dotenv').config();
 const {
   syncMembershipToTripletex,
-  approveSubscriptionForOrder,
+  approveSubscriptionInvoice,
   stopTripletexSubscriptionForOrder,
 } = require('./tripletexClient');
 
@@ -2728,10 +2728,13 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
                 null,
             };
 
-            const tripResult = await syncMembershipToTripletex({
+            const invoiceDate = firstDayOfNextMonth();
+            await syncMembershipToTripletex({
               member: tripMember,
               plan: planForTripletex,
+              invoiceDate,
             });
+
 
             updateOrderStatus(orderId, orderAfter.status || newStatus, {
               tripletexSynced: true,
@@ -2767,7 +2770,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
               ) {
                 const invoiceDate = firstDayOfNextMonth();
 
-                await approveSubscriptionForOrder(
+                await approveSubscriptionInvoice(
                   tripResult.order.id,
                   invoiceDate
                 );

@@ -16,6 +16,22 @@ let cachedSessionToken = null;
 let cachedSessionExpires = null; // 'YYYY-MM-DD'
 
 // -----------------------------
+// 0) Små dato-hjelpere
+// -----------------------------
+function toISODate(d) {
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+function firstDayOfNextMonthISO(fromDate = new Date()) {
+  const year = fromDate.getFullYear();
+  const month = fromDate.getMonth(); // 0-11
+  const nextMonth = (month + 1) % 12;
+  const nextYear = year + (month === 11 ? 1 : 0);
+  const d = new Date(nextYear, nextMonth, 1);
+  return toISODate(d);
+}
+
+// -----------------------------
 // 1) Lag sessionToken
 //    PUT /token/session/:create
 // -----------------------------
@@ -23,7 +39,7 @@ async function createSessionToken() {
   // Sett utløpsdato f.eks. 3 måneder fram i tid (må være fram i tid)
   const d = new Date();
   d.setMonth(d.getMonth() + 3);
-  const expirationDate = d.toISOString().slice(0, 10); // YYYY-MM-DD
+  const expirationDate = toISODate(d); // YYYY-MM-DD
 
   const url =
     `${TRIPLETEX_BASE}/token/session/:create` +
@@ -71,7 +87,7 @@ async function createSessionToken() {
 // -----------------------------
 function isSessionValid() {
   if (!cachedSessionToken || !cachedSessionExpires) return false;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toISODate(new Date());
   // Token utløper ved midnatt på expirationDate → vi er forsiktige og fornyer
   return today <= cachedSessionExpires;
 }
@@ -112,7 +128,12 @@ async function tripletexRequest(path, options = {}) {
 
   if (!res.ok) {
     console.error('[TRIPLETEX] HTTP-feil', res.status, 'på', path, json);
-    throw new Error(`Tripletex error ${res.status} på ${path}`);
+    // Ta med Tripletex sin valideringsfeil i feilmeldingen for logging
+    const msg =
+      json?.message ||
+      json?.developerMessage ||
+      `Tripletex error ${res.status} på ${path}`;
+    throw new Error(msg);
   }
 
   return json;
@@ -131,10 +152,15 @@ function firstValueFromList(json) {
 // --------------------------------------------------
 
 // Godkjenn ordre for abonnementsfakturering
-async function approveSubscriptionInvoice(orderId) {
+async function approveSubscriptionInvoice(orderId, invoiceDate) {
   if (!orderId) throw new Error('approveSubscriptionInvoice: orderId mangler');
+  if (!invoiceDate)
+    throw new Error('approveSubscriptionInvoice: invoiceDate mangler');
+
   return await tripletexRequest(
-    `/order/${orderId}/:approveSubscriptionInvoice`,
+    `/order/${orderId}/:approveSubscriptionInvoice?invoiceDate=${encodeURIComponent(
+      invoiceDate
+    )}`,
     { method: 'PUT' }
   );
 }
@@ -200,22 +226,20 @@ async function findOrCreateCustomer(member) {
 
   // 4.2 Hvis ikke, opprett ny kunde
   const body = {
-  name,
-  email: email || undefined,
-  phoneNumber: phone || undefined,
-  isPrivateIndividual: true,
+    name,
+    email: email || undefined,
+    phoneNumber: phone || undefined,
+    isPrivateIndividual: true,
 
-  // VIKTIG: tving utsendelse til e-post
-  invoiceSendMethod: 'EMAIL',
-};
-
+    // VIKTIG: tving utsendelse til e-post, ellers kan Tripletex forsøke eFaktura og feile
+    invoiceSendMethod: 'EMAIL',
+  };
 
   const created = await tripletexRequest('/customer', {
     method: 'POST',
     body,
   });
 
-  // Respons kan være { value: { ... } } eller direkte objekt
   const customer = created.value || created;
 
   console.log(
@@ -230,24 +254,31 @@ async function findOrCreateCustomer(member) {
 // --------------------------------------------------
 // 5) Opprett abonnementsordre for medlemskap
 // --------------------------------------------------
-async function createMembershipOrder(customerId, plan) {
+async function createMembershipOrder(customerId, plan, invoiceDate) {
   if (!customerId) throw new Error('createMembershipOrder: customerId mangler');
   if (!plan || !plan.name || typeof plan.amount !== 'number') {
     throw new Error('createMembershipOrder: plan mangler name/amount');
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toISODate(new Date());
 
   // plan.amount er i øre → konverter til NOK
   const unitPriceNok = plan.amount / 100;
+
+  // Hvis ikke oppgitt: første dag i neste måned
+  const safeInvoiceDate = invoiceDate || firstDayOfNextMonthISO(new Date());
 
   const order = {
     customer: { id: customerId },
     orderDate: today,
     deliveryDate: today,
+
+    // VIKTIG: Tripletex vil ha invoiceDate ved approveSubscriptionInvoice
+    invoiceDate: safeInvoiceDate,
+
     isPrioritizeAmountsIncludingVat: true,
 
-    // Abonnement-felter – som før
+    // Abonnement-felter
     isSubscription: true,
     subscriptionDuration: 1,
     subscriptionDurationType: 'MONTHS',
@@ -276,36 +307,35 @@ async function createMembershipOrder(customerId, plan) {
   });
 
   const createdOrder = json.value || json;
-  console.log('[TRIPLETEX] Opprettet ordre id=', createdOrder.id);
+  console.log(
+    '[TRIPLETEX] Opprettet ordre id=',
+    createdOrder.id,
+    'invoiceDate=',
+    safeInvoiceDate
+  );
   return createdOrder;
 }
 
-
-// --------------------------------------------------
 // 6) Hovedfunksjon: kall denne etter Vipps-betaling
-// --------------------------------------------------
-async function syncMembershipToTripletex({ member, plan }) {
+async function syncMembershipToTripletex({ member, plan, invoiceDate }) {
   const customer = await findOrCreateCustomer(member);
-  const order = await createMembershipOrder(customer.id, plan);
+
+  const safeInvoiceDate = invoiceDate || firstDayOfNextMonthISO(new Date());
+
+  // Bruk invoiceDate både på ordre og på godkjenning
+  const order = await createMembershipOrder(customer.id, plan, safeInvoiceDate);
 
   // Godkjenn ordre for abonnementsfakturering
-  try {
-    await approveSubscriptionInvoice(order.id);
-    console.log(
-      '[TRIPLETEX] approveSubscriptionInvoice OK for ordre id=',
-      order.id
-    );
-  } catch (e) {
-    console.error(
-      '[TRIPLETEX] approveSubscriptionInvoice FEIL for ordre id=',
-      order.id,
-      e.message
-    );
-  }
+  await approveSubscriptionInvoice(order.id, safeInvoiceDate);
+  console.log(
+    '[TRIPLETEX] approveSubscriptionInvoice OK for ordre id=',
+    order.id,
+    'invoiceDate=',
+    safeInvoiceDate
+  );
 
   return { customer, order };
 }
-
 
 module.exports = {
   syncMembershipToTripletex,
@@ -314,4 +344,5 @@ module.exports = {
   approveSubscriptionInvoice,
   stopTripletexSubscriptionForOrder,
 };
+
 
