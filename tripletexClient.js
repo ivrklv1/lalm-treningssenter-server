@@ -273,9 +273,6 @@ async function createMembershipOrder(customerId, plan, invoiceDate) {
     orderDate: today,
     deliveryDate: today,
 
-    // VIKTIG: Tripletex vil ha invoiceDate ved approveSubscriptionInvoice
-    invoiceDate: safeInvoiceDate,
-
     isPrioritizeAmountsIncludingVat: true,
 
     // Abonnement-felter
