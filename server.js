@@ -20,6 +20,7 @@ require('dotenv').config();
 const {
   syncMembershipToTripletex,
   approveSubscriptionForOrder,
+  stopTripletexSubscriptionForOrder,
 } = require('./tripletexClient');
 
 
@@ -264,6 +265,61 @@ function findOrder(orderId) {
   const orders = getOrders();
   return orders.find(o => o.orderId === orderId) || null;
 }
+
+// Finn siste Tripletex-ordre for medlem og stopp abonnementet
+async function stopTripletexForMember(member) {
+  try {
+    const emailNorm = (member.email || '').toLowerCase();
+    const memberId = member.id || null;
+
+    const orders = getOrders() || [];
+
+    // Finn alle ordre som tilhører medlemmet og er synket mot Tripletex
+    const relevant = orders.filter((o) => {
+      const orderEmail = (o.email || '').toLowerCase();
+      const sameEmail = emailNorm && orderEmail === emailNorm;
+      const sameMemberId = memberId && o.memberId === memberId;
+
+      return (
+        o.tripletexSynced &&
+        o.tripletexOrderId &&
+        (sameEmail || sameMemberId)
+      );
+    });
+
+    if (!relevant.length) {
+      appendAccessLog(
+        `[${new Date().toISOString()}] TRIPLETEX_STOP_NO_ORDER email=${emailNorm} memberId=${memberId}\n`
+      );
+      return;
+    }
+
+    // Ta den nyeste ordren basert på createdAt/updatedAt
+    relevant.sort((a, b) => {
+      const aTs = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const bTs = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return bTs - aTs;
+    });
+
+    const latest = relevant[0];
+
+    await stopTripletexSubscriptionForOrder(latest.tripletexOrderId);
+
+    updateOrderStatus(latest.orderId, latest.status || 'CANCELLED', {
+      tripletexSubscriptionStoppedAt: new Date().toISOString(),
+    });
+
+    appendAccessLog(
+      `[${new Date().toISOString()}] TRIPLETEX_STOP_OK orderId=${latest.orderId} tripletexOrderId=${latest.tripletexOrderId} memberId=${memberId}\n`
+    );
+  } catch (e) {
+    console.error('[TRIPLETEX_STOP_ERROR] memberId', member.id, e.message);
+    appendAccessLog(
+      `[${new Date().toISOString()}] TRIPLETEX_STOP_ERROR memberId=${member.id} err=${e.message}\n`
+    );
+  }
+}
+
 
 function updateOrderStatus(orderId, status, extra = {}) {
   const orders = getOrders();
@@ -767,6 +823,43 @@ app.get('/admin/members', basicAuth, (req, res) => {
   const members = getMembers();
   res.json(members);
 });
+
+// Sett medlem inaktiv (pause) + stopp abonnement i Tripletex
+app.post('/admin/members/pause', basicAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const email = (body.email || '').toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ ok: false, error: 'email_required' });
+    }
+
+    const members = getMembers();
+    const member = members.find(
+      (m) => (m.email || '').toLowerCase() === email
+    );
+
+    if (!member) {
+      return res.status(404).json({ ok: false, error: 'member_not_found' });
+    }
+
+    // Sett medlem inaktiv lokalt
+    member.active = false;
+    member.updatedAt = new Date().toISOString();
+    saveMembers(members);
+
+    // Stopp abonnement i Tripletex (best effort)
+    await stopTripletexForMember(member);
+
+    return res.json({ ok: true, paused: true });
+  } catch (e) {
+    console.error('[ADMIN_PAUSE_MEMBER_ERROR]', e.message);
+    return res
+      .status(500)
+      .json({ ok: false, error: 'internal_error', message: e.message });
+  }
+});
+
 
 app.post('/admin/members', basicAuth, (req, res) => {
   const body = req.body || {};

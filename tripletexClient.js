@@ -126,6 +126,43 @@ function firstValueFromList(json) {
   return undefined;
 }
 
+// --------------------------------------------------
+// Abonnements-hjelpere
+// --------------------------------------------------
+
+// Godkjenn ordre for abonnementsfakturering
+async function approveSubscriptionInvoice(orderId) {
+  if (!orderId) throw new Error('approveSubscriptionInvoice: orderId mangler');
+  return await tripletexRequest(
+    `/order/${orderId}/:approveSubscriptionInvoice`,
+    { method: 'PUT' }
+  );
+}
+
+// Stopp abonnement-fakturering (unapprove)
+async function unapproveSubscriptionInvoice(orderId) {
+  if (!orderId) throw new Error('unapproveSubscriptionInvoice: orderId mangler');
+  return await tripletexRequest(
+    `/order/${orderId}/:unApproveSubscriptionInvoice`,
+    { method: 'PUT' }
+  );
+}
+
+// Enkel wrapper vi kan bruke fra server.js
+async function stopTripletexSubscriptionForOrder(orderId) {
+  try {
+    await unapproveSubscriptionInvoice(orderId);
+    console.log('[TRIPLETEX] Stoppet abonnement for ordre id=', orderId);
+  } catch (e) {
+    console.error(
+      '[TRIPLETEX] Klarte ikke å stoppe abonnement for ordre id=',
+      orderId,
+      e.message
+    );
+    throw e;
+  }
+}
+
 // ------------------------------------
 // 4) Finn / opprett kunde i Tripletex
 // ------------------------------------
@@ -163,12 +200,15 @@ async function findOrCreateCustomer(member) {
 
   // 4.2 Hvis ikke, opprett ny kunde
   const body = {
-    name,
-    email: email || undefined,
-    phoneNumber: phone || undefined,
-    isPrivateIndividual: true,
-    // Hvordan eFaktura/Avtalegiro sendes styres primært i Tripletex-oppsettet.
-  };
+  name,
+  email: email || undefined,
+  phoneNumber: phone || undefined,
+  isPrivateIndividual: true,
+
+  // VIKTIG: tving utsendelse til e-post
+  invoiceSendMethod: 'EMAIL',
+};
+
 
   const created = await tripletexRequest('/customer', {
     method: 'POST',
@@ -247,11 +287,31 @@ async function createMembershipOrder(customerId, plan) {
 async function syncMembershipToTripletex({ member, plan }) {
   const customer = await findOrCreateCustomer(member);
   const order = await createMembershipOrder(customer.id, plan);
+
+  // Godkjenn ordre for abonnementsfakturering
+  try {
+    await approveSubscriptionInvoice(order.id);
+    console.log(
+      '[TRIPLETEX] approveSubscriptionInvoice OK for ordre id=',
+      order.id
+    );
+  } catch (e) {
+    console.error(
+      '[TRIPLETEX] approveSubscriptionInvoice FEIL for ordre id=',
+      order.id,
+      e.message
+    );
+  }
+
   return { customer, order };
 }
+
 
 module.exports = {
   syncMembershipToTripletex,
   findOrCreateCustomer,
   createMembershipOrder,
+  approveSubscriptionInvoice,
+  stopTripletexSubscriptionForOrder,
 };
+
