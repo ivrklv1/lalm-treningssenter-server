@@ -284,7 +284,7 @@ async function createMembershipOrder(customerId, plan, invoiceDate) {
     subscriptionInvoicingTimeInAdvanceOrArrears: 'ADVANCE',
     subscriptionInvoicingTime: 0,
     subscriptionInvoicingTimeType: 'MONTHS',
-    isSubscriptionAutoInvoicing: false,
+    isSubscriptionAutoInvoicing: true,
 
     orderLines: [
       {
