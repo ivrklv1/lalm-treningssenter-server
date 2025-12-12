@@ -2765,7 +2765,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
                 isRecurring &&
                 tripResult?.order?.id
               ) {
-                const invoiceDate = getFirstDayOfNextMonth();
+                const invoiceDate = firstDayOfNextMonth();
 
                 await approveSubscriptionForOrder(
                   tripResult.order.id,
