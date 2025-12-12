@@ -2729,10 +2729,11 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
             };
 
             const invoiceDate = firstDayOfNextMonth();
-            await syncMembershipToTripletex({
-              member: tripMember,
-              plan: planForTripletex,
-              invoiceDate,
+
+            const tripResult = await syncMembershipToTripletex({
+             member: tripMember,
+             plan: planForTripletex,
+             invoiceDate,
             });
 
 
