@@ -28,6 +28,47 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
 // ----------------------------
+// Åpningstid (Europe/Oslo): 05-23
+// ----------------------------
+const OPENING_HOUR = 5;   // 05:00
+const CLOSING_HOUR = 23;  // 23:00 (dvs. siste tillatte tidspunkt er 22:59)
+
+function getOsloHourMinute() {
+  // Robust mot DST (sommertid) siden Intl bruker tz-regler
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Oslo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date());
+
+  const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+  const minute = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+  return { hour, minute };
+}
+
+function isWithinOpeningHours() {
+  const { hour } = getOsloHourMinute();
+
+  // Tillat fra 05:00:00 til 22:59:59
+  // (kl 23:00 og senere skal blokkeres)
+  return hour >= OPENING_HOUR && hour < CLOSING_HOUR;
+}
+
+function openingHoursGuard(req, res, next) {
+  if (isWithinOpeningHours()) return next();
+
+  // Konsistent feilmelding til appen
+  return res.status(403).json({
+    ok: false,
+    error: 'CLOSED',
+    message: 'Treningssenteret er stengt. Åpningstid: 05:00–23:00.',
+    openingHours: { from: '05:00', to: '23:00', timeZone: 'Europe/Oslo' },
+  });
+}
+
+
+// ----------------------------
 // Filbasert lagring → persistent /data på Render
 // ----------------------------
 // NB: Render lager tom /data ved deploy. Ikke bruk .json filer i repo for prod-data.
@@ -1666,7 +1707,7 @@ app.post('/dropin/verify', (req, res) => {
 });
 
 // Åpne dør via token / medlem – bruker activeDropins
-app.post('/door/open', async (req, res) => {
+app.post('/door/open', openingHoursGuard, async (req, res) => {
   try {
     const { token, email, phone, doorId = 'styrkerom' } = req.body || {};
 
@@ -1685,7 +1726,7 @@ app.post('/door/open', async (req, res) => {
 
     const now = new Date();
     const dropin = activeDropins.find(
-      d => d.token === token && new Date(d.validUntil) >= now,
+      d => d.token === token && new Date(d.validUntil) >= now
     );
 
     if (!member && !dropin) {
@@ -1695,6 +1736,7 @@ app.post('/door/open', async (req, res) => {
         '\n  hasMember:', !!member,
         '\n  hasDropin:', !!dropin,
         '\n}');
+
       return res.status(403).json({ ok: false, error: 'no_access' });
     }
 
@@ -1709,10 +1751,11 @@ app.post('/door/open', async (req, res) => {
     const who = member
       ? (member.email || member.phone || 'ukjent')
       : `${dropin.email} (dropin)`;
+
     const ts = new Date().toLocaleString('nb-NO', { timeZone: 'Europe/Oslo' });
 
     appendAccessLog(
-      `${ts} email=${who} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=OPEN_${source}\n`,
+      `${ts} email=${who} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=OPEN_${source}\n`
     );
 
     return res.json({ ok: true, source });
@@ -1721,6 +1764,7 @@ app.post('/door/open', async (req, res) => {
     return res.status(500).json({ ok: false, error: 'internal_error' });
   }
 });
+
 
 
 // =====================================================
