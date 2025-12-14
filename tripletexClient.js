@@ -1,4 +1,5 @@
-// tripletexClient.js
+//  }
+ tripletexClient.js
 const fetch = require('node-fetch');
 
 const TRIPLETEX_BASE = process.env.TRIPLETEX_BASE || 'https://tripletex.no/v2';
@@ -29,6 +30,33 @@ function firstDayOfNextMonthISO(fromDate = new Date()) {
   const nextYear = year + (month === 11 ? 1 : 0);
   const d = new Date(nextYear, nextMonth, 1);
   return toISODate(d);
+}
+
+function addMonthsISO(isoDate, months) {
+  // isoDate: 'YYYY-MM-DD'
+  const [y, m, d] = isoDate.split('-').map((n) => parseInt(n, 10));
+  const dt = new Date(y, (m - 1) + months, d);
+  return toISODate(dt);
+}
+
+
+// -----------------------------
+// Abonnement-regler
+// -----------------------------
+function isSubscriptionPlan(plan) {
+  // Drop-in / korttid (shortTermDays) skal ikke være abonnement.
+  // TEST-planen ønskes som abonnement (for å få checkbox + start/slutt i UI).
+  const planType = String(plan?.type || '').toLowerCase();
+  const planName = String(plan?.name || '').toLowerCase();
+
+  const isShortOrDropIn =
+    !!plan?.shortTermDays ||
+    ['dropin', 'drop-in', 'korttid', 'short', 'shortterm'].includes(planType) ||
+    planName.includes('drop') ||
+    planName.includes('drop-in') ||
+    planName.includes('korttid');
+
+  return !isShortOrDropIn;
 }
 
 // -----------------------------
@@ -268,29 +296,62 @@ async function createMembershipOrder(customerId, plan, invoiceDate) {
   // Hvis ikke oppgitt: første dag i neste måned
   const safeInvoiceDate = invoiceDate || firstDayOfNextMonthISO(new Date());
 
+  // Avgjør om dette skal være abonnement i Tripletex
+  const isSubscription = isSubscriptionPlan(plan);
+
+  // Start: invoiceDate (typisk 1. i neste måned)
+  const subscriptionPeriodStart = safeInvoiceDate;
+
+  // Slutt: hvis bindingMonths > 0 → sett sluttdato, ellers lar vi den stå tom
+  const bindingMonths = Number(plan.bindingMonths || 0);
+  const subscriptionPeriodEnd =
+    isSubscription && bindingMonths > 0
+      ? addMonthsISO(subscriptionPeriodStart, bindingMonths)
+      : isSubscription
+      ? addMonthsISO(subscriptionPeriodStart, 120) // uten binding → sett langt fram i tid
+      : null;
+
   const order = {
     customer: { id: customerId },
     orderDate: today,
-    deliveryDate: today,
+
+    // Leveringsdato i UI bør normalt matche fakturaperiodens start (ikke "i dag")
+    deliveryDate: subscriptionPeriodStart,
 
     isPrioritizeAmountsIncludingVat: true,
 
-    // Abonnement-felter
-    isSubscription: true,
-    subscriptionDuration: 1,
-    subscriptionDurationType: 'MONTHS',
-    subscriptionPeriodsOnInvoice: 1,
-    subscriptionPeriodsOnInvoiceType: 'MONTHS',
-    subscriptionInvoicingTimeInAdvanceOrArrears: 'ADVANCE',
-    subscriptionInvoicingTime: 0,
-    subscriptionInvoicingTimeType: 'MONTHS',
-    isSubscriptionAutoInvoicing: true,
+    // Abonnement (ordre-nivå) – beholdes for kompatibilitet, men linjenivå er det som vises i UI
+    ...(isSubscription
+      ? {
+          isSubscription: true,
+          subscriptionDuration: 1,
+          subscriptionDurationType: 'MONTHS',
+          subscriptionPeriodsOnInvoice: 1,
+          subscriptionPeriodsOnInvoiceType: 'MONTHS',
+          subscriptionInvoicingTimeInAdvanceOrArrears: 'ADVANCE',
+          subscriptionInvoicingTime: 0,
+          subscriptionInvoicingTimeType: 'MONTHS',
+          isSubscriptionAutoInvoicing: true,
+        }
+      : {}),
 
     orderLines: [
       {
         description: `Medlemskap ${plan.name}`,
         count: 1,
         unitPriceIncludingVatCurrency: unitPriceNok,
+
+        // Abonnement (linjenivå) – dette styrer checkbox + start/slutt i ordrelinja
+        ...(isSubscription
+          ? {
+              isSubscription: true,
+              subscriptionPeriodStart,
+              ...(subscriptionPeriodEnd
+                ? { subscriptionPeriodEnd }
+                : {}),
+            }
+          : {}),
+
         ...(plan.tripletexProductId
           ? { product: { id: plan.tripletexProductId } }
           : {}),
@@ -322,14 +383,18 @@ async function syncMembershipToTripletex({ member, plan, invoiceDate }) {
   // Bruk invoiceDate både på ordre og på godkjenning
   const order = await createMembershipOrder(customer.id, plan, safeInvoiceDate);
 
-  // Godkjenn ordre for abonnementsfakturering
-  await approveSubscriptionInvoice(order.id, safeInvoiceDate);
-  console.log(
-    '[TRIPLETEX] approveSubscriptionInvoice OK for ordre id=',
-    order.id,
-    'invoiceDate=',
-    safeInvoiceDate
-  );
+  // Godkjenn ordre for abonnementsfakturering (kun hvis abonnement)
+  if (isSubscriptionPlan(plan)) {
+    await approveSubscriptionInvoice(order.id, safeInvoiceDate);
+    console.log(
+      '[TRIPLETEX] approveSubscriptionInvoice OK for ordre id=',
+      order.id,
+      'invoiceDate=',
+      safeInvoiceDate
+    );
+  } else {
+    console.log('[TRIPLETEX] Ikke abonnement – hopper over approveSubscriptionInvoice');
+  }
 
   return { customer, order };
 }
