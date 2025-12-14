@@ -1927,8 +1927,24 @@ app.post('/vipps/checkout', async (req, res) => {
 
     try {
     // HENT UT BEGGE FELT
-    let { membershipKey, membershipId, phone, name, email, source } =
-      req.body || {};
+    let {
+      membershipKey,
+      membershipId,
+     phone,
+     name,
+     email,
+     source,
+     firstName,
+      lastName
+    } = req.body || {};
+
+    // Bygg navn hvis web ikke sender "name"
+    if (!name || !String(name).trim()) {
+     const builtName = `${firstName || ''} ${lastName || ''}`.trim();
+     if (builtName) {
+       name = builtName;
+      }
+    }
 
     // TILLAT AT APPEN SENDER membershipId I STEDET FOR membershipKey
     if (!membershipKey && membershipId) {
