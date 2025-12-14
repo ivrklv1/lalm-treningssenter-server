@@ -1,5 +1,3 @@
-//  }
- tripletexClient.js
 const fetch = require('node-fetch');
 
 const TRIPLETEX_BASE = process.env.TRIPLETEX_BASE || 'https://tripletex.no/v2';
@@ -406,5 +404,4 @@ module.exports = {
   approveSubscriptionInvoice,
   stopTripletexSubscriptionForOrder,
 };
-
 
