@@ -2748,62 +2748,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
               `[${new Date().toISOString()}] TRIPLETEX_SYNC_OK orderId=${orderId} customerId=${tripResult.customer?.id || '?'} orderId=${tripResult.order?.id || '?'}\n`
             );
 
-            // -----------------------------
-            // NY DEL: abonnementsfakturering
-            // -----------------------------
-            try {
-              // Bestem om dette er et "gjentakende" medlemskap
-              let isRecurring = true;
-              const planType = (originalPlan?.type || '').toLowerCase();
-
-              if (
-                planType === 'dropin' ||
-                planType === 'short' ||
-                planType === 'korttid'
-              ) {
-                isRecurring = false;
-              }
-
-              if (
-                TRIPLETEX_SUBSCRIPTION_ENABLED &&
-                isRecurring &&
-                tripResult?.order?.id
-              ) {
-                const invoiceDate = firstDayOfNextMonth();
-
-                await approveSubscriptionInvoice(
-                  tripResult.order.id,
-                  invoiceDate
-                );
-
-                updateOrderStatus(orderId, orderAfter.status || newStatus, {
-                  tripletexSubscriptionApproved: true,
-                  tripletexSubscriptionInvoiceDate: invoiceDate,
-                  tripletexSubscriptionApprovedAt: new Date().toISOString(),
-                });
-
-                appendAccessLog(
-                  `[${new Date().toISOString()}] TRIPLETEX_SUBSCRIPTION_APPROVED orderId=${tripResult.order.id} invoiceDate=${invoiceDate}\n`
-                );
-              } else {
-                appendAccessLog(
-                  `[${new Date().toISOString()}] TRIPLETEX_SUBSCRIPTION_SKIPPED orderId=${orderId} recurring=${isRecurring} enabled=${TRIPLETEX_SUBSCRIPTION_ENABLED}\n`
-                );
-              }
-            } catch (eSub) {
-              console.error(
-                'Feil ved abonnement-godkjenning i Tripletex for orderId',
-                orderId,
-                eSub.message
-              );
-              appendAccessLog(
-                `[${new Date().toISOString()}] TRIPLETEX_SUBSCRIPTION_ERROR orderId=${orderId} err=${eSub.message}\n`
-              );
-            }
-          } else {
-            appendAccessLog(
-              `[${new Date().toISOString()}] TRIPLETEX_SYNC_SKIPPED_NO_PLAN orderId=${orderId} membershipKey=${orderAfter?.membershipKey}\n`
-            );
+            
           }
         }
       } catch (e) {

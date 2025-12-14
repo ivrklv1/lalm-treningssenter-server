@@ -1,7 +1,7 @@
 // tripletexClient.js
 const fetch = require('node-fetch');
 
-const TRIPLETEX_BASE = 'https://tripletex.no/v2';
+const TRIPLETEX_BASE = process.env.TRIPLETEX_BASE || 'https://tripletex.no/v2';
 
 const CONSUMER_TOKEN = process.env.TRIPLETEX_CONSUMER_TOKEN;
 const EMPLOYEE_TOKEN = process.env.TRIPLETEX_EMPLOYEE_TOKEN;
