@@ -3009,11 +3009,6 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
 // Backup to Cloudflare R2 (S3)
 // + status logging to /data
 // ============================
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const crypto = require('crypto');
-const { execFile } = require('child_process');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 function envBool(v) {
