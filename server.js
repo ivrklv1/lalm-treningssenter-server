@@ -16,6 +16,10 @@ const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
+const { execFile } = require('child_process');
+const util = require('util');
+const execFileAsync = util.promisify(execFile);
 require('dotenv').config();
 const {
   syncMembershipToTripletex,
@@ -3000,6 +3004,166 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
       .json({ error: 'Kunne ikke sende SMS. Sjekk server-loggen.' });
   }
 });
+
+// ============================
+// Backup to Cloudflare R2 (S3)
+// + status logging to /data
+// ============================
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const crypto = require('crypto');
+const { execFile } = require('child_process');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+
+function envBool(v) {
+  return String(v || '').toLowerCase() === 'true';
+}
+
+function safeNowStamp() {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+}
+
+function requireBackupAuth(req) {
+  const secret = process.env.BACKUP_CRON_SECRET || '';
+  const got = req.headers['x-backup-secret'] || '';
+  return secret && got && String(secret) === String(got);
+}
+
+function getS3Client() {
+  const endpoint = process.env.BACKUP_S3_ENDPOINT; // R2 endpoint
+  return new S3Client({
+    region: process.env.BACKUP_S3_REGION || 'auto',
+    endpoint,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: process.env.BACKUP_S3_ACCESS_KEY_ID,
+      secretAccessKey: process.env.BACKUP_S3_SECRET_ACCESS_KEY,
+    },
+  });
+}
+
+const BACKUP_DATA_DIR = process.env.BACKUP_DATA_DIR || '/data';
+const BACKUP_STATUS_FILE = path.join(BACKUP_DATA_DIR, 'backup-status.json');
+const BACKUP_LOG_FILE = path.join(BACKUP_DATA_DIR, 'backup-log.json');
+
+function readJsonSafe(p, fallback) {
+  try {
+    if (!fs.existsSync(p)) return fallback;
+    const raw = fs.readFileSync(p, 'utf8');
+    return JSON.parse(raw || 'null') ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonSafe(p, obj) {
+  try {
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify(obj, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('[BACKUP_LOG_WRITE_FAIL]', p, e?.message || e);
+  }
+}
+
+function appendBackupLog(entry) {
+  const arr = readJsonSafe(BACKUP_LOG_FILE, []);
+  arr.push(entry);
+  // behold f.eks. siste 200 rader
+  const trimmed = arr.slice(-200);
+  writeJsonSafe(BACKUP_LOG_FILE, trimmed);
+  // siste status
+  writeJsonSafe(BACKUP_STATUS_FILE, entry);
+}
+
+async function runBackupOnce() {
+  const bucket = process.env.BACKUP_S3_BUCKET;
+  const prefix = process.env.BACKUP_S3_PREFIX || '';
+
+  if (!bucket) throw new Error('BACKUP_S3_BUCKET missing');
+  if (!fs.existsSync(BACKUP_DATA_DIR)) throw new Error(`dataDir not found: ${BACKUP_DATA_DIR}`);
+
+  const stamp = safeNowStamp();
+  const rand = crypto.randomBytes(4).toString('hex');
+  const fileName = `backup-${stamp}-${rand}.tar.gz`;
+  const tmpPath = path.join(os.tmpdir(), fileName);
+
+  // tar -czf <tmpPath> -C <dataDir> .
+  await new Promise((resolve, reject) => {
+    execFile('tar', ['-czf', tmpPath, '-C', BACKUP_DATA_DIR, '.'], (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+
+  const key = `${prefix}${fileName}`;
+  const s3 = getS3Client();
+
+  await s3.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: fs.createReadStream(tmpPath),
+    ContentType: 'application/gzip',
+  }));
+
+  // filstørrelse for logging
+  let bytes = null;
+  try { bytes = fs.statSync(tmpPath).size; } catch {}
+
+  // cleanup tmp
+  try { fs.unlinkSync(tmpPath); } catch {}
+
+  return { bucket, key, fileName, bytes };
+}
+
+// ---- ROUTES ----
+// Trigger backup (for cron / manual)
+app.post('/internal/backup/run', async (req, res) => {
+  const startedAt = new Date().toISOString();
+
+  try {
+    if (!envBool(process.env.BACKUP_ENABLED)) {
+      return res.status(403).json({ ok: false, error: 'backup_disabled' });
+    }
+    if (!requireBackupAuth(req)) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' });
+    }
+
+    const result = await runBackupOnce();
+
+    const entry = {
+      ok: true,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      ...result,
+    };
+    appendBackupLog(entry);
+
+    return res.json({ ok: true, ...result });
+  } catch (e) {
+    const entry = {
+      ok: false,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      error: String(e?.message || e),
+    };
+    appendBackupLog(entry);
+
+    console.error('[BACKUP_ERROR]', e);
+    return res.status(500).json({ ok: false, error: 'backup_failed', detail: entry.error });
+  }
+});
+
+// Read last backup status (useful for admin/monitoring)
+app.get('/internal/backup/status', (req, res) => {
+  // valgfritt: beskytt også denne med secret
+  if (!requireBackupAuth(req)) {
+    return res.status(401).json({ ok: false, error: 'unauthorized' });
+  }
+  const status = readJsonSafe(BACKUP_STATUS_FILE, null);
+  return res.json({ ok: true, status });
+});
+
 
 // ----------------------------
 // Start server
