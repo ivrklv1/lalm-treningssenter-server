@@ -2111,17 +2111,6 @@ if (src === 'web') {
       });
     }
 
-    const isTestPlan =
-      selected?.id === 'TEST_1KR' ||
-     selected?.key === 'TEST_1KR' ||
-     String(selected?.id || selected?.key || '').toUpperCase().startsWith('TEST_');
-
-    if (isTestPlan) {
-     selected.prorate = false;
-     // sett riktig felt for innmeldingsavgift til 0:
-      selected.signupFee = 0;      // hvis dere bruker signupFee
-    }
-
 
     // 4) Telefon-normalisering
     const phoneFull = normalizePhone(phone); // f.eks. +4790000000
@@ -2188,14 +2177,14 @@ if (src === 'web') {
       SIGNUP_FEE = (selected.signupFee || 0) + ADMIN_FEE;
 
       // Spesial-test: TEST_1KR uten admin-gebyr
-      if (membershipKey === 'Test_3kr') {
+      if (membershipKey === 'TEST_1KR') {
         SIGNUP_FEE = 0;
       }
     }
 
     // Prorasjon kun for "vanlige" medlemskap der selected.prorate = true
     // UNNTAK: 'Test_3kr' skal ALDRI prorateres
-    if (!isShortOrDropin && selected.prorate && selected.key !== 'Test_3kr') {
+    if (!isShortOrDropin && selected.prorate && selected.key !== 'TEST_1KR') {
       fraction = remainingDays / daysInMonth;
      firstMonthTrainingAmount = Math.round(selected.amount * fraction);
       prorationLabel = ` – første måned: ${remainingDays} av ${daysInMonth} dager`;
@@ -2239,32 +2228,6 @@ if (src === 'web') {
       `[${new Date().toISOString()}] VIPPS_AMOUNT_CALC orderId=${orderId} membershipKey=${membershipKey} full=${selected.amount} firstMonth=${firstMonthTrainingAmount} signupFee=${SIGNUP_FEE} final=${finalAmount} shortOrDropin=${isShortOrDropin}\n`
     );
 
-    // Sikkerhet: Vipps krever minst 1 kr (100 øre)
-    if (finalAmount < 100) {
-      console.warn(
-        'finalAmount < 100, justerer opp til 100. membershipKey=',
-        membershipKey,
-        'beregnet=',
-        finalAmount
-      );
-      finalAmount = 100;
-    }
-
-    console.log('VIPPS BELØP', {
-      membershipKey,
-      selectedAmount: selected.amount,
-      firstMonthTrainingAmount,
-      SIGNUP_FEE,
-      finalAmount,
-    });
-    appendAccessLog(
-      `[${new Date().toISOString()}] VIPPS_AMOUNT_CALC orderId=${orderId} membershipKey=${membershipKey} full=${selected.amount} firstMonth=${firstMonthTrainingAmount} signupFee=${SIGNUP_FEE} final=${finalAmount}\n`
-    );
-
-    const apiBase =
-      process.env.VIPPS_ENV === 'test'
-        ? 'https://apitest.vipps.no'
-        : 'https://api.vipps.no';
 
     // 8) Hent access token (eCom)
     const tokenRes = await axios.post(
