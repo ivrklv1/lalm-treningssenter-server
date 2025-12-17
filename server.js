@@ -2639,9 +2639,21 @@ async function processTripletexForOrder(orderId, newStatus, opts = {}) {
 
       const invoiceDate = firstDayOfNextMonth();
 
+      // Lagre invoiceDate på ordren slik at approve/retry alltid har tilgang
+      try {
+        const o = findOrder(orderId) || orderAfter;
+        if (o) {
+         updateOrderStatus(orderId, o.status || newStatus, {
+           tripletexInvoiceDate: invoiceDate, // "YYYY-MM-DD"
+         });
+        }
+      } catch (e) {
+       console.log('[TRIPLETEX] could not persist tripletexInvoiceDate:', e?.message || e);
+      }
+
       const tripResult = await withRetry(
         () =>
-          syncMembershipToTripletex({
+         syncMembershipToTripletex({
             member: tripMember,
             plan: planForTripletex,
             invoiceDate,
@@ -2649,6 +2661,7 @@ async function processTripletexForOrder(orderId, newStatus, opts = {}) {
           }),
         { tag: `sync ${tag}` }
       );
+
 
       // Forsøk å hente en relevant "ordreId" fra svaret
       const tripletexOrderId =
@@ -2673,34 +2686,42 @@ async function processTripletexForOrder(orderId, newStatus, opts = {}) {
 
     // ---------- B) AUTOMATISK GODKJENNING AV ABONNEMENT ----------
     const freshOrder = findOrder(orderId) || orderAfter;
+
     if (
-      isPaidStatus &&
-      freshOrder.tripletexOrderId &&
+     isPaidStatus &&
+     freshOrder &&
+     freshOrder.tripletexOrderId &&
       !freshOrder.tripletexSubscriptionApproved
     ) {
-      const approveAttempts = Number(freshOrder.tripletexApproveAttempts || 0) + 1;
-      updateOrderStatus(orderId, freshOrder.status || newStatus, {
-        tripletexApproveAttempts: approveAttempts,
-        tripletexApproveLastAttemptAt: new Date().toISOString(),
-        tripletexApproveLastError: null,
-      });
+     const approveAttempts = Number(freshOrder.tripletexApproveAttempts || 0) + 1;
+
+      // invoiceDate må være med – hent fra ordre hvis retry senere, ellers fra scope
+     const invDate =
+       freshOrder.tripletexInvoiceDate || invoiceDate || firstDayOfNextMonth();
+
+     updateOrderStatus(orderId, freshOrder.status || newStatus, {
+       tripletexApproveAttempts: approveAttempts,
+       tripletexApproveLastAttemptAt: new Date().toISOString(),
+       tripletexApproveLastError: null,
+     });
 
       await withRetry(
-        () => approveSubscriptionInvoice(freshOrder.tripletexOrderId),
-        { tag: `approve ${tag}` }
-      );
+       () => approveSubscriptionInvoice(freshOrder.tripletexOrderId, invDate),
+       { tag: `approve ${tag}` }
+     );
 
       updateOrderStatus(orderId, freshOrder.status || newStatus, {
-        tripletexSubscriptionApproved: true,
-        tripletexSubscriptionApprovedAt: new Date().toISOString(),
-        tripletexSubscriptionApproveError: null,
-        tripletexApproveLastError: null,
-      });
+       tripletexSubscriptionApproved: true,
+       tripletexSubscriptionApprovedAt: new Date().toISOString(),
+       tripletexSubscriptionApproveError: null,
+       tripletexApproveLastError: null,
+     });
 
-      appendAccessLog(
-        `[${new Date().toISOString()}] TRIPLETEX_SUBSCRIPTION_APPROVED orderId=${orderId} tripletexOrderId=${freshOrder.tripletexOrderId}\n`
+     appendAccessLog(
+       `[${new Date().toISOString()}] TRIPLETEX_SUBSCRIPTION_APPROVED orderId=${orderId} tripletexOrderId=${freshOrder.tripletexOrderId} invoiceDate=${invDate}\n`
       );
     }
+
 
     return { ok: true };
   } catch (err) {
