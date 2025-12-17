@@ -738,8 +738,17 @@ async function sendSms(phone, message) {
     headers: { 'Content-Type': 'application/json' },
   });
 
-  console.log('Eurobate-respons (sendSms):', res.data);
-  return res.data;
+  const d = res.data || {};
+  const errCode = Number(d.error || d.ERROR || 0);
+  const status = String(d.STATUS || d.status || '').toUpperCase();
+  if (errCode && errCode !== 0) {
+    console.error('[EUROBATE] sendSms failed error=', errCode, 'status=', status, d);
+  } else if (status && status !== 'OK') {
+    console.warn('[EUROBATE] sendSms non-OK status=', status, d);
+  } else {
+    console.log('[EUROBATE] sendSms OK uuid=', d.uuid || d.UUID || '', 'parts=', d.messageParts || d.MESSAGEPARTS || '');
+  }
+  return d;
 }
 
 /**
@@ -2492,6 +2501,334 @@ async function vippsAutoCapture(orderId, amountInOre, transactionText) {
 // -----------------------------------------------------
 // Hjelpefunksjon: første dag i neste måned (YYYY-MM-DD)
 // -----------------------------------------------------
+// -----------------------------------------------------
+// Tripletex: retry helpers for transient errors
+// -----------------------------------------------------
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTripletexTransientError(err) {
+  const msg = String(err?.message || "").toLowerCase();
+  const data = String(err?.response?.data || "").toLowerCase();
+
+  // typiske midlertidige feil / gateway-feil / nettverk
+  if (
+    msg.includes("502") ||
+    msg.includes("bad gateway") ||
+    msg.includes("timeout") ||
+    msg.includes("econnreset") ||
+    msg.includes("etimedout") ||
+    msg.includes("eai_again")
+  ) {
+    return true;
+  }
+
+  // noen ganger kommer HTML fra reverse proxy i stedet for JSON
+  if (data.includes("<html") || data.includes("bad gateway") || data.includes("502")) {
+    return true;
+  }
+
+  // defensivt: hvis Tripletex-klienten vår ender opp med "ugyldig JSON"
+  // pga HTML/feilside, håndter det som transient og prøv igjen.
+  if (msg.includes("ugyldig json") || (msg.includes("parse") && msg.includes("json"))) {
+    return true;
+  }
+
+  return false;
+}
+
+async function withRetry(fn, opts = {}) {
+  const retries = Number.isFinite(opts.retries) ? opts.retries : 2;
+  const baseDelayMs = Number.isFinite(opts.baseDelayMs) ? opts.baseDelayMs : 800;
+  const tag = opts.tag || "";
+
+  let lastErr = null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+
+      const transient = isTripletexTransientError(e);
+      console.warn(
+        "[TRIPLETEX_RETRY]",
+        tag,
+        `attempt ${attempt + 1}/${retries + 1}`,
+        "transient=",
+        transient,
+        "err=",
+        e?.message || String(e)
+      );
+
+      if (!transient || attempt === retries) throw e;
+
+      // enkel eksponentiell backoff
+      await sleep(baseDelayMs * Math.pow(2, attempt));
+    }
+  }
+
+  throw lastErr;
+}
+
+// =====================================================
+// Tripletex side effects – sync + approve (asynkron, idempotent)
+// =====================================================
+async function processTripletexForOrder(orderId, newStatus, opts = {}) {
+  const tag = opts.tag || `orderId=${orderId}`;
+  try {
+    const orderAfter = findOrder(orderId);
+    if (!orderAfter) return { ok: false, skipped: true, reason: 'order_not_found' };
+
+    const isPaidStatus = newStatus === 'SALE' || newStatus === 'CAPTURED';
+    const isNotDropin = orderAfter.membershipKey !== 'DROPIN';
+
+    if (!isNotDropin) {
+      return { ok: true, skipped: true, reason: 'dropin' };
+    }
+
+    // ---------- A) SYNC TIL TRIPLETEX (kun ved betalt status, og kun én gang) ----------
+    if (isPaidStatus && !orderAfter.tripletexSynced) {
+      const allPlans = getPlans() || [];
+      const originalPlan =
+        allPlans.find(
+          (pl) =>
+            pl &&
+            (pl.id === orderAfter.membershipKey || pl.key === orderAfter.membershipKey)
+        ) || null;
+
+      if (!originalPlan) {
+        throw new Error(`plan_not_found membershipKey=${orderAfter.membershipKey}`);
+      }
+
+      // Bygg planobjekt som tripletexClient forventer
+      const planForTripletex = {
+        name: originalPlan.name || originalPlan.text || originalPlan.id || orderAfter.membershipKey,
+        amount: typeof originalPlan.amount === 'number' ? originalPlan.amount : Number(originalPlan.amount || 0),
+        tripletexProductId: originalPlan.tripletexProductId || originalPlan.tripletexproductid || originalPlan.tripletexId || originalPlan.tripletexid || null,
+      };
+
+      // Finn medlem-objekt (hvis vi har memberId), ellers fall tilbake til ordredata
+      const allMembers = getMembers() || [];
+      const memberObj =
+        (orderAfter.memberId && allMembers.find((m) => m.id === orderAfter.memberId)) || null;
+
+      const tripMember = {
+        id: memberObj?.id || orderAfter.memberId || null,
+        name: (memberObj?.name || orderAfter.name || orderAfter.email || '').trim(),
+        email: (memberObj?.email || orderAfter.email || '').trim(),
+        phone:
+          memberObj?.phoneFull ||
+          memberObj?.phone ||
+          orderAfter.phoneFull ||
+          normalizePhone(orderAfter.phone) ||
+          null,
+        address: memberObj?.address || orderAfter.address || null,
+        zip: memberObj?.zip || orderAfter.zip || null,
+        city: memberObj?.city || orderAfter.city || null,
+      };
+
+      const syncAttempts = Number(orderAfter.tripletexSyncAttempts || 0) + 1;
+      updateOrderStatus(orderId, orderAfter.status || newStatus, {
+        tripletexSyncAttempts: syncAttempts,
+        tripletexLastAttemptAt: new Date().toISOString(),
+        tripletexLastError: null,
+      });
+
+      const invoiceDate = firstDayOfNextMonth();
+
+      const tripResult = await withRetry(
+        () =>
+          syncMembershipToTripletex({
+            member: tripMember,
+            plan: planForTripletex,
+            invoiceDate,
+            orderId,
+          }),
+        { tag: `sync ${tag}` }
+      );
+
+      // Forsøk å hente en relevant "ordreId" fra svaret
+      const tripletexOrderId =
+        tripResult?.order?.id ||
+        tripResult?.invoice?.order?.id ||
+        tripResult?.subscription?.id ||
+        tripResult?.orderId ||
+        null;
+
+      updateOrderStatus(orderId, orderAfter.status || newStatus, {
+        tripletexSynced: true,
+        tripletexSyncedAt: new Date().toISOString(),
+        tripletexOrderId: tripletexOrderId || orderAfter.tripletexOrderId || null,
+        tripletexLastError: null,
+        tripletexLastErrorAt: null,
+      });
+
+      appendAccessLog(
+        `[${new Date().toISOString()}] TRIPLETEX_SYNC_OK orderId=${orderId} tripletexOrderId=${tripletexOrderId || '?'}\n`
+      );
+    }
+
+    // ---------- B) AUTOMATISK GODKJENNING AV ABONNEMENT ----------
+    const freshOrder = findOrder(orderId) || orderAfter;
+    if (
+      isPaidStatus &&
+      freshOrder.tripletexOrderId &&
+      !freshOrder.tripletexSubscriptionApproved
+    ) {
+      const approveAttempts = Number(freshOrder.tripletexApproveAttempts || 0) + 1;
+      updateOrderStatus(orderId, freshOrder.status || newStatus, {
+        tripletexApproveAttempts: approveAttempts,
+        tripletexApproveLastAttemptAt: new Date().toISOString(),
+        tripletexApproveLastError: null,
+      });
+
+      await withRetry(
+        () => approveSubscriptionInvoice(freshOrder.tripletexOrderId),
+        { tag: `approve ${tag}` }
+      );
+
+      updateOrderStatus(orderId, freshOrder.status || newStatus, {
+        tripletexSubscriptionApproved: true,
+        tripletexSubscriptionApprovedAt: new Date().toISOString(),
+        tripletexSubscriptionApproveError: null,
+        tripletexApproveLastError: null,
+      });
+
+      appendAccessLog(
+        `[${new Date().toISOString()}] TRIPLETEX_SUBSCRIPTION_APPROVED orderId=${orderId} tripletexOrderId=${freshOrder.tripletexOrderId}\n`
+      );
+    }
+
+    return { ok: true };
+  } catch (err) {
+    const msg = err?.message || String(err);
+
+    console.warn('[TRIPLETEX_SIDEFX_ERROR]', tag, msg);
+
+    // best effort: behold ordren, men logg feil så vi kan retry'e senere
+    try {
+      updateOrderStatus(orderId, newStatus, {
+        tripletexLastError: msg,
+        tripletexLastErrorAt: new Date().toISOString(),
+      });
+    } catch (_) {}
+
+    appendAccessLog(
+      `[${new Date().toISOString()}] TRIPLETEX_SIDEFX_ERROR orderId=${orderId} err=${msg}\n`
+    );
+
+    return { ok: false, error: msg };
+  }
+}
+
+async function runTripletexRetryPass(opts = {}) {
+  const maxToProcess = Number(opts.maxToProcess || 50);
+  const force = Boolean(opts.force);
+  const orders = getOrders() || [];
+  let processed = 0;
+  let ok = 0;
+  let failed = 0;
+  const details = [];
+
+  for (const o of orders) {
+    if (processed >= maxToProcess) break;
+    if (!o || !o.orderId) continue;
+    if (o.membershipKey === 'DROPIN') continue;
+
+    const status = o.status || '';
+    const isPaid = status === 'SALE' || status === 'CAPTURED';
+
+    const needsSync = isPaid && !o.tripletexSynced;
+    const needsApprove =
+      isPaid && o.tripletexOrderId && !o.tripletexSubscriptionApproved;
+
+    if (!force && !needsSync && !needsApprove) continue;
+
+    processed += 1;
+    const r = await processTripletexForOrder(o.orderId, status, { tag: `retry orderId=${o.orderId}` });
+    if (r.ok) ok += 1;
+    else failed += 1;
+    details.push({ orderId: o.orderId, ok: r.ok, error: r.error || null });
+  }
+
+  return { processed, ok, failed, details };
+}
+
+
+
+
+// -----------------------------------------------------
+
+// -----------------------------------------------------
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTripletexTransientError(err) {
+  const msg = String(err?.message || '').toLowerCase();
+  const data = String(err?.response?.data || '').toLowerCase();
+
+  // typiske midlertidige feil / gateway-feil / nettverk
+  if (
+    msg.includes('502') ||
+    msg.includes('bad gateway') ||
+    msg.includes('timeout') ||
+    msg.includes('econnreset') ||
+    msg.includes('etimedout') ||
+    msg.includes('eai_again')
+  ) {
+    return true;
+  }
+
+  // noen ganger kommer HTML fra reverse proxy i stedet for JSON
+  if (data.includes('<html') || data.includes('bad gateway') || data.includes('502')) {
+    return true;
+  }
+
+  // defensivt: hvis Tripletex-klienten vår ender opp med "ugyldig JSON"
+  // pga HTML/feilside, håndter det som transient og prøv igjen.
+  if (msg.includes('ugyldig json') || (msg.includes('parse') && msg.includes('json'))) {
+    return true;
+  }
+
+  return false;
+}
+
+async function withRetry(fn, opts = {}) {
+  const retries = Number.isFinite(opts.retries) ? opts.retries : 2;
+  const baseDelayMs = Number.isFinite(opts.baseDelayMs) ? opts.baseDelayMs : 800;
+  const tag = opts.tag || '';
+
+  let lastErr = null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+
+      const transient = isTripletexTransientError(e);
+      console.warn(
+        '[TRIPLETEX_RETRY]',
+        tag,
+        `attempt ${attempt + 1}/${retries + 1}`,
+        'transient=',
+        transient,
+        'err=',
+        e?.message || String(e)
+      );
+
+      if (!transient || attempt === retries) throw e;
+
+      // enkel eksponentiell backoff
+      await sleep(baseDelayMs * (2 ** attempt));
+    }
+  }
+
+  throw lastErr;
+}
 function firstDayOfNextMonth(fromDate = new Date()) {
   const year = fromDate.getFullYear();
   const month = fromDate.getMonth(); // 0–11
@@ -2704,149 +3041,20 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         });
       }
 
-// 4.3) Tripletex-sync + automatisk godkjenning av abonnement
-try {
-  const orderAfter = findOrder(orderId);
-  if (!orderAfter) return;
-
-  const isPaidStatus =
-    newStatus === 'SALE' || newStatus === 'CAPTURED';
-
-  const isNotDropin = orderAfter.membershipKey !== 'DROPIN';
-
-  // ---------- A) SYNC TIL TRIPLETEX (kun én gang) ----------
-  if (
-    isNotDropin &&
-    !orderAfter.tripletexSynced &&
-    isPaidStatus
-  ) {
-    // Finn plan
-    const allPlans = getPlans() || [];
-    let originalPlan = null;
-    let planForTripletex = null;
-
-    if (allPlans.length) {
-      originalPlan = allPlans.find(
-        (pl) =>
-          pl &&
-          (pl.id === orderAfter.membershipKey ||
-            pl.key === orderAfter.membershipKey)
-      );
-
-      if (originalPlan && typeof originalPlan.amount === 'number') {
-        planForTripletex = {
-          name:
-            originalPlan.name ||
-            originalPlan.text ||
-            orderAfter.membershipKey,
-          amount: originalPlan.amount,
-          tripletexProductId: originalPlan.tripletexProductId || null,
-        };
-      }
-    }
-
-    // Fallback (kun hvis plans.json mangler)
-    if (!planForTripletex) {
-      const fallbackMap = {
-        LALM_IL_BINDING: { name: 'Lalm IL-medlem - 12 mnd binding', amount: 34900 },
-        STANDARD_BINDING: { name: 'Standard - 12 mnd binding', amount: 44900 },
-        HYTTE_BINDING: { name: 'Hyttemedlemskap - 12 mnd binding', amount: 16900 },
-        LALM_IL_UBIND: { name: 'Lalm IL-medlem – uten binding', amount: 44900 },
-        STANDARD_UBIND: { name: 'Standard – uten binding', amount: 54900 },
-        Test_3kr: {
-          name: 'TEST – 3 kr',
-          amount: orderAfter.fullMonthAmount || orderAfter.amount,
-        },
-      };
-
-      if (fallbackMap[orderAfter.membershipKey]) {
-        planForTripletex = fallbackMap[orderAfter.membershipKey];
-      }
-    }
-
-    if (planForTripletex) {
-      // Finn medlem
-      const allMembers = getMembers();
-      const memberObj =
-        (orderAfter.memberId &&
-          allMembers.find((m) => m.id === orderAfter.memberId)) ||
-        null;
-
-      const tripMember = memberObj || {
-        name: orderAfter.name || '',
-        email: orderAfter.email || null,
-        phone:
-          orderAfter.phoneFull ||
-          normalizePhone(orderAfter.phone) ||
-          null,
-      };
-
-      const invoiceDate = firstDayOfNextMonth();
-
-      const tripResult = await syncMembershipToTripletex({
-        member: tripMember,
-        plan: planForTripletex,
-        invoiceDate,
+// 4.3) Tripletex-sync + automatisk godkjenning av abonnement (asynkron – ikke blokkér Vipps-callback)
+      setImmediate(() => {
+        processTripletexForOrder(orderId, newStatus, { tag: `vipps-callback orderId=${orderId}` })
+          .catch((e) => {
+            const msg = e?.message || String(e);
+            console.warn('[TRIPLETEX_SIDEFX_UNHANDLED]', orderId, msg);
+            appendAccessLog(
+              `[${new Date().toISOString()}] TRIPLETEX_SIDEFX_UNHANDLED orderId=${orderId} err=${msg}
+`
+            );
+          });
       });
 
-      updateOrderStatus(orderId, orderAfter.status || newStatus, {
-        tripletexSynced: true,
-        tripletexCustomerId: tripResult.customer?.id || null,
-        tripletexOrderId: tripResult.order?.id || null,
-        tripletexSyncedAt: new Date().toISOString(),
-      });
-
-      appendAccessLog(
-        `[${new Date().toISOString()}] TRIPLETEX_SYNC_OK orderId=${orderId} tripletexOrderId=${tripResult.order?.id || '?'}\n`
-      );
-    }
-  }
-
-  // ---------- B) AUTOMATISK GODKJENNING AV ABONNEMENT ----------
-  if (
-    isNotDropin &&
-    isPaidStatus &&
-    orderAfter.tripletexOrderId &&
-    !orderAfter.tripletexSubscriptionApproved
-  ) {
-    try {
-      await approveSubscriptionInvoice(orderAfter.tripletexOrderId);
-
-      updateOrderStatus(orderId, orderAfter.status || newStatus, {
-        tripletexSubscriptionApproved: true,
-        tripletexSubscriptionApprovedAt: new Date().toISOString(),
-      });
-
-      appendAccessLog(
-        `[${new Date().toISOString()}] TRIPLETEX_SUBSCRIPTION_APPROVED orderId=${orderId} tripletexOrderId=${orderAfter.tripletexOrderId}\n`
-      );
-    } catch (err) {
-      const msg = err?.message || String(err);
-
-      updateOrderStatus(orderId, orderAfter.status || newStatus, {
-        tripletexSubscriptionApproveError: msg,
-      });
-
-      console.warn(
-        '[TRIPLETEX_SUBSCRIPTION_APPROVE_ERROR]',
-        orderId,
-        msg
-      );
-
-      appendAccessLog(
-        `[${new Date().toISOString()}] TRIPLETEX_SUBSCRIPTION_APPROVE_ERROR orderId=${orderId} tripletexOrderId=${orderAfter.tripletexOrderId} err=${msg}\n`
-      );
-    }
-  }
-} catch (e) {
-  console.error('[TRIPLETEX_4.3_ERROR] orderId', orderId, e.message);
-  appendAccessLog(
-    `[${new Date().toISOString()}] TRIPLETEX_4.3_ERROR orderId=${orderId} err=${e.message}\n`
-  );
-}
-
-
-      // 4.4) Send velkommen-SMS én gang (ikke for DROPIN)
+// 4.4) Send velkommen-SMS én gang (ikke for DROPIN)
       try {
         const orderAfter = findOrder(orderId);
 
@@ -3158,6 +3366,55 @@ app.get('/internal/backup/status', (req, res) => {
   const status = readJsonSafe(BACKUP_STATUS_FILE, null);
   return res.json({ ok: true, status });
 });
+
+// =====================================================
+// Internal Tripletex retry endpoint + optional scheduler
+// =====================================================
+function requireTripletexAuth(req) {
+  const secret = process.env.TRIPLETEX_CRON_SECRET || '';
+  const got = req.headers['x-tripletex-secret'] || '';
+  return secret && got && String(secret) === String(got);
+}
+
+app.post('/internal/tripletex/retry', async (req, res) => {
+  if (!requireTripletexAuth(req)) {
+    return res.status(401).json({ ok: false, error: 'unauthorized' });
+  }
+
+  const maxToProcess = Number(req.query.max || req.body?.max || 50);
+  const force = String(req.query.force || req.body?.force || 'false') === 'true';
+
+  try {
+    const r = await runTripletexRetryPass({ maxToProcess, force });
+    return res.json({ ok: true, ...r });
+  } catch (e) {
+    const msg = e?.message || String(e);
+    appendAccessLog(
+      `[${new Date().toISOString()}] TRIPLETEX_RETRY_ENDPOINT_ERROR err=${msg}
+`
+    );
+    return res.status(500).json({ ok: false, error: 'retry_failed', detail: msg });
+  }
+});
+
+// Optional: run a retry pass periodically (useful if Render Cron is not available).
+// Enable by setting TRIPLETEX_RETRY_INTERVAL_MINUTES (e.g. 5).
+const TRIPLETEX_RETRY_INTERVAL_MINUTES = Number(process.env.TRIPLETEX_RETRY_INTERVAL_MINUTES || 0);
+if (TRIPLETEX_RETRY_INTERVAL_MINUTES > 0) {
+  const ms = Math.max(1, TRIPLETEX_RETRY_INTERVAL_MINUTES) * 60 * 1000;
+  console.log(`[TRIPLETEX] Retry scheduler enabled: every ${TRIPLETEX_RETRY_INTERVAL_MINUTES} min`);
+  setInterval(async () => {
+    try {
+      const r = await runTripletexRetryPass({ maxToProcess: 30, force: false });
+      if (r.failed > 0) {
+        console.warn('[TRIPLETEX] retry pass completed with failures', r.failed);
+      }
+    } catch (e) {
+      console.warn('[TRIPLETEX] retry pass error', e?.message || String(e));
+    }
+  }, ms);
+}
+
 
 
 // ----------------------------
