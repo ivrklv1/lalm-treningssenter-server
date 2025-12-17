@@ -2228,6 +2228,32 @@ if (src === 'web') {
       `[${new Date().toISOString()}] VIPPS_AMOUNT_CALC orderId=${orderId} membershipKey=${membershipKey} full=${selected.amount} firstMonth=${firstMonthTrainingAmount} signupFee=${SIGNUP_FEE} final=${finalAmount} shortOrDropin=${isShortOrDropin}\n`
     );
 
+    // Sikkerhet: Vipps krever minst 1 kr (100 øre)
+    if (finalAmount < 100) {
+      console.warn(
+        'finalAmount < 100, justerer opp til 100. membershipKey=',
+        membershipKey,
+        'beregnet=',
+        finalAmount
+      );
+      finalAmount = 100;
+    }
+
+    console.log('VIPPS BELØP', {
+      membershipKey,
+      selectedAmount: selected.amount,
+      firstMonthTrainingAmount,
+      SIGNUP_FEE,
+      finalAmount,
+    });
+    appendAccessLog(
+      `[${new Date().toISOString()}] VIPPS_AMOUNT_CALC orderId=${orderId} membershipKey=${membershipKey} full=${selected.amount} firstMonth=${firstMonthTrainingAmount} signupFee=${SIGNUP_FEE} final=${finalAmount}\n`
+    );
+
+    const apiBase =
+      process.env.VIPPS_ENV === 'test'
+        ? 'https://apitest.vipps.no'
+        : 'https://api.vipps.no';
 
     // 8) Hent access token (eCom)
     const tokenRes = await axios.post(
