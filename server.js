@@ -2111,6 +2111,18 @@ if (src === 'web') {
       });
     }
 
+    const isTestPlan =
+      selected?.id === 'TEST_1KR' ||
+     selected?.key === 'TEST_1KR' ||
+     String(selected?.id || selected?.key || '').toUpperCase().startsWith('TEST_');
+
+    if (isTestPlan) {
+     selected.prorate = false;
+     // sett riktig felt for innmeldingsavgift til 0:
+      selected.signupFee = 0;      // hvis dere bruker signupFee
+    }
+
+
     // 4) Telefon-normalisering
     const phoneFull = normalizePhone(phone); // f.eks. +4790000000
     if (!phoneFull) {
