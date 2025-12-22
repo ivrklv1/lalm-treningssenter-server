@@ -1982,7 +1982,6 @@ app.post('/vipps/checkout', async (req, res) => {
     `[${ts}] VIPPS_CHECKOUT_REQUEST body=${JSON.stringify(req.body)}\n`
   );
 
-
     try {
     // HENT UT BEGGE FELT
     let {
@@ -1996,21 +1995,6 @@ app.post('/vipps/checkout', async (req, res) => {
       lastName
     } = req.body || {};
 
-    // 🔧 fallback: app sender membershipId
-    if (!membershipKey && membershipId) {
-      membershipKey = membershipId;
-    }
-
-    // -------------------------------------------------
-    // Validering: drop-in og korttid krever IKKE e-post
-    // -------------------------------------------------
-     if (!membershipKey || !phone) {
-      return res.status(400).json({
-        ok: false,
-        error: 'membershipKey_phone_required',
-     });
-    }
-
     // Bygg navn hvis web ikke sender "name"
     if (!name || !String(name).trim()) {
      const builtName = `${firstName || ''} ${lastName || ''}`.trim();
@@ -2019,21 +2003,24 @@ app.post('/vipps/checkout', async (req, res) => {
       }
     }
 
-    // TILLAT AT APPEN SENDER membershipId I STEDET FOR membershipKey
-    if (!membershipKey && membershipId) {
-      membershipKey = membershipId;
+// Normaliser nøkkelen (appen/web kan sende ulike varianter)
+    if (membershipKey != null) membershipKey = String(membershipKey).trim();
+    if (membershipId != null && (!membershipKey || !String(membershipKey).trim())) {
+      membershipKey = String(membershipId).trim();
     }
 
-    // E-post er påkrevd for alle andre enn DROPIN
-    if (!membershipKey || !phone || (!email && membershipKey !== 'DROPIN')) {
+    // Validering: vi krever IKKE e-post for drop-in/korttid (og i praksis ikke i checkout)
+    // Krav: membershipKey + phone må finnes for å kunne knytte kjøpet til et nummer
+    const phoneClean = String(phone || '').trim();
+    if (!membershipKey || !String(membershipKey).trim() || !phoneClean) {
       return res.status(400).json({
         ok: false,
-        error:
-          membershipKey === 'DROPIN'
-            ? 'membershipKey_phone_required'
-            : 'membershipKey_phone_email_required',
+        error: 'membershipKey_phone_required',
       });
     }
+
+    // bruk renset telefon videre
+    phone = phoneClean;
 
 // 1) Lag orderId
 const orderId = 'ORDER-' + Date.now();
