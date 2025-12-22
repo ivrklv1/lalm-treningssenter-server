@@ -166,6 +166,63 @@ function normalizePhone(raw) {
 }
 
 // ----------------------------
+// Tilgangslogikk: "aktiv" + ev. utløpsdato (validUntil)
+// - For ordinære medlemskap: ingen validUntil (uendelig til oppsigelse/deaktivering)
+// - For korttid/drop-in: validUntil settes ved betaling og sjekkes ved login/døråpning/checkout
+// ----------------------------
+function isValidUntilOk(memberOrOrder) {
+  try {
+    const vu = memberOrOrder?.validUntil || memberOrOrder?.expiresAt || null;
+    if (!vu) return true;
+    const d = new Date(vu);
+    if (Number.isNaN(d.getTime())) return true;
+    return new Date() <= d;
+  } catch (e) {
+    return true;
+  }
+}
+
+function getPlanMeta(membershipKey) {
+  try {
+    const plans = getPlans();
+    if (!plans || !Array.isArray(plans)) return null;
+    const p = plans.find((x) => x && (x.id === membershipKey || x.key === membershipKey));
+    if (!p) return null;
+    return {
+      type: p.type || null,
+      shortTermDays: Number(p.shortTermDays || 0) || 0,
+      name: p.name || p.text || p.id || membershipKey,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function computeValidUntilForPurchase(membershipKey) {
+  const now = new Date();
+
+  // Drop-in: gyldig ut dagen (23:59:59)
+  if (membershipKey === 'DROPIN') {
+    const vu = new Date(now);
+    vu.setHours(23, 59, 59, 999);
+    return vu.toISOString();
+  }
+
+  const meta = getPlanMeta(membershipKey);
+  const days = meta?.shortTermDays || 0;
+
+  // Korttid: hvis shortTermDays > 0 → gyldig X dager, ut siste dag kl 23:59:59
+  if (days > 0) {
+    const vu = new Date(now);
+    vu.setDate(vu.getDate() + (days - 1));
+    vu.setHours(23, 59, 59, 999);
+    return vu.toISOString();
+  }
+
+  return null; // ordinært medlemskap
+}
+
+// ----------------------------
 // Apple testbruker (for App Review)
 // ----------------------------
 const APPLE_TEST_PHONE = process.env.APPLE_TEST_PHONE || '+4799999999'; // legg inn ditt nr i .env
@@ -1732,7 +1789,7 @@ app.post('/door/open', openingHoursGuard, async (req, res) => {
     let member = null;
     if (phone || email) {
       member = findMemberByPhoneOrEmail(phone || null, email || null);
-      if (member && !member.active) {
+      if (member && (!member.active || !isValidUntilOk(member))) {
         member = null;
       }
     }
@@ -1903,7 +1960,7 @@ app.post('/auth/verify-code', async (req, res) => {
 
     const members = getMembers();
     const member = members.find(
-      m => normalizePhone(m.phone) === phoneNormalized && m.active,
+      (m) => normalizePhone(m.phone) === phoneNormalized && m.active && isValidUntilOk(m)
     );
 
     if (member) {
@@ -1914,6 +1971,7 @@ app.post('/auth/verify-code', async (req, res) => {
           email: member.email,
           name: member.name || '',
           phone: phoneNormalized,
+          validUntil: member.validUntil || null,
         },
       });
     }
@@ -2136,7 +2194,7 @@ if (src === 'web') {
 
     // 5) Sjekk om det finnes aktivt medlem med samme tlf/e-post
     const existingMember = findMemberByPhoneOrEmail(phoneFull, email);
-    if (existingMember && existingMember.active) {
+    if (existingMember && existingMember.active && isValidUntilOk(existingMember)) {
       appendAccessLog(
         `[${new Date().toISOString()}] VIPPS_CHECKOUT_BLOCKED_EXISTING_MEMBER phone=${phoneFull} email=${(email || '').toLowerCase()} memberId=${existingMember.id}\n`
       );
@@ -2999,12 +3057,16 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         }
       }
 
-      // 4.2) Opprett / gjenbruk medlem hvis ingen match bare på telefon
-      if (!memberId && updatedOrder.email) {
+      // 4.2) Opprett / gjenbruk medlem hvis ingen match bare på telefon (inkl. drop-in/korttid uten e-post)
+      if (!memberId) {
         // Sjekk en ekstra gang: finnes medlem via e-post / telefon?
+        const placeholderEmail = (updatedOrder.email && String(updatedOrder.email).trim())
+          ? String(updatedOrder.email).trim().toLowerCase()
+          : `temp-${String(updatedOrder.phone || updatedOrder.phoneFull || '').replace(/\D/g,'') || Date.now()}@lalmtreningssenter.no`;
+
         const existingByEmailOrPhone = findMemberByPhoneOrEmail(
           updatedOrder.phoneFull || updatedOrder.phone,
-          updatedOrder.email
+          placeholderEmail
         );
 
         if (existingByEmailOrPhone) {
@@ -3013,6 +3075,18 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           existingByEmailOrPhone.plan =
             updatedOrder.membershipKey || existingByEmailOrPhone.plan || null;
           existingByEmailOrPhone.updatedAt = new Date().toISOString();
+
+          // Sett / oppdater validUntil for drop-in/korttid
+          const vu = computeValidUntilForPurchase(updatedOrder.membershipKey || existingByEmailOrPhone.plan);
+          if (vu) {
+            existingByEmailOrPhone.validUntil = vu;
+          } else {
+            // Ordinært medlemskap: fjern evt. gammel validUntil
+            if (existingByEmailOrPhone.validUntil) delete existingByEmailOrPhone.validUntil;
+          }
+
+          // Sørg for at medlemmet har e-post-streng (app forventer gjerne string)
+          if (!existingByEmailOrPhone.email) existingByEmailOrPhone.email = placeholderEmail;
 
           memberId = existingByEmailOrPhone.id || null;
           membersChanged = true;
@@ -3027,8 +3101,8 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           )}`;
           const newMember = {
             id: newMemberId,
-            email: updatedOrder.email,
-            name: updatedOrder.name || updatedOrder.email,
+            email: placeholderEmail,
+            name: updatedOrder.name || placeholderEmail,
             phone:
               updatedOrder.phoneFull || normalizePhone(updatedOrder.phone),
             active: true,
@@ -3036,6 +3110,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
             clubMember: false,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
+            validUntil: computeValidUntilForPurchase(updatedOrder.membershipKey) || null,
           };
 
           members.push(newMember);
