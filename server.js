@@ -1996,6 +1996,11 @@ app.post('/vipps/checkout', async (req, res) => {
       lastName
     } = req.body || {};
 
+    // 🔧 fallback: app sender membershipId
+    if (!membershipKey && membershipId) {
+      membershipKey = membershipId;
+    }
+
     // -------------------------------------------------
     // Validering: drop-in og korttid krever IKKE e-post
     // -------------------------------------------------
