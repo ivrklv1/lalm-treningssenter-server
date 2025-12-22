@@ -200,9 +200,10 @@ function getPlanMeta(membershipKey) {
 
 function computeValidUntilForPurchase(membershipKey) {
   const now = new Date();
+  const key = String(membershipKey || '').trim().toLowerCase();
 
-  // Drop-in: gyldig ut dagen (23:59:59)
-  if (membershipKey === 'DROPIN') {
+  // Drop-in: gyldig ut dagen
+  if (key === 'dropin') {
     const vu = new Date(now);
     vu.setHours(23, 59, 59, 999);
     return vu.toISOString();
@@ -211,7 +212,7 @@ function computeValidUntilForPurchase(membershipKey) {
   const meta = getPlanMeta(membershipKey);
   const days = meta?.shortTermDays || 0;
 
-  // Korttid: hvis shortTermDays > 0 → gyldig X dager, ut siste dag kl 23:59:59
+  // Korttid: X dager, ut siste dag kl 23:59:59
   if (days > 0) {
     const vu = new Date(now);
     vu.setDate(vu.getDate() + (days - 1));
@@ -219,8 +220,11 @@ function computeValidUntilForPurchase(membershipKey) {
     return vu.toISOString();
   }
 
-  return null; // ordinært medlemskap
+  // Ordinært medlemskap
+  return null;
 }
+
+
 
 // ----------------------------
 // Apple testbruker (for App Review)
@@ -3057,91 +3061,111 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         }
       }
 
-      // 4.2) Opprett / gjenbruk medlem hvis ingen match bare på telefon (inkl. drop-in/korttid uten e-post)
+      // 4.2) Opprett / gjenbruk medlem (match på telefon først, deretter e-post)
+      //      - Drop-in/korttid uten e-post støttes (placeholder e-post)
+      //      - validUntil settes for drop-in/korttid, fjernes for ordinære medlemskap
       if (!memberId) {
-        // Sjekk en ekstra gang: finnes medlem via e-post / telefon?
-        const placeholderEmail = (updatedOrder.email && String(updatedOrder.email).trim())
-          ? String(updatedOrder.email).trim().toLowerCase()
-          : `temp-${String(updatedOrder.phone || updatedOrder.phoneFull || '').replace(/\D/g,'') || Date.now()}@lalmtreningssenter.no`;
+        const phoneRaw = updatedOrder.phoneFull || updatedOrder.phone || '';
+        const phoneNormalized = normalizePhone(phoneRaw);
 
-        const existingByEmailOrPhone = findMemberByPhoneOrEmail(
-          updatedOrder.phoneFull || updatedOrder.phone,
-          placeholderEmail
-        );
+        const planKeyRaw =
+          updatedOrder.membershipKey ||
+          updatedOrder.membershipId ||
+          updatedOrder.plan ||
+          null;
 
-        if (existingByEmailOrPhone) {
-          // Gjenbruk eksisterende medlem
-          existingByEmailOrPhone.active = true;
-          existingByEmailOrPhone.plan =
-            updatedOrder.membershipKey || existingByEmailOrPhone.plan || null;
-          existingByEmailOrPhone.updatedAt = new Date().toISOString();
+        const planKey = String(planKeyRaw || '').trim();
+        const planKeyLower = planKey.toLowerCase();
 
-          // Sett / oppdater validUntil for drop-in/korttid
-          const vu = computeValidUntilForPurchase(updatedOrder.membershipKey || existingByEmailOrPhone.plan);
-          if (vu) {
-            existingByEmailOrPhone.validUntil = vu;
+        const placeholderEmail =
+          (updatedOrder.email && String(updatedOrder.email).trim())
+            ? String(updatedOrder.email).trim().toLowerCase()
+            : `temp-${String(phoneRaw).replace(/\D/g, '') || Date.now()}@lalmtreningssenter.no`;
+
+       // 1) Finn eksisterende medlem: primært telefon, sekundært e-post
+       //    (for drop-in/korttid kan e-post være placeholder)
+        const existing =
+          findMemberByPhoneOrEmail(phoneNormalized, null) ||
+          findMemberByPhoneOrEmail(null, placeholderEmail);
+
+        const computedValidUntil = computeValidUntilForPurchase(planKey);
+
+        if (existing) {
+         // --- Gjenbruk eksisterende ---
+         existing.active = true;
+         existing.updatedAt = new Date().toISOString();
+
+         // Oppdater plan (men ikke ødelegg hvis planKey mangler)
+         if (planKey) {
+           existing.plan = planKeyLower;
+         } else if (!existing.plan) {
+           existing.plan = null;
+         }
+
+          // Sett validUntil for drop-in/korttid, ellers fjern
+          if (computedValidUntil) {
+            existing.validUntil = computedValidUntil;
           } else {
-            // Ordinært medlemskap: fjern evt. gammel validUntil
-            if (existingByEmailOrPhone.validUntil) delete existingByEmailOrPhone.validUntil;
-          }
+            if (existing.validUntil) delete existing.validUntil;
+         }
 
-          // Sørg for at medlemmet har e-post-streng (app forventer gjerne string)
-          if (!existingByEmailOrPhone.email) existingByEmailOrPhone.email = placeholderEmail;
+          // Sørg for at email finnes som streng (app forventer ofte string)
+          if (!existing.email) existing.email = placeholderEmail;
 
-          memberId = existingByEmailOrPhone.id || null;
+          // Sørg for at phone finnes i normalisert form
+          if (!existing.phone && phoneNormalized) existing.phone = phoneNormalized;
+
+         memberId = existing.id || null;
           membersChanged = true;
 
           appendAccessLog(
-            `[${new Date().toISOString()}] VIPPS_REUSED_MEMBER orderId=${orderId} memberId=${memberId} email=${updatedOrder.email}\n`
-          );
+            `[${new Date().toISOString()}] VIPPS_REUSED_MEMBER orderId=${orderId} memberId=${memberId} plan=${existing.plan} validUntil=${existing.validUntil || 'null'}\n`
+         );
         } else {
-          // Ingen match → opprett nytt medlem
-          const newMemberId = `mem_${Date.now()}_${Math.floor(
-            Math.random() * 100000
-          )}`;
-          const newMember = {
-            id: newMemberId,
-            email: placeholderEmail,
-            name: updatedOrder.name || placeholderEmail,
-            phone:
-              updatedOrder.phoneFull || normalizePhone(updatedOrder.phone),
-            active: true,
-            plan: updatedOrder.membershipKey || null,
-            clubMember: false,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            validUntil: computeValidUntilForPurchase(updatedOrder.membershipKey) || null,
-          };
+          // --- Opprett nytt medlem ---
+          const newMemberId = `mem_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 
-          members.push(newMember);
-          membersChanged = true;
-          memberId = newMemberId;
+         const newMember = {
+           id: newMemberId,
+           email: placeholderEmail,
+           name: updatedOrder.name || '',
+           phone: phoneNormalized,
+           active: true,
+           plan: planKey ? planKeyLower : null,
+           clubMember: false,
+           createdAt: new Date().toISOString(),
+           updatedAt: new Date().toISOString(),
+         };
 
-          appendAccessLog(
-            `[${new Date().toISOString()}] VIPPS_CREATED_MEMBER orderId=${orderId} email=${newMember.email}\n`
-          );
-        }
+         // validUntil: kun drop-in/korttid
+         if (computedValidUntil) {
+           newMember.validUntil = computedValidUntil;
+         }
+
+         members.push(newMember);
+         membersChanged = true;
+         memberId = newMemberId;
+
+         appendAccessLog(
+            `[${new Date().toISOString()}] VIPPS_CREATED_MEMBER orderId=${orderId} memberId=${memberId} plan=${newMember.plan} validUntil=${newMember.validUntil || 'null'}\n`
+         );
+       }
       }
 
+      // Persistér kun hvis endringer
       if (membersChanged) {
-        saveMembers(members);
-        appendAccessLog(
-          `[${new Date().toISOString()}] VIPPS_ACTIVATED orderId=${orderId} phone=${phoneDigits} memberId=${memberId}\n`
-        );
+       saveMembers(members);
+       appendAccessLog(
+         `[${new Date().toISOString()}] VIPPS_ACTIVATED orderId=${orderId} memberId=${memberId}\n`
+       );
       } else {
-        appendAccessLog(
-          `[${new Date().toISOString()}] VIPPS_NO_MATCH orderId=${orderId} phone=${phoneDigits}\n`
-        );
+       appendAccessLog(
+         `[${new Date().toISOString()}] VIPPS_NO_MEMBER_CHANGE orderId=${orderId}\n`
+       );
       }
 
-      if (!updatedOrder.processedAt) {
-        updateOrderStatus(orderId, newStatus, {
-          memberId: memberId || updatedOrder.memberId || null,
-          processedAt: new Date().toISOString(),
-        });
-      }
 
-// 4.3) Tripletex-sync + automatisk godkjenning av abonnement (asynkron – ikke blokkér Vipps-callback)
+      // 4.3) Tripletex-sync + automatisk godkjenning av abonnement (asynkron – ikke blokkér Vipps-callback)
       setImmediate(() => {
         processTripletexForOrder(orderId, newStatus, { tag: `vipps-callback orderId=${orderId}` })
           .catch((e) => {
@@ -3154,7 +3178,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           });
       });
 
-// 4.4) Send velkommen-SMS én gang (ikke for DROPIN)
+      // 4.4) Send velkommen-SMS én gang (ikke for DROPIN)
       try {
         const orderAfter = findOrder(orderId);
 
