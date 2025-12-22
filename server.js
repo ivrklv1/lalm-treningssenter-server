@@ -1982,6 +1982,7 @@ app.post('/vipps/checkout', async (req, res) => {
     `[${ts}] VIPPS_CHECKOUT_REQUEST body=${JSON.stringify(req.body)}\n`
   );
 
+
     try {
     // HENT UT BEGGE FELT
     let {
@@ -1994,6 +1995,16 @@ app.post('/vipps/checkout', async (req, res) => {
      firstName,
       lastName
     } = req.body || {};
+
+    // -------------------------------------------------
+    // Validering: drop-in og korttid krever IKKE e-post
+    // -------------------------------------------------
+     if (!membershipKey || !phone) {
+      return res.status(400).json({
+        ok: false,
+        error: 'membershipKey_phone_required',
+     });
+    }
 
     // Bygg navn hvis web ikke sender "name"
     if (!name || !String(name).trim()) {
