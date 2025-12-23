@@ -833,16 +833,60 @@ async function sendWelcomeMembershipSms(order, member) {
 
     const greeting = firstName ? `Hei ${firstName}!` : 'Hei!';
 
-    const message =
-      `${greeting} Velkommen som medlem hos Lalm Treningssenter! 🎉\n` +
-      `Medlemskapet ditt er nå aktivt.\n` +
-      `Last ned appen for å få tilgang til treningssenteret.\n` +
-      `Gi oss beskjed hvis du trenger hjelp – God trening! 💪`;
+    // Plan-key (bruk member.plan først, så order.membershipKey)
+    const planKey = String(member?.plan || order?.membershipKey || '')
+      .trim()
+      .toLowerCase();
+
+    // Hent meta for å vite om det er korttid (shortTermDays)
+    const meta = getPlanMeta(member?.plan || order?.membershipKey);
+    const shortDays = Number(meta?.shortTermDays || 0);
+
+    // Gyldig-til-dato (Oslo) hvis vi har validUntil
+    const validUntilOslo = member?.validUntil
+      ? new Date(member.validUntil).toLocaleDateString('nb-NO', { timeZone: 'Europe/Oslo' })
+      : null;
+
+    // Felles: innloggingstekst (uten å endre den ordinære teksten for mye)
+    const loginLine = `Logg inn i appen med telefonnummeret ditt og SMS-koden du får ved innlogging.`;
+
+    let message = '';
+
+    // -------- DROP-IN --------
+    if (planKey === 'dropin') {
+      message =
+        `${greeting}\n` +
+        `Drop-in er nå aktiv hos Lalm Treningssenter.\n` +
+        `Gyldig i dag innen åpningstid (05–23).\n` +
+        `${loginLine}\n` +
+        `God trening! 💪`;
+    }
+    // -------- KORTTID (3 dagerpass / 7 dagerpass / osv.) --------
+    else if (shortDays > 0) {
+      const passText = `${shortDays} dagerpass`;
+      message =
+        `${greeting}\n` +
+        `Ditt ${passText} er nå aktivt hos Lalm Treningssenter.\n` +
+        (validUntilOslo
+          ? `Gyldig til og med ${validUntilOslo} innen åpningstid (05–23).\n`
+          : `Gyldig innen åpningstid (05–23).\n`) +
+        `${loginLine}\n` +
+        `God trening! 💪`;
+    }
+    // -------- ORDINÆRT MEDLEMSKAP (beholder teksten du liker) --------
+    else {
+      message =
+        `${greeting} Velkommen som medlem hos Lalm Treningssenter! 🎉\n` +
+        `Medlemskapet ditt er nå aktivt.\n` +
+        `Last ned appen for å få tilgang til treningssenteret.\n` +
+        `${loginLine}\n` +
+        `Gi oss beskjed hvis du trenger hjelp – God trening! 💪`;
+    }
 
     await sendSms(phoneNormalized, message);
 
     appendAccessLog(
-      `[${new Date().toISOString()}] WELCOME_SMS_SENT orderId=${order?.orderId} phone=${phoneNormalized}\n`
+      `[${new Date().toISOString()}] WELCOME_SMS_SENT orderId=${order?.orderId} phone=${phoneNormalized} plan=${planKey} shortDays=${shortDays}\n`
     );
   } catch (e) {
     console.error(
@@ -854,6 +898,7 @@ async function sendWelcomeMembershipSms(order, member) {
     );
   }
 }
+
 
 
 // ----------------------------
