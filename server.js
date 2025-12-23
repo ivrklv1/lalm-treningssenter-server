@@ -476,33 +476,8 @@ function normalizeName(name) {
     .trim();
 }
 
-function normalizePhone(raw) {
-  if (!raw) return '';
 
-  let p = String(raw).trim();
-
-  // Fjern mellomrom, bindestrek og parenteser
-  p = p.replace(/[\s\-()]/g, '');
-
-  // 00xx → +xx (f.eks. 0047 → +47)
-  if (p.startsWith('00')) {
-    p = '+' + p.slice(2);
-  }
-
-  // Hvis ikke + i starten, prøv å tolke som norsk nummer
-  if (!p.startsWith('+')) {
-    // 8 siffer → norsk nummer → legg til +47
-    if (p.length === 8 && /^\d{8}$/.test(p)) {
-      p = '+47' + p;
-    }
-    // 47 + 8 siffer → lag +47 + 8 siffer
-    else if (p.length === 10 && p.startsWith('47') && /^\d+$/.test(p)) {
-      p = '+' + p;
-    }
-  }
-
-  return p;
-}
+// (normalizePhone er definert tidligere i filen)
 
 // ----------------------------
 // Cookie-hjelp (enkelt)
@@ -1963,9 +1938,11 @@ app.post('/auth/verify-code', async (req, res) => {
     loginCodes.delete(phoneNormalized);
 
     const members = getMembers();
-    const member = members.find(
-      (m) => normalizePhone(m.phone) === phoneNormalized && m.active && isValidUntilOk(m)
-    );
+    const member = members.find((m) => {
+      const candidatePhone = m?.phone || m?.phoneFull || m?.mobile || null;
+      const mPhone = candidatePhone ? normalizePhone(candidatePhone) : null;
+      return mPhone === phoneNormalized && m?.active && isValidUntilOk(m);
+    });
 
     if (member) {
       return res.json({
@@ -2227,7 +2204,7 @@ if (src === 'web') {
       (selected.type === 'short_term') ||
       (selected.type === 'dropin') ||
       (selected.shortTermDays && selected.shortTermDays > 0) ||
-      membershipKey === 'DROPIN';
+      String(membershipKey || '').trim().toLowerCase() === 'dropin';
 
     let fraction = 1;
     let prorationLabel = '';
@@ -2648,9 +2625,10 @@ async function processTripletexForOrder(orderId, newStatus, opts = {}) {
     if (!orderAfter) return { ok: false, skipped: true, reason: 'order_not_found' };
 
     const isPaidStatus = newStatus === 'SALE' || newStatus === 'CAPTURED';
-    const isNotDropin = orderAfter.membershipKey !== 'DROPIN';
 
-    if (!isNotDropin) {
+    // Drop-in skal aldri synkes til Tripletex (case-insensitivt)
+    const keyLc = String(orderAfter.membershipKey || '').trim().toLowerCase();
+    if (keyLc === 'dropin') {
       return { ok: true, skipped: true, reason: 'dropin' };
     }
 
@@ -2822,7 +2800,7 @@ async function runTripletexRetryPass(opts = {}) {
   for (const o of orders) {
     if (processed >= maxToProcess) break;
     if (!o || !o.orderId) continue;
-    if (o.membershipKey === 'DROPIN') continue;
+    if (String(o.membershipKey || '').trim().toLowerCase() === 'dropin') continue;
 
     const status = o.status || '';
     const isPaid = status === 'SALE' || status === 'CAPTURED';
@@ -2993,10 +2971,11 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     // 3.1 AUTO-CAPTURE: hvis Vipps sier RESERVED/RESERVE → prøv å belaste
     if (['RESERVE', 'RESERVED'].includes(status)) {
       try {
-        const captureText =
-          existingOrder.membershipKey === 'DROPIN'
-            ? 'Drop-in adgang Lalm Treningssenter'
-            : 'Medlemskap Lalm Treningssenter';
+        const isDropinKey =
+          String(existingOrder.membershipKey || '').trim().toLowerCase() === 'dropin';
+        const captureText = isDropinKey
+          ? 'Drop-in adgang Lalm Treningssenter'
+          : 'Medlemskap Lalm Treningssenter';
 
         const amountInOre = existingOrder.amount; // samme som vi reserverte
 
@@ -3156,12 +3135,21 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       if (membersChanged) {
        saveMembers(members);
        appendAccessLog(
-         `[${new Date().toISOString()}] VIPPS_ACTIVATED orderId=${orderId} memberId=${memberId}\n`
+         `[${new Date().toISOString()}] VIPPS_ACTIVATED orderId=${orderId} memberId=${memberId}
+`
        );
       } else {
        appendAccessLog(
-         `[${new Date().toISOString()}] VIPPS_NO_MEMBER_CHANGE orderId=${orderId}\n`
+         `[${new Date().toISOString()}] VIPPS_NO_MEMBER_CHANGE orderId=${orderId}
+`
        );
+      }
+
+      // Knytt order -> memberId (nyttig for feilsøking og Tripletex)
+      if (memberId) {
+        try {
+          updateOrderStatus(orderId, newStatus, { memberId });
+        } catch (_) {}
       }
 
 
@@ -3184,7 +3172,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
 
         if (
           orderAfter &&
-          orderAfter.membershipKey !== 'DROPIN' && // ikke send SMS for drop-in
+          String(orderAfter.membershipKey || '').trim().toLowerCase() !== 'dropin' && // ikke send SMS for drop-in
           !orderAfter.welcomeSmsSent && // bare én gang
           (newStatus === 'SALE' || newStatus === 'CAPTURED') // kun når faktisk belastet
         ) {
