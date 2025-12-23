@@ -209,8 +209,16 @@ function computeValidUntilForPurchase(membershipKey) {
     return vu.toISOString();
   }
 
-  const meta = getPlanMeta(membershipKey);
-  const days = meta?.shortTermDays || 0;
+  const rawKey = member?.plan || order?.membershipKey || '';
+  const keyNorm = String(rawKey).trim().toLowerCase();
+
+  const meta = getPlanMeta(keyNorm) || getPlanMeta(rawKey); // prøv norm først
+  const shortDays = Number(meta?.shortTermDays || 0);
+
+  // Fallback: hvis vi har validUntil og det ikke er dropin, er det nesten sikkert korttid
+  const isDropin = keyNorm === 'dropin';
+  const isShortTerm = !isDropin && (shortDays > 0 || !!member?.validUntil);
+
 
   // Korttid: X dager, ut siste dag kl 23:59:59
   if (days > 0) {
@@ -862,8 +870,8 @@ async function sendWelcomeMembershipSms(order, member) {
         `God trening! 💪`;
     }
     // -------- KORTTID (3 dagerpass / 7 dagerpass / osv.) --------
-    else if (shortDays > 0) {
-      const passText = `${shortDays} dagerpass`;
+    else if (isShortTerm) {
+      const passText = shortDays > 0 ? `${shortDays} dagerpass` : 'korttidspass';
       message =
         `${greeting}\n` +
         `Ditt ${passText} er nå aktivt hos Lalm Treningssenter.\n` +
