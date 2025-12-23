@@ -198,34 +198,51 @@ function getPlanMeta(membershipKey) {
   }
 }
 
-function computeValidUntilForPurchase(membershipKey) {
-  const now = new Date();
-  const key = String(membershipKey || '').trim().toLowerCase();
-
-  // Drop-in: gyldig ut dagen (lokal tid på server)
-  if (key === 'dropin') {
-    const vu = new Date(now);
-    vu.setHours(23, 59, 59, 999);
-    return vu.toISOString();
-  }
-
-  // Korttid: slå opp antall dager via plan-meta (shortTermDays)
-  // getPlanMeta bør kunne finne plan basert på key (id/key)
-  const meta = getPlanMeta(key) || getPlanMeta(membershipKey);
-  const days = Number(meta?.shortTermDays || 0);
-
-  if (days > 0) {
-    const vu = new Date(now);
-    // Gyldig i N dager inkl. i dag => legg til (days - 1)
-    vu.setDate(vu.getDate() + (days - 1));
-    vu.setHours(23, 59, 59, 999);
-    return vu.toISOString();
-  }
-
-  // Ordinært medlemskap: ingen validUntil
-  return null;
+function nowInOslo() {
+  // Robust "nå" i Europe/Oslo uten ekstra biblioteker
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Oslo' }));
 }
 
+function endOfDayOslo(d) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+function addDaysOslo(d, days) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + Number(days || 0));
+  return x;
+}
+
+// planKey: f.eks. "DROPIN", "dropin", "korttid_3d", osv.
+function computeValidUntilForPurchase(planKey) {
+  const key = String(planKey || '').trim().toLowerCase();
+
+  // 1) Drop-in: gyldig ut dagen (Oslo)
+  if (key === 'dropin' || key === 'drop-in' || key === 'drop_in') {
+    const until = endOfDayOslo(nowInOslo());
+    return until.toISOString();
+  }
+
+  // 2) Korttid: leses fra plans.json via shortTermDays
+  const plans = getPlans() || [];
+  const plan = plans.find(
+    (p) =>
+      p &&
+      (String(p.id || '').trim().toLowerCase() === key ||
+        String(p.key || '').trim().toLowerCase() === key)
+  );
+
+  const shortTermDays = plan && Number(plan.shortTermDays || 0);
+  if (shortTermDays > 0) {
+    const until = endOfDayOslo(addDaysOslo(nowInOslo(), shortTermDays));
+    return until.toISOString();
+  }
+
+  // 3) Ordinære medlemskap: ingen validUntil (null/fjern)
+  return null;
+}
 
 
 
@@ -3087,19 +3104,54 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       let membersChanged = false;
       let memberId = updatedOrder.memberId || null;
 
-      // 4.1) Finn ved telefon
-      if (!memberId) {
-        for (const m of members) {
-          if (!m.phone) continue;
-          const memberPhoneDigits = normalizePhone(m.phone).replace(/\D/g, '');
-          if (memberPhoneDigits && memberPhoneDigits.endsWith(phoneDigits)) {
-            m.active = true;
-            m.plan = updatedOrder.membershipKey || m.plan || null;
-            m.updatedAt = new Date().toISOString();
-            membersChanged = true;
+      // --------------------------------------------------
+      // 4.1) Finn eksisterende medlem ved telefon (DROP-IN / KORTTID / ordinært)
+      // --------------------------------------------------
+      if (updatedOrder.phoneFull || updatedOrder.phone) {
+        const phone = updatedOrder.phoneFull || updatedOrder.phone;
 
-            memberId = m.id || null;
-          }
+        const m = findMemberByPhoneOrEmail(phone, null);
+
+        if (m) {
+          // Aktiver medlem
+          m.active = true;
+
+          // Normaliser plan (samme format uansett kilde)
+          m.plan = String(
+            updatedOrder.membershipKey ||
+            updatedOrder.membershipId ||
+            updatedOrder.plan ||
+            m.plan ||
+            ''
+          )
+            .trim()
+            .toLowerCase();
+
+          // Beregn validUntil for DROP-IN / korttid
+          const computedValidUntil = computeValidUntilForPurchase(m.plan);
+
+          if (computedValidUntil) {
+            // DROP-IN eller korttid
+           m.validUntil = computedValidUntil;
+          } else {
+           // Ordinært medlemskap → ingen tidsbegrensning
+           delete m.validUntil;
+         }
+
+          // Oppdater metadata
+          m.updatedAt = new Date().toISOString();
+
+          // Lagre
+          saveMembers(members);
+
+          console.log('[VIPPS] 4.1 eksisterende medlem oppdatert', {
+            phone,
+            plan: m.plan,
+            validUntil: m.validUntil || null,
+          });
+
+          // Viktig: stopp videre behandling (ikke kjør 4.2)
+          return res.json({ ok: true, handledBy: '4.1' });
         }
       }
 
