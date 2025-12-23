@@ -970,9 +970,12 @@ app.post('/admin/members/pause', basicAuth, async (req, res) => {
     }
 
     const members = getMembers();
-    const member = members.find(
-      (m) => (m.email || '').toLowerCase() === email
-    );
+    const member = members.find((m) => {
+      const candidatePhone = m.phone || m.phoneFull || m.mobile || null;
+      const mPhoneNorm = candidatePhone ? normalizePhone(candidatePhone) : null;
+      return mPhoneNorm === phoneNormalized && m.active && isValidUntilOk(m);
+    });
+
 
     if (!member) {
       return res.status(404).json({ ok: false, error: 'member_not_found' });
