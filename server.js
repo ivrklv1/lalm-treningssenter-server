@@ -202,35 +202,30 @@ function computeValidUntilForPurchase(membershipKey) {
   const now = new Date();
   const key = String(membershipKey || '').trim().toLowerCase();
 
-  // Drop-in: gyldig ut dagen
+  // Drop-in: gyldig ut dagen (lokal tid på server)
   if (key === 'dropin') {
     const vu = new Date(now);
     vu.setHours(23, 59, 59, 999);
     return vu.toISOString();
   }
 
-  const rawKey = member?.plan || order?.membershipKey || '';
-  const keyNorm = String(rawKey).trim().toLowerCase();
+  // Korttid: slå opp antall dager via plan-meta (shortTermDays)
+  // getPlanMeta bør kunne finne plan basert på key (id/key)
+  const meta = getPlanMeta(key) || getPlanMeta(membershipKey);
+  const days = Number(meta?.shortTermDays || 0);
 
-  const meta = getPlanMeta(keyNorm) || getPlanMeta(rawKey); // prøv norm først
-  const shortDays = Number(meta?.shortTermDays || 0);
-
-  // Fallback: hvis vi har validUntil og det ikke er dropin, er det nesten sikkert korttid
-  const isDropin = keyNorm === 'dropin';
-  const isShortTerm = !isDropin && (shortDays > 0 || !!member?.validUntil);
-
-
-  // Korttid: X dager, ut siste dag kl 23:59:59
   if (days > 0) {
     const vu = new Date(now);
+    // Gyldig i N dager inkl. i dag => legg til (days - 1)
     vu.setDate(vu.getDate() + (days - 1));
     vu.setHours(23, 59, 59, 999);
     return vu.toISOString();
   }
 
-  // Ordinært medlemskap
+  // Ordinært medlemskap: ingen validUntil
   return null;
 }
+
 
 
 
