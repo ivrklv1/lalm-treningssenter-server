@@ -780,13 +780,24 @@ async function sendSms(phone, message) {
   const d = res.data || {};
   const errCode = Number(d.error || d.ERROR || 0);
   const status = String(d.STATUS || d.status || '').toUpperCase();
+
+  // Fail-fast: hvis Eurobate ikke svarer OK, skal resten av systemet vite det
   if (errCode && errCode !== 0) {
     console.error('[EUROBATE] sendSms failed error=', errCode, 'status=', status, d);
-  } else if (status && status !== 'OK') {
-    console.warn('[EUROBATE] sendSms non-OK status=', status, d);
-  } else {
-    console.log('[EUROBATE] sendSms OK uuid=', d.uuid || d.UUID || '', 'parts=', d.messageParts || d.MESSAGEPARTS || '');
+    throw new Error(`EUROBATE_ERROR_${errCode}`);
   }
+  if (status && status !== 'OK') {
+    console.warn('[EUROBATE] sendSms non-OK status=', status, d);
+    throw new Error(`EUROBATE_STATUS_${status}`);
+  }
+
+  console.log(
+    '[EUROBATE] sendSms OK uuid=',
+    d.uuid || d.UUID || '',
+    'parts=',
+    d.messageParts || d.MESSAGEPARTS || ''
+  );
+
   return d;
 }
 
@@ -842,15 +853,18 @@ async function sendWelcomeMembershipSms(order, member) {
       .toLowerCase();
 
     // Hent meta for å vite om det er korttid (shortTermDays)
-    const meta = getPlanMeta(member?.plan || order?.membershipKey);
+    const meta = getPlanMeta(planKey) || getPlanMeta(member?.plan || order?.membershipKey);
     const shortDays = Number(meta?.shortTermDays || 0);
+
+    // Korttid-flagg
+    const isShortTerm = planKey !== 'dropin' && (shortDays > 0 || !!member?.validUntil);
 
     // Gyldig-til-dato (Oslo) hvis vi har validUntil
     const validUntilOslo = member?.validUntil
       ? new Date(member.validUntil).toLocaleDateString('nb-NO', { timeZone: 'Europe/Oslo' })
       : null;
 
-    // Felles: innloggingstekst (uten å endre den ordinære teksten for mye)
+    // Felles: innloggingstekst
     const loginLine = `Logg inn i appen med telefonnummeret ditt og SMS-koden du får ved innlogging.`;
 
     let message = '';
@@ -864,14 +878,14 @@ async function sendWelcomeMembershipSms(order, member) {
         `${loginLine}\n` +
         `God trening! 💪`;
     }
-    // -------- KORTTID (3 dagerpass / 7 dagerpass / osv.) --------
+    // -------- KORTTID (3-dagerspass / 7-dagerspass / osv.) --------
     else if (isShortTerm) {
-      const passText = shortDays > 0 ? `${shortDays} dagerpass` : 'korttidspass';
+      const passText = shortDays > 0 ? `${shortDays}-dagerspass` : 'korttidspass';
       message =
         `${greeting}\n` +
         `Ditt ${passText} er nå aktivt hos Lalm Treningssenter.\n` +
         (validUntilOslo
-          ? `Gyldig til og med ${validUntilOslo} innen åpningstid (05–23).\n`
+          ? `Gyldig til og med ${validUntilOslo} innen åpningstiden (05–23).\n`
           : `Gyldig innen åpningstid (05–23).\n`) +
         `${loginLine}\n` +
         `God trening! 💪`;
@@ -881,7 +895,7 @@ async function sendWelcomeMembershipSms(order, member) {
       message =
         `${greeting} Velkommen som medlem hos Lalm Treningssenter! 🎉\n` +
         `Medlemskapet ditt er nå aktivt.\n` +
-        `Last ned appen for å få tilgang til treningssenteret.\n` +
+        `Logg inn i appen for å få tilgang til treningssenteret.\n` +
         `${loginLine}\n` +
         `Gi oss beskjed hvis du trenger hjelp – God trening! 💪`;
     }
@@ -892,15 +906,13 @@ async function sendWelcomeMembershipSms(order, member) {
       `[${new Date().toISOString()}] WELCOME_SMS_SENT orderId=${order?.orderId} phone=${phoneNormalized} plan=${planKey} shortDays=${shortDays}\n`
     );
   } catch (e) {
-    console.error(
-      '[WELCOME_SMS] Feil ved sending:',
-      e?.response?.data || e.message
-    );
+    console.error('[WELCOME_SMS] Feil ved sending:', e?.response?.data || e.message);
     appendAccessLog(
       `[${new Date().toISOString()}] WELCOME_SMS_ERROR orderId=${order?.orderId} err=${e.message}\n`
     );
   }
 }
+
 
 
 
