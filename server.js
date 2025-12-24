@@ -3176,7 +3176,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           if (computedValidUntil) {
             // DROP-IN eller korttid
             m.validUntil = computedValidUntil;
-         } else {
+          } else {
            // Ordinært medlemskap → ingen tidsbegrensning
             delete m.validUntil;
           }
