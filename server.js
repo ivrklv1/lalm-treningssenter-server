@@ -3157,7 +3157,14 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       if (updatedOrder.phoneFull || updatedOrder.phone) {
         const phone = updatedOrder.phoneFull || updatedOrder.phone;
 
-        const m = findMemberByPhoneOrEmail(phone, null);
+        // VIKTIG: finn medlem i SAMME array som skal lagres
+        const m = members.find((x) => {
+          const candidatePhone = x.phone || x.phoneFull || x.mobile || null;
+          const normalized = candidatePhone
+            ? String(candidatePhone).replace(/\D/g, '')
+            : null;
+         return normalized === String(phone).replace(/\D/g, '');
+        })
 
         if (m) {
           console.log('[VIPPS] 4.1 RUNNING for order', orderId);
@@ -3173,8 +3180,6 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
             '';
 
           const planKeyLower = String(planKey).trim().toLowerCase();
-
-          // Sett plan eksplisitt (standardisert)
           m.plan = planKeyLower;
 
           // Beregn validUntil for DROP-IN / korttid
