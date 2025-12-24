@@ -3281,38 +3281,29 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           });
       });
 
-      // 4.4) Send velkommen-SMS én gang (ikke for DROPIN)
+      // 4.4) Send velkommen-SMS én gang (også DROP-IN og KORTTID)
       try {
         const orderAfter = findOrder(orderId);
 
         if (
-          orderAfter &&
-          String(orderAfter.membershipKey || '').trim().toLowerCase() !== 'dropin' && // ikke send SMS for drop-in
-          !orderAfter.welcomeSmsSent && // bare én gang
+         orderAfter &&
+         !orderAfter.welcomeSmsSent && // bare én gang
           (newStatus === 'SALE' || newStatus === 'CAPTURED') // kun når faktisk belastet
-        ) {
-          // Finn medlem-objekt (hvis vi har memberId)
-          const allMembers = getMembers();
+       ) {
+         const allMembers = getMembers();
           const memberObj =
-            (orderAfter.memberId &&
+           (orderAfter.memberId &&
               allMembers.find((m) => m.id === orderAfter.memberId)) || null;
 
-          await sendWelcomeMembershipSms(orderAfter, memberObj);
+         await sendWelcomeMembershipSms(orderAfter, memberObj);
 
           updateOrderStatus(orderId, orderAfter.status, {
-            welcomeSmsSent: true,
+           welcomeSmsSent: true,
             welcomeSmsAt: new Date().toISOString(),
           });
-        }
+       }
       } catch (e) {
-        console.error(
-          '[WELCOME_SMS] callback wrapper error for orderId',
-          orderId,
-          e.message
-        );
-        appendAccessLog(
-          `[${new Date().toISOString()}] WELCOME_SMS_CALLBACK_ERROR orderId=${orderId} err=${e.message}\n`
-        );
+        console.log('[WELCOME_SMS_ERROR]', e?.message || e);
       }
     }
 
