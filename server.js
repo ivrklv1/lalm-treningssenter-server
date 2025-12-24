@@ -687,27 +687,27 @@ app.post('/api/admin/tell-schemas', basicAuth, async (req, res) => {
     ];
 
 
-    let errors = [];
+  let errors = [];
 
-    for (const c of candidates) {
-      const url = `${TELL.base}/${c.path}`;
-      try {
-        const r = await axios.post(url, payload, { headers });
-        return res.json({ ok: true, used: c, tell: r.data });
-      } catch (e) {
-        errors.push({
-          used: c,
-          status: e?.response?.status || null,
-          detail: e?.response?.data || e?.message || String(e),
-        });
-      }
+  for (const c of candidates) {
+    const url = `${TELL.base}/${c.path}`;
+    try {
+      const r = await axios.post(url, payload, { headers });
+      return res.json({ ok: true, used: c, tell: r.data });
+    } catch (e) {
+      errors.push({
+        used: c,
+        status: e?.response?.status || null,
+        detail: e?.response?.data || e?.message || String(e),
+      });
     }
+  }
 
-  return res.status(500).json({
-    ok: false,
-    error: 'tell_getschemas_failed',
-    tried: errors,
-  });
+return res.status(500).json({
+  ok: false,
+  error: 'tell_getschemas_failed',
+  tried: errors,
+});
 
 
 
