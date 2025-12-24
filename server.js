@@ -2706,11 +2706,18 @@ async function processTripletexForOrder(orderId, newStatus, opts = {}) {
 
     const isPaidStatus = newStatus === 'SALE' || newStatus === 'CAPTURED';
 
-    // Drop-in skal aldri synkes til Tripletex (case-insensitivt)
+    // Drop-in / korttid skal aldri synkes til Tripletex
     const keyLc = String(orderAfter.membershipKey || '').trim().toLowerCase();
-    if (keyLc === 'dropin') {
-      return { ok: true, skipped: true, reason: 'dropin' };
+    const isShortOrDropin =
+     Boolean(orderAfter.isShortOrDropin) ||
+     keyLc === 'dropin' ||
+     keyLc.startsWith('korttid') ||
+     keyLc.startsWith('shortterm');
+
+    if (isShortOrDropin) {
+     return { ok: true, skipped: true, reason: 'short_or_dropin' };
     }
+
 
     // ---------- A) SYNC TIL TRIPLETEX (kun ved betalt status, og kun én gang) ----------
     if (isPaidStatus && !orderAfter.tripletexSynced) {
