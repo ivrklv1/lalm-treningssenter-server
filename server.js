@@ -882,7 +882,7 @@ async function sendWelcomeMembershipSms(order, member) {
       : null;
 
     // Felles: innloggingstekst
-    const loginLine = `Logg inn i appen med telefonnummeret ditt og SMS-koden du får ved innlogging.`;
+    const loginLine = `Logg inn i appen for å åpne døren.`;
 
     let message = '';
 
@@ -891,7 +891,7 @@ async function sendWelcomeMembershipSms(order, member) {
       message =
         `${greeting}\n` +
         `Drop-in er nå aktiv hos Lalm Treningssenter.\n` +
-        `Gyldig i dag innen åpningstid (05–23).\n` +
+        `Gyldig ut dagen innenfor åpningstiden (05–23).\n` +
         `${loginLine}\n` +
         `God trening! 💪`;
     }
@@ -902,7 +902,7 @@ async function sendWelcomeMembershipSms(order, member) {
         `${greeting}\n` +
         `Ditt ${passText} er nå aktivt hos Lalm Treningssenter.\n` +
         (validUntilOslo
-          ? `Gyldig til og med ${validUntilOslo} innen åpningstiden (05–23).\n`
+          ? `Gyldig til og med ${validUntilOslo} innenfor åpningstiden (05–23).\n`
           : `Gyldig innen åpningstid (05–23).\n`) +
         `${loginLine}\n` +
         `God trening! 💪`;
@@ -912,7 +912,6 @@ async function sendWelcomeMembershipSms(order, member) {
       message =
         `${greeting} Velkommen som medlem hos Lalm Treningssenter! 🎉\n` +
         `Medlemskapet ditt er nå aktivt.\n` +
-        `Logg inn i appen for å få tilgang til treningssenteret.\n` +
         `${loginLine}\n` +
         `Gi oss beskjed hvis du trenger hjelp – God trening! 💪`;
     }
