@@ -730,7 +730,7 @@ app.get('/debug/tell-addappid', async (req, res) => {
 
     const r = await fetch(url, {
       method: 'GET',
-      // ingen body, ingen spesielle headers
+      headers: { 'api-key': TELL.apiKey },
     });
 
     const text = await r.text();
