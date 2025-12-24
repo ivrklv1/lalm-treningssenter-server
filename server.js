@@ -3160,18 +3160,20 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           m.active = true;
 
           // Normaliser plan (samme format uansett kilde)
-          m.plan = String(
-           updatedOrder.membershipKey ||
-             updatedOrder.membershipId ||
-             updatedOrder.plan ||
-             m.plan ||
-              ''
-         )
-            .trim()
-           .toLowerCase();
+          const planKey =
+            updatedOrder.membershipKey ||
+            updatedOrder.membershipId ||
+            updatedOrder.plan ||
+            m.plan ||
+            ''
+
+          const planKeyLower = String(planKey).trim().toLowerCase();
+
+          // Sett plan eksplisitt (standardisert)
+          m.plan = planKeyLower;
 
           // Beregn validUntil for DROP-IN / korttid
-         const computedValidUntil = computeValidUntilForPurchase(m.plan);
+          const computedValidUntil = computeValidUntilForPurchase(planKeyLower);
 
           if (computedValidUntil) {
             // DROP-IN eller korttid
@@ -3181,8 +3183,8 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
             delete m.validUntil;
           }
 
-         // Oppdater metadata
-         m.updatedAt = new Date().toISOString();
+          // Oppdater metadata
+          m.updatedAt = new Date().toISOString();
 
           // VIKTIG: Ikke lagre her, og ikke returner.
           // Sett flagg og memberId så vi:
