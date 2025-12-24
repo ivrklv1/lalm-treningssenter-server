@@ -1001,11 +1001,48 @@ app.post('/admin/members/pause', basicAuth, async (req, res) => {
     }
 
     const members = getMembers();
-    const member = members.find((m) => {
-      const candidatePhone = m.phone || m.phoneFull || m.mobile || null;
-      const mPhoneNorm = candidatePhone ? normalizePhone(candidatePhone) : null;
-      return mPhoneNorm === phoneNormalized && m.active && isValidUntilOk(m);
+
+    // Finn alle medlemmer som matcher telefon (inkl. duplikater)
+    const matches = members.filter((m) => {
+     const candidatePhone = m?.phone || m?.phoneFull || m?.mobile || null;
+     const mPhone = candidatePhone ? normalizePhone(candidatePhone) : null;
+     return mPhone === phoneNormalized && m?.active;
     });
+
+    function isCurrentlyValid(m) {
+      // Ordinært medlemskap: ingen validUntil => gyldig
+      if (!m?.validUntil) return true;
+     return new Date(m.validUntil) >= new Date();
+    }
+
+    // 1) Prioriter medlem som er gyldig nå
+    let member = matches.find(isCurrentlyValid);
+
+    // 2) Hvis ingen er gyldig nå: velg den med nyeste validUntil (for forutsigbarhet)
+    if (!member && matches.length) {
+     member = [...matches].sort((a, b) => {
+       const av = a?.validUntil ? new Date(a.validUntil).getTime() : 0;
+       const bv = b?.validUntil ? new Date(b.validUntil).getTime() : 0;
+       return bv - av;
+      })[0];
+    }
+
+    // Returner kun innlogging hvis gyldig nå
+    if (member && isCurrentlyValid(member)) {
+      return res.json({
+        ok: true,
+        isMember: true,
+        member: {
+         email: member.email,
+         name: member.name || '',
+         phone: phoneNormalized,
+         validUntil: member.validUntil || null,
+        },
+     });
+    }
+
+    return res.json({ ok: true, isMember: false, member: null });
+
 
 
     if (!member) {
@@ -3124,40 +3161,46 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
 
           // Normaliser plan (samme format uansett kilde)
           m.plan = String(
-            updatedOrder.membershipKey ||
-            updatedOrder.membershipId ||
-            updatedOrder.plan ||
-            m.plan ||
-            ''
-          )
+           updatedOrder.membershipKey ||
+             updatedOrder.membershipId ||
+             updatedOrder.plan ||
+             m.plan ||
+              ''
+         )
             .trim()
-            .toLowerCase();
+           .toLowerCase();
 
           // Beregn validUntil for DROP-IN / korttid
-          const computedValidUntil = computeValidUntilForPurchase(m.plan);
+         const computedValidUntil = computeValidUntilForPurchase(m.plan);
 
           if (computedValidUntil) {
             // DROP-IN eller korttid
-           m.validUntil = computedValidUntil;
-          } else {
+            m.validUntil = computedValidUntil;
+         } else {
            // Ordinært medlemskap → ingen tidsbegrensning
-           delete m.validUntil;
-         }
+            delete m.validUntil;
+          }
 
-          // Oppdater metadata
-          m.updatedAt = new Date().toISOString();
+         // Oppdater metadata
+         m.updatedAt = new Date().toISOString();
 
-          // Lagre
-          saveMembers(members);
+          // VIKTIG: Ikke lagre her, og ikke returner.
+          // Sett flagg og memberId så vi:
+          //  - persister én gang senere
+          //  - knytter order->memberId
+          memberId = m.id || memberId;
+          membersChanged = true;
+
+         appendAccessLog(
+            `[${new Date().toISOString()}] VIPPS_UPDATED_EXISTING_MEMBER orderId=${orderId} memberId=${memberId} plan=${m.plan} validUntil=${m.validUntil || 'null'}\n`
+          );
 
           console.log('[VIPPS] 4.1 eksisterende medlem oppdatert', {
             phone,
             plan: m.plan,
             validUntil: m.validUntil || null,
-          });
-
-          // Viktig: stopp videre behandling (ikke kjør 4.2)
-          return res.json({ ok: true, handledBy: '4.1' });
+            memberId,
+         });
         }
       }
 
