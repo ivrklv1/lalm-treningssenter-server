@@ -3165,7 +3165,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
             updatedOrder.membershipId ||
             updatedOrder.plan ||
             m.plan ||
-            ''
+            '';
 
           const planKeyLower = String(planKey).trim().toLowerCase();
 
@@ -3180,7 +3180,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
             m.validUntil = computedValidUntil;
           } else {
            // Ordinært medlemskap → ingen tidsbegrensning
-            delete m.validUntil;
+            if (m.validUntil) delete m.validUntil;
           }
 
           // Oppdater metadata
