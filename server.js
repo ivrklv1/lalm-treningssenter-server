@@ -3067,13 +3067,17 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     }
 
     // 2) Idempotens: hvis vi allerede har en "ferdig" status, gjør ingenting
-    if (['RESERVED', 'SALE', 'CAPTURED'].includes(existingOrder.status)) {
+    const isAlreadyHandled =
+     ['SALE', 'CAPTURED'].includes(existingOrder.status);
+
+    if (isAlreadyHandled) {
       appendAccessLog(
-        `[${new Date().toISOString()}] VIPPS_CALLBACK_IDEMPOTENT orderId=${orderId} alreadyStatus=${existingOrder.status}\n`
+       `[${new Date().toISOString()}] VIPPS_CALLBACK_IDEMPOTENT orderId=${orderId} alreadyStatus=${existingOrder.status}\n`
       );
       if (!res.headersSent) return res.status(200).send('OK');
       return;
     }
+
 
     // 3) Mappe status fra Vipps -> vår interne status
     let newStatus = existingOrder.status;
@@ -3156,6 +3160,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         const m = findMemberByPhoneOrEmail(phone, null);
 
         if (m) {
+          console.log('[VIPPS] 4.1 RUNNING for order', orderId);
           // Aktiver medlem
           m.active = true;
 
