@@ -675,6 +675,7 @@ async function tellRegisterAppId() {
 app.post('/api/admin/tell-schemas', basicAuth, async (req, res) => {
   try {
     const headers = tellHeaders();
+
     const payload = {
       hwId: TELL.hwId,
       hwName: TELL.hwName || 'Lalm Treningssenter',
@@ -683,30 +684,40 @@ app.post('/api/admin/tell-schemas', basicAuth, async (req, res) => {
 
     const candidates = [
       { method: 'post', path: 'gc/getschema' },   // prøv singular først
-      { method: 'post', path: 'gc/getschemas' },  // behold som fallback
+      { method: 'post', path: 'gc/getschemas' },  // fallback
     ];
 
+    const errors = [];
 
-  let errors = [];
-
-  for (const c of candidates) {
-    const url = `${TELL.base}/${c.path}`;
-    try {
-      const r = await axios.post(url, payload, { headers });
-      return res.json({ ok: true, used: c, tell: r.data });
-    } catch (e) {
-      errors.push({
-        used: c,
-        status: e?.response?.status || null,
-        detail: e?.response?.data || e?.message || String(e),
-      });
+    for (const c of candidates) {
+      const url = `${TELL.base}/${c.path}`;
+      try {
+        // Vi bruker POST på begge kandidatene
+        const r = await axios.post(url, payload, { headers });
+        return res.json({ ok: true, used: c, tell: r.data });
+      } catch (e) {
+        errors.push({
+          used: c,
+          status: e?.response?.status || null,
+          detail: e?.response?.data || e?.message || String(e),
+        });
+      }
     }
-  }
 
-return res.status(500).json({
-  ok: false,
-  error: 'tell_getschemas_failed',
-  tried: errors,
+    // Ingen av kandidatene fungerte
+    return res.status(500).json({
+      ok: false,
+      error: 'tell_getschemas_failed',
+      tried: errors,
+    });
+  } catch (e) {
+    // Uventet feil i vår egen kode
+    return res.status(500).json({
+      ok: false,
+      error: 'tell_schemas_internal_error',
+      detail: e?.message || String(e),
+    });
+  }
 });
 
 
