@@ -564,36 +564,33 @@ async function tellAddUser(phone, name) {
   const phoneDigits = String(phone).replace(/\D/g, '');
   const headers = tellHeaders();
 
+  const username = phoneDigits;
+  const fullName = name ? String(name).trim() : '';
+
   const payload = {
+    // Send begge varianter for å unngå case/variant-problemer
     hwId: TELL.hwId,
-    hwName: TELL.hwName || 'Lalm Treningssenter',
+    hwid: TELL.hwId,
+
     appId: TELL.appId,
+    appid: TELL.appId,
 
-    // username (ofte OK å bruke telefon)
-    name: phoneDigits,
+    hwName: TELL.hwName || 'Lalm Treningssenter',
 
-    // full name/comment
-    fname: name ? String(name).trim() : '',
+    // Brukerinfo
+    name: username,
+    fname: fullName,
 
-    // msisdn
+    // Send begge varianter av telefonfelt
     phoneNumber: phoneDigits,
+    phnr: phoneDigits,
 
-    // role user
     role: 'U',
-
-    // schemes: [ ... ]  // kun hvis dere faktisk har template-UIDs
   };
-
-  // Viktig: ikke send tomme/ukjente felter (schemes osv.)
-  // Hvis dere senere får schemes fra TELL: sett det kun når dere har en faktisk liste.
-
-  console.log('[TELL] headers keys:', Object.keys(headers));
-  console.log('[TELL] api-key present:', !!headers['api-key'], 'x-api-key present:', !!headers['x-api-key']);
-
 
   try {
     const r = await axios.post(`${TELL.base}/gc/adduser`, payload, { headers });
-    console.log(`✅ [TELL] La til ${payload.fname || payload.name} (${phoneDigits})`, r.data);
+    console.log(`✅ [TELL] La til ${fullName || username} (${phoneDigits})`, r.data);
     return r.data;
   } catch (e) {
     console.error(
@@ -603,6 +600,7 @@ async function tellAddUser(phone, name) {
     throw e;
   }
 }
+
 
 
 // Fjern bruker i TELL
