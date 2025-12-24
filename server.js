@@ -548,56 +548,77 @@ function tellHeaders() {
   if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
     console.warn('TELL-konfig ikke komplett (API key / hwId / appId mangler).');
   }
-
   return {
     'Content-Type': 'application/json',
-    'api-key': TELL.apiKey,
-    'x-api-key': TELL.apiKey,
+    'api-key': TELL.apiKey, // NØYAKTIG slik Zoltan skrev
   };
 }
-
-
-
 
 // Legg til bruker i TELL
 async function tellAddUser(phone, name) {
   const phoneDigits = String(phone).replace(/\D/g, '');
   const headers = tellHeaders();
 
-  const username = phoneDigits;
-  const fullName = name ? String(name).trim() : '';
-
-  const payload = {
-    // Send begge varianter for å unngå case/variant-problemer
+  // Bygg payload i tråd med dokumentasjonen
+  const base = {
     hwId: TELL.hwId,
-    hwid: TELL.hwId,
-
-    appId: TELL.appId,
-    appid: TELL.appId,
-
     hwName: TELL.hwName || 'Lalm Treningssenter',
+    appId: TELL.appId,
 
-    // Brukerinfo
-    name: username,
-    fname: fullName,
-
-    // Send begge varianter av telefonfelt
-    phoneNumber: phoneDigits,
-    phnr: phoneDigits,
+    name: phoneDigits, // username
+    fname: (name && String(name).trim()) ? String(name).trim() : phoneDigits,
 
     role: 'U',
+    inserter: TELL.inserter || 'Lalm Treningssenter admin',
+
+    // Booleans (som i doc-eksempelet)
+    go1: true,
+    go2: false,
+    out1: true,
+    out2: false,
+    call: false,
+    sms: false,
+    pushD: false,
+    smsD: false,
+    doorBell: false,
+    cam1: false,
+    cam2: false,
+    pushE: false,
+
+    specificRuleType: '', // empty string er eksplisitt tillatt i doc
   };
 
+  // Ikke send schemes hvis tom
+  if (Array.isArray(TELL.schemes) && TELL.schemes.length > 0) {
+    base.schemes = TELL.schemes;
+  }
+
+  // Forsøk 1: uten "+"
+  const payload1 = { ...base, phoneNumber: phoneDigits };
+
+  // Forsøk 2: med "+" (E.164-lignende)
+  const payload2 = { ...base, phoneNumber: `+${phoneDigits}` };
+
   try {
-    const r = await axios.post(`${TELL.base}/gc/adduser`, payload, { headers });
-    console.log(`✅ [TELL] La til ${fullName || username} (${phoneDigits})`, r.data);
+    console.log('[TELL] adduser payload (try1):', payload1);
+    const r = await axios.post(`${TELL.base}/gc/adduser`, payload1, { headers });
+    console.log(`✅ [TELL] La til ${payload1.fname} (${payload1.phoneNumber})`, r.data);
     return r.data;
-  } catch (e) {
-    console.error(
-      `❌ [TELL] Feil ved legg til ${phoneDigits}:`,
-      e?.response?.data || e?.message || e
-    );
-    throw e;
+  } catch (e1) {
+    const err1 = e1?.response?.data || e1?.message || e1;
+    console.error(`❌ [TELL] adduser try1 feilet (${phoneDigits}):`, err1);
+
+    // Bare prøv try2 hvis det er format-feil (eller generelt)
+    try {
+      console.log('[TELL] adduser payload (try2):', payload2);
+      const r2 = await axios.post(`${TELL.base}/gc/adduser`, payload2, { headers });
+      console.log(`✅ [TELL] La til ${payload2.fname} (${payload2.phoneNumber})`, r2.data);
+      return r2.data;
+    } catch (e2) {
+      const err2 = e2?.response?.data || e2?.message || e2;
+      console.error(`❌ [TELL] adduser try2 feilet (+${phoneDigits}):`, err2);
+      throw e2;
+    }
   }
 }
 
