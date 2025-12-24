@@ -740,6 +740,10 @@ app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
   }
 });
 
+app.get('/api/admin/tell-schemas', basicAuth, (req, res) => {
+  // kall samme logikk som POST (evt. flytt logikken til en felles funksjon)
+  res.status(405).json({ ok: false, error: 'use_post' });
+});
 
 
 // Admin: registrer appId på TELL-enheten via nettleser (GET)
