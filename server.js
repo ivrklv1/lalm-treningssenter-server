@@ -551,68 +551,59 @@ function tellHeaders() {
   }
   return {
     'Content-Type': 'application/json',
-    'api-key': TELL.apiKey, // NØYAKTIG slik Zoltan skrev
+
+    // Dokumentert header-navn:
+    'API key': TELL.apiKey,
+
+    // Kompatibilitet (kan beholdes):
+    'api-key': TELL.apiKey,
+    'x-api-key': TELL.apiKey,
   };
 }
 
 
 
-// Legg til bruker i TELL (ikke i bruk automatisk nå)
+// Legg til bruker i TELL
 async function tellAddUser(phone, name) {
-  const phoneNormalized = normalizePhone(phone);
-  if (!phoneNormalized) {
-    console.warn('[TELL] tellAddUser kalt uten gyldig telefonnummer');
-    return;
-  }
-
-  const phoneDigits = phoneNormalized.replace(/\D/g, '');
-  if (!phoneDigits) {
-    console.warn('[TELL] tellAddUser: klarte ikke å hente siffer fra telefon:', phone);
-    return;
-  }
-
+  const phoneDigits = String(phone).replace(/\D/g, '');
   const headers = tellHeaders();
 
-  const body = {
+  const payload = {
     hwId: TELL.hwId,
-    hwName: TELL.hwName,
+    hwName: TELL.hwName || 'Lalm Treningssenter',
     appId: TELL.appId,
 
+    // username (ofte OK å bruke telefon)
     name: phoneDigits,
-    fname: name || phoneDigits,
+
+    // full name/comment
+    fname: name ? String(name).trim() : '',
+
+    // msisdn
     phoneNumber: phoneDigits,
 
-    schemes: TELL.schemes,
-
-    go1: true,
-    go2: false,
-    out1: true,
-    out2: false,
-
-    pushD: false,
-    smsD: false,
-    call: false,
-    sms: false,
-
-    inserter: TELL.inserter,
+    // role user
     role: 'U',
-    specificRuleType: '',
+
+    // schemes: [ ... ]  // kun hvis dere faktisk har template-UIDs
   };
 
-  console.log('[TELL] adduser payload:', body);
+  // Viktig: ikke send tomme/ukjente felter (schemes osv.)
+  // Hvis dere senere får schemes fra TELL: sett det kun når dere har en faktisk liste.
 
   try {
-    const r = await axios.post(`${TELL.base}/gc/adduser`, body, { headers });
-    console.log(`✅ [TELL] La til ${name} (${phoneDigits})`, r.data);
+    const r = await axios.post(`${TELL.base}/gc/adduser`, payload, { headers });
+    console.log(`✅ [TELL] La til ${payload.fname || payload.name} (${phoneDigits})`, r.data);
     return r.data;
   } catch (e) {
     console.error(
       `❌ [TELL] Feil ved legg til ${phoneDigits}:`,
-      e?.response?.data || e.message
+      e?.response?.data || e?.message || e
     );
     throw e;
   }
 }
+
 
 // Fjern bruker i TELL
 async function tellRemoveUser(phone) {
