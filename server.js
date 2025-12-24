@@ -554,6 +554,8 @@ function tellHeaders() {
   };
 }
 
+const TELL_SYNC_ENABLED = String(process.env.TELL_SYNC_ENABLED || '').toLowerCase() === 'true';
+
 // Legg til bruker i TELL
 async function tellAddUser(phone, name) {
   const phoneDigits = String(phone).replace(/\D/g, '');
@@ -671,54 +673,6 @@ async function tellRegisterAppId() {
   console.log('[TELL addappid]', r.data);
   return r.data;
 }
-
-app.post('/api/admin/tell-schemas', basicAuth, async (req, res) => {
-  try {
-    const headers = tellHeaders();
-
-    const payload = {
-      hwId: TELL.hwId,
-      hwName: TELL.hwName || 'Lalm Treningssenter',
-      appId: TELL.appId,
-    };
-
-    const candidates = [
-      { method: 'post', path: 'gc/getschema' },   // prøv singular først
-      { method: 'post', path: 'gc/getschemas' },  // fallback
-    ];
-
-    const errors = [];
-
-    for (const c of candidates) {
-      const url = `${TELL.base}/${c.path}`;
-      try {
-        // Vi bruker POST på begge kandidatene
-        const r = await axios.post(url, payload, { headers });
-        return res.json({ ok: true, used: c, tell: r.data });
-      } catch (e) {
-        errors.push({
-          used: c,
-          status: e?.response?.status || null,
-          detail: e?.response?.data || e?.message || String(e),
-        });
-      }
-    }
-
-    // Ingen av kandidatene fungerte
-    return res.status(500).json({
-      ok: false,
-      error: 'tell_getschemas_failed',
-      tried: errors,
-    });
-  } catch (e) {
-    // Uventet feil i vår egen kode
-    return res.status(500).json({
-      ok: false,
-      error: 'tell_schemas_internal_error',
-      detail: e?.message || String(e),
-    });
-  }
-});
 
 
 
@@ -1614,11 +1568,12 @@ app.delete('/api/admin/members', basicAuth, async (req, res) => {
 
 app.post('/api/admin/tell-sync', basicAuth, async (req, res) => {
   try {
-    if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
-      return res.status(503).json({
+    if (!TELL_SYNC_ENABLED) {
+      return res.status(501).json({
         ok: false,
-        error: 'tell_not_ready',
-        detail: 'Mangler TELL_API_KEY / TELL_HWID / TELL_APP_ID',
+        error: 'tell_sync_disabled',
+        message:
+          'TELL-sync er deaktivert: TELL-installasjonen støtter ikke schema/template API (getschema/getschemas). Bruk kun gc/open + manuell backup (ring dørnummer).',
       });
     }
 
@@ -1646,12 +1601,14 @@ app.post('/api/admin/tell-sync', basicAuth, async (req, res) => {
       const raw = m.phone || m.mobile || m.phoneFull;
       const norm = normalizePhone(raw);
       if (!norm) continue;
+
       if (seen.has(norm)) continue;
       seen.add(norm);
 
-      const displayName = (m.name && String(m.name).trim() && !String(m.name).includes('@'))
-        ? String(m.name).trim()
-        : '';
+      const displayName =
+        m.name && String(m.name).trim() && !String(m.name).includes('@')
+          ? String(m.name).trim()
+          : '';
 
       queue.push({ phone: norm, name: displayName });
     }
@@ -1665,7 +1622,7 @@ app.post('/api/admin/tell-sync', basicAuth, async (req, res) => {
     }
 
     let attempted = 0;
-    let ok = 0;
+    let okCount = 0;
     let failed = 0;
     const failedPhones = [];
 
@@ -1673,7 +1630,7 @@ app.post('/api/admin/tell-sync', basicAuth, async (req, res) => {
       attempted++;
       try {
         await tellAddUser(item.phone, item.name);
-        ok++;
+        okCount++;
       } catch (e) {
         failed++;
         failedPhones.push({
@@ -1681,6 +1638,7 @@ app.post('/api/admin/tell-sync', basicAuth, async (req, res) => {
           err: e?.response?.data || e?.message || 'unknown_error',
         });
       }
+
       // enkel throttling for å være snill mot APIet
       await new Promise((r) => setTimeout(r, 120));
     }
@@ -1688,7 +1646,7 @@ app.post('/api/admin/tell-sync', basicAuth, async (req, res) => {
     return res.json({
       ok: true,
       attempted,
-      okCount: ok,
+      okCount,
       failed,
       totalEligibleMembers: eligible.length,
       uniquePhones: queue.length,
@@ -1696,10 +1654,14 @@ app.post('/api/admin/tell-sync', basicAuth, async (req, res) => {
     });
   } catch (e) {
     console.error('[TELL_SYNC_ERROR]', e?.response?.data || e?.message || e);
-    return res.status(500).json({ ok: false, error: 'tell_sync_failed' });
+    return res.status(500).json({
+      ok: false,
+      error: 'tell_sync_failed',
+      detail: e?.response?.data || e?.message || String(e),
+    });
   }
 });
-;
+
 
 app.post('/api/admin/nif-import', basicAuth, (req, res) => {
   const { csv } = req.body || {};
