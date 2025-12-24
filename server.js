@@ -682,38 +682,33 @@ app.post('/api/admin/tell-schemas', basicAuth, async (req, res) => {
     };
 
     const candidates = [
-      { method: 'post', path: 'gc/getschemas' },  // finnes ikke hos deg (men behold for framtid)
-      { method: 'post', path: 'gc/getschema' },   // vanlig variant
-      { method: 'get',  path: 'gc/getschemas' },  // noen APIer bruker GET
-      { method: 'get',  path: 'gc/getschema' },   // noen APIer bruker GET
+      { method: 'post', path: 'gc/getschema' },   // prøv singular først
+      { method: 'post', path: 'gc/getschemas' },  // behold som fallback
     ];
 
-    let lastErr = null;
+
+    let errors = [];
 
     for (const c of candidates) {
+      const url = `${TELL.base}/${c.path}`;
       try {
-        const url = `${TELL.base}/${c.path}`;
-
-        const r =
-          c.method === 'post'
-            ? await axios.post(url, payload, { headers })
-            : await axios.get(url, { headers, params: payload });
-
+        const r = await axios.post(url, payload, { headers });
         return res.json({ ok: true, used: c, tell: r.data });
       } catch (e) {
-        lastErr = e;
+        errors.push({
+          used: c,
+          status: e?.response?.status || null,
+          detail: e?.response?.data || e?.message || String(e),
+        });
       }
     }
 
-    throw lastErr;
-  } catch (e) {
-    return res.status(500).json({
-      ok: false,
-      error: 'tell_getschemas_failed',
-      detail: e?.response?.data || e?.message || String(e),
-    });
-  }
-});
+  return res.status(500).json({
+    ok: false,
+    error: 'tell_getschemas_failed',
+    tried: errors,
+  });
+
 
 
 // Test-endepunkt for TELL: sjekk at API-nøkkel, hwId og appId fungerer
