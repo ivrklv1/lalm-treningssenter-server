@@ -1548,10 +1548,94 @@ app.delete('/api/admin/members', basicAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// TELL-sync endpoint deaktivert
 app.post('/api/admin/tell-sync', basicAuth, async (req, res) => {
-  return res.status(501).json({ ok: false, error: 'tell_sync_disabled' });
+  try {
+    if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
+      return res.status(503).json({
+        ok: false,
+        error: 'tell_not_ready',
+        detail: 'Mangler TELL_API_KEY / TELL_HWID / TELL_APP_ID',
+      });
+    }
+
+    const members = getMembers() || [];
+
+    // Velg hvem som skal synkes:
+    // - aktiv
+    // - og (valgfritt, anbefalt) gyldig validUntil for drop-in/korttid
+    const eligible = members.filter((m) => {
+      if (!m || !m.active) return false;
+
+      // Hvis dere ønsker å *ignorere* validUntil og synke alle aktive,
+      // kommenter ut linjen under.
+      if (typeof isValidUntilOk === 'function' && !isValidUntilOk(m)) return false;
+
+      // Må ha telefon i et av feltene
+      const raw = m.phone || m.mobile || m.phoneFull;
+      return !!raw;
+    });
+
+    const seen = new Set();
+    const queue = [];
+
+    for (const m of eligible) {
+      const raw = m.phone || m.mobile || m.phoneFull;
+      const norm = normalizePhone(raw);
+      if (!norm) continue;
+      if (seen.has(norm)) continue;
+      seen.add(norm);
+
+      const displayName = (m.name && String(m.name).trim() && !String(m.name).includes('@'))
+        ? String(m.name).trim()
+        : '';
+
+      queue.push({ phone: norm, name: displayName });
+    }
+
+    if (!queue.length) {
+      return res.status(400).json({
+        ok: false,
+        error: 'no_phones',
+        detail: 'Fant ingen aktive medlemmer med gyldig telefonnummer å synke.',
+      });
+    }
+
+    let attempted = 0;
+    let ok = 0;
+    let failed = 0;
+    const failedPhones = [];
+
+    for (const item of queue) {
+      attempted++;
+      try {
+        await tellAddUser(item.phone, item.name);
+        ok++;
+      } catch (e) {
+        failed++;
+        failedPhones.push({
+          phone: item.phone,
+          err: e?.response?.data || e?.message || 'unknown_error',
+        });
+      }
+      // enkel throttling for å være snill mot APIet
+      await new Promise((r) => setTimeout(r, 120));
+    }
+
+    return res.json({
+      ok: true,
+      attempted,
+      okCount: ok,
+      failed,
+      totalEligibleMembers: eligible.length,
+      uniquePhones: queue.length,
+      failedPhones,
+    });
+  } catch (e) {
+    console.error('[TELL_SYNC_ERROR]', e?.response?.data || e?.message || e);
+    return res.status(500).json({ ok: false, error: 'tell_sync_failed' });
+  }
 });
+;
 
 app.post('/api/admin/nif-import', basicAuth, (req, res) => {
   const { csv } = req.body || {};
