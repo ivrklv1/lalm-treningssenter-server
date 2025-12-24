@@ -544,22 +544,18 @@ console.log('TELL CONFIG CHECK:', {
   appId: !!TELL.appId,
 });
 
-// Hjelpefunksjon: lage auth-headere
 function tellHeaders() {
   if (!TELL.apiKey || !TELL.hwId || !TELL.appId) {
     console.warn('TELL-konfig ikke komplett (API key / hwId / appId mangler).');
   }
+
   return {
     'Content-Type': 'application/json',
-
-    // Dokumentert header-navn:
-    'API key': TELL.apiKey,
-
-    // Kompatibilitet (kan beholdes):
     'api-key': TELL.apiKey,
     'x-api-key': TELL.apiKey,
   };
 }
+
 
 
 
@@ -590,6 +586,10 @@ async function tellAddUser(phone, name) {
 
   // Viktig: ikke send tomme/ukjente felter (schemes osv.)
   // Hvis dere senere får schemes fra TELL: sett det kun når dere har en faktisk liste.
+
+  console.log('[TELL] headers keys:', Object.keys(headers));
+  console.log('[TELL] api-key present:', !!headers['api-key'], 'x-api-key present:', !!headers['x-api-key']);
+
 
   try {
     const r = await axios.post(`${TELL.base}/gc/adduser`, payload, { headers });
