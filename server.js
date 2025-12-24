@@ -681,28 +681,31 @@ app.post('/api/admin/tell-schemas', basicAuth, async (req, res) => {
       appId: TELL.appId,
     };
 
-    const r = await axios.post(`${TELL.base}/gc/getschemas`, payload, { headers });
-    res.json({ ok: true, tell: r.data });
-  } catch (e) {
-    res.status(500).json({
-      ok: false,
-      error: 'tell_getschemas_failed',
-      detail: e?.response?.data || e?.message || String(e),
-    });
-  }
-});
+    const candidates = [
+      { method: 'post', path: 'gc/getschemas' },  // finnes ikke hos deg (men behold for framtid)
+      { method: 'post', path: 'gc/getschema' },   // vanlig variant
+      { method: 'get',  path: 'gc/getschemas' },  // noen APIer bruker GET
+      { method: 'get',  path: 'gc/getschema' },   // noen APIer bruker GET
+    ];
 
-app.get('/api/admin/tell-schemas', basicAuth, async (req, res) => {
-  try {
-    const headers = tellHeaders();
-    const payload = {
-      hwId: TELL.hwId,
-      hwName: TELL.hwName || 'Lalm Treningssenter',
-      appId: TELL.appId,
-    };
+    let lastErr = null;
 
-    const r = await axios.post(`${TELL.base}/gc/getschemas`, payload, { headers });
-    return res.json({ ok: true, tell: r.data });
+    for (const c of candidates) {
+      try {
+        const url = `${TELL.base}/${c.path}`;
+
+        const r =
+          c.method === 'post'
+            ? await axios.post(url, payload, { headers })
+            : await axios.get(url, { headers, params: payload });
+
+        return res.json({ ok: true, used: c, tell: r.data });
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+
+    throw lastErr;
   } catch (e) {
     return res.status(500).json({
       ok: false,
