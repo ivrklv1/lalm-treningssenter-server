@@ -692,6 +692,26 @@ app.post('/api/admin/tell-schemas', basicAuth, async (req, res) => {
   }
 });
 
+app.get('/api/admin/tell-schemas', basicAuth, async (req, res) => {
+  try {
+    const headers = tellHeaders();
+    const payload = {
+      hwId: TELL.hwId,
+      hwName: TELL.hwName || 'Lalm Treningssenter',
+      appId: TELL.appId,
+    };
+
+    const r = await axios.post(`${TELL.base}/gc/getschemas`, payload, { headers });
+    return res.json({ ok: true, tell: r.data });
+  } catch (e) {
+    return res.status(500).json({
+      ok: false,
+      error: 'tell_getschemas_failed',
+      detail: e?.response?.data || e?.message || String(e),
+    });
+  }
+});
+
 
 // Test-endepunkt for TELL: sjekk at API-nøkkel, hwId og appId fungerer
 app.post('/api/admin/tell-test', basicAuth, async (req, res) => {
