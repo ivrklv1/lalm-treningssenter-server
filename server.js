@@ -2438,6 +2438,7 @@ if (src === 'web') {
 
     // 7) Innmeldingsavgift / admingebyr
     // Standard-medlemskap: 199,- admin + ev. plan.signupFee
+    const ADMIN_FEE = 0;
     let SIGNUP_FEE = 0;
 
     if (!isShortOrDropin) {
