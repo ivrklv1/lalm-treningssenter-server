@@ -1012,60 +1012,20 @@ app.get('/admin/members', basicAuth, (req, res) => {
 app.post('/admin/members/pause', basicAuth, async (req, res) => {
   try {
     const body = req.body || {};
-    const email = (body.email || '').toLowerCase();
+    const email = (body.email || '').toLowerCase().trim();
 
     if (!email) {
       return res.status(400).json({ ok: false, error: 'email_required' });
     }
 
     const members = getMembers();
+    const idx = members.findIndex((m) => (m?.email || '').toLowerCase().trim() === email);
 
-    // Finn alle medlemmer som matcher telefon (inkl. duplikater)
-    const matches = members.filter((m) => {
-     const candidatePhone = m?.phone || m?.phoneFull || m?.mobile || null;
-     const mPhone = candidatePhone ? normalizePhone(candidatePhone) : null;
-     return mPhone === phoneNormalized && m?.active;
-    });
-
-    function isCurrentlyValid(m) {
-      // Ordinært medlemskap: ingen validUntil => gyldig
-      if (!m?.validUntil) return true;
-     return new Date(m.validUntil) >= new Date();
-    }
-
-    // 1) Prioriter medlem som er gyldig nå
-    let member = matches.find(isCurrentlyValid);
-
-    // 2) Hvis ingen er gyldig nå: velg den med nyeste validUntil (for forutsigbarhet)
-    if (!member && matches.length) {
-     member = [...matches].sort((a, b) => {
-       const av = a?.validUntil ? new Date(a.validUntil).getTime() : 0;
-       const bv = b?.validUntil ? new Date(b.validUntil).getTime() : 0;
-       return bv - av;
-      })[0];
-    }
-
-    // Returner kun innlogging hvis gyldig nå
-    if (member && isCurrentlyValid(member)) {
-      return res.json({
-        ok: true,
-        isMember: true,
-        member: {
-         email: member.email,
-         name: member.name || '',
-         phone: phoneNormalized,
-         validUntil: member.validUntil || null,
-        },
-     });
-    }
-
-    return res.json({ ok: true, isMember: false, member: null });
-
-
-
-    if (!member) {
+    if (idx === -1) {
       return res.status(404).json({ ok: false, error: 'member_not_found' });
     }
+
+    const member = members[idx];
 
     // Sett medlem inaktiv lokalt
     member.active = false;
@@ -1075,14 +1035,13 @@ app.post('/admin/members/pause', basicAuth, async (req, res) => {
     // Stopp abonnement i Tripletex (best effort)
     await stopTripletexForMember(member);
 
-    return res.json({ ok: true, paused: true });
+    return res.json({ ok: true, paused: true, member: { id: member.id || null, email: member.email || email } });
   } catch (e) {
-    console.error('[ADMIN_PAUSE_MEMBER_ERROR]', e.message);
-    return res
-      .status(500)
-      .json({ ok: false, error: 'internal_error', message: e.message });
+    console.error('[ADMIN_PAUSE_MEMBER_ERROR]', e?.message || e);
+    return res.status(500).json({ ok: false, error: 'internal_error', message: e?.message || String(e) });
   }
 });
+
 
 
 app.post('/admin/members', basicAuth, (req, res) => {
@@ -1094,11 +1053,40 @@ app.post('/admin/members', basicAuth, (req, res) => {
   }
 
   const emailNorm = normalizeEmail(body.email);
+
+// Normaliser felt før lagring (admin → members.json i /data)
+const sanitized = { ...body };
+sanitized.email = emailNorm;
+
+// Telefon (for TELL): normaliser om oppgitt
+if (Object.prototype.hasOwnProperty.call(sanitized, 'phone') && sanitized.phone) {
+  sanitized.phone = normalizePhone(sanitized.phone) || sanitized.phone;
+}
+if (Object.prototype.hasOwnProperty.call(sanitized, 'phoneFull') && sanitized.phoneFull) {
+  sanitized.phoneFull = normalizePhone(sanitized.phoneFull) || sanitized.phoneFull;
+}
+if (Object.prototype.hasOwnProperty.call(sanitized, 'mobile') && sanitized.mobile) {
+  sanitized.mobile = normalizePhone(sanitized.mobile) || sanitized.mobile;
+}
+
+// Plan: standardiser til lowercase key, og verifiser mot plans.json hvis mulig
+if (Object.prototype.hasOwnProperty.call(sanitized, 'plan') && sanitized.plan) {
+  const planKey = String(sanitized.plan).trim().toLowerCase();
+  const plans = getPlans() || [];
+  const exists = plans.length
+    ? plans.some((p) => p && (String(p.id || '').trim().toLowerCase() === planKey || String(p.key || '').trim().toLowerCase() === planKey))
+    : true; // hvis ingen plans.json ennå, tillat (bakoverkompatibilitet)
+  if (!exists) {
+    return res.status(400).json({ ok: false, error: 'plan_not_found', detail: planKey });
+  }
+  sanitized.plan = planKey;
+}
+
 let existing = members.find((m) => normalizeEmail(m.email) === emailNorm);
 
 if (existing) {
   // Oppdater eksisterende, men behold id hvis den finnes
-  Object.assign(existing, body);
+  Object.assign(existing, sanitized);
   if (!existing.id) {
     existing.id = `mem_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
   }
@@ -1106,7 +1094,7 @@ if (existing) {
   // Nytt medlem → sørg for id
   const newMember = {
     id: body.id || `mem_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
-    ...body,
+    ...sanitized,
   };
   members.push(newMember);
 }
@@ -1123,28 +1111,6 @@ app.get('/admin/orders', basicAuth, (req, res) => {
 });
 
 // Legg til/oppdater medlem (nytt admin-UI)
-app.post('/admin/members', basicAuth, (req, res) => {
-  const body = req.body || {};
-  const members = getMembers();
-
-  if (!body.email) {
-    return res.status(400).json({ error: 'email må være satt' });
-  }
-
-  const emailNorm = normalizeEmail(body.email);
-  let existing = members.find((m) => normalizeEmail(m.email) === emailNorm);
-
-  if (existing) {
-    Object.assign(existing, body);
-  } else {
-    members.push(body);
-  }
-
-  saveMembers(members);
-  res.json({ ok: true });
-});
-
-// Søk medlem (nytt admin-UI)
 app.get('/admin/members/search', basicAuth, (req, res) => {
   const email = normalizeEmail(req.query.email);
   const phone = normalizePhone(req.query.phone);
@@ -1469,13 +1435,25 @@ app.post('/api/admin/members', basicAuth, async (req, res) => {
 
   const phoneNormalized = normalizePhone(phone);
 
+  // Plan: standardiser til lowercase key, og verifiser mot plans.json hvis mulig
+  let planKey = plan ? String(plan).trim().toLowerCase() : null;
+  if (planKey) {
+    const plans = getPlans() || [];
+    const exists = plans.length
+      ? plans.some((p) => p && (String(p.id || '').trim().toLowerCase() === planKey || String(p.key || '').trim().toLowerCase() === planKey))
+      : true;
+    if (!exists) {
+      return res.status(400).json({ ok: false, error: 'plan_not_found', detail: planKey });
+    }
+  }
+
   const member = {
   id: `mem_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
   email: email.toLowerCase(),
   active: !!active,
   name,
   phone: phoneNormalized,
-  plan: plan || null,
+  plan: planKey || null,
   clubMember: false,
 };
 
@@ -1519,7 +1497,16 @@ app.post('/api/admin/members/update-plan', basicAuth, (req, res) => {
     return res.status(404).json({ ok: false, error: 'member_not_found' });
   }
 
-  members[idx].plan = plan;
+  const planKey = String(plan).trim().toLowerCase();
+  const plans = getPlans() || [];
+  const exists = plans.length
+    ? plans.some((p) => p && (String(p.id || '').trim().toLowerCase() === planKey || String(p.key || '').trim().toLowerCase() === planKey))
+    : true;
+  if (!exists) {
+    return res.status(400).json({ ok: false, error: 'plan_not_found', detail: planKey });
+  }
+
+  members[idx].plan = planKey;
   members[idx].updatedAt = new Date().toISOString();
   saveMembers(members);
 
