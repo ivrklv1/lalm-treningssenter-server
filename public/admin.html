@@ -1111,6 +1111,70 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   let smsMembers = [];
   let currentDetailIndex = null;
   let dragPlanIndex = null;
+
+  // -----------------------------
+  // Plan helpers (kilde: /admin/plans -> /data/plans.json)
+  // -----------------------------
+  function planKeyOf(p) {
+    return String(p?.id || p?.key || '').trim();
+  }
+
+  function planLabelOf(p) {
+    const name = String(p?.name || '').trim();
+    const key = String(p?.id || p?.key || '').trim();
+    return name ? name : key;
+  }
+
+  function buildPlanOptions(selectEl, plans, { includeAll = false, includePlaceholder = true, placeholder = 'Velg plan…' } = {}) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '';
+
+    if (includePlaceholder) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = placeholder;
+      selectEl.appendChild(opt);
+    }
+
+    if (includeAll) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Alle planer';
+      selectEl.appendChild(opt);
+    }
+
+    const list = (plans || [])
+      .filter(p => p && (p.id || p.key))
+      .filter(p => p.active !== false)
+      .sort((a, b) => (a.sortOrder || 9999) - (b.sortOrder || 9999));
+
+    for (const p of list) {
+      const opt = document.createElement('option');
+      opt.value = planKeyOf(p);
+      opt.textContent = planLabelOf(p);
+      selectEl.appendChild(opt);
+    }
+  }
+
+  async function loadPlansForMemberUi() {
+    const res = await fetch('/admin/plans');
+    if (!res.ok) throw new Error('Kunne ikke laste plans (HTTP ' + res.status + ')');
+    const list = await res.json();
+    allPlans = Array.isArray(list) ? list : [];
+
+    // Dropdowns i "Medlemmer"
+    buildPlanOptions(newPlan, allPlans, { includePlaceholder: true, placeholder: 'Velg plan…' });
+    buildPlanOptions(changePlanSelect, allPlans, { includePlaceholder: true, placeholder: 'Endre plan…' });
+
+    // Filter
+    buildPlanOptions(filterPlan, allPlans, { includeAll: true, includePlaceholder: false });
+
+    // Modal planselect (hvis modal allerede er åpen / selectedMember finnes)
+    try {
+      fillModalPlanOptions(selectedMember?.plan || '');
+    } catch (_) {}
+  }
+
   let selectedMember = null;
   let currentPlanFilter = 'all';
 
@@ -1231,18 +1295,26 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
 
     function fillModalPlanOptions(currentPlan) {
-    if (!modalMemberPlanSelect || !newPlan) return;
+    if (!modalMemberPlanSelect) return;
     modalMemberPlanSelect.innerHTML = '';
-    Array.from(newPlan.options).forEach(opt => {
-      if (!opt.value) return;
-      const o = document.createElement('option');
-      o.value = opt.value;
-      o.textContent = opt.textContent;
-      if (opt.value === currentPlan) {
-        o.selected = true;
-      }
-      modalMemberPlanSelect.appendChild(o);
-    });
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Velg plan…';
+    modalMemberPlanSelect.appendChild(placeholder);
+
+    const list = (allPlans || [])
+      .filter(p => p && planKeyOf(p))
+      .filter(p => p.active !== false)
+      .sort((a, b) => (a.sortOrder || 9999) - (b.sortOrder || 9999));
+
+    for (const p of list) {
+      const opt = document.createElement('option');
+      opt.value = planKeyOf(p);
+      opt.textContent = planLabelOf(p);
+      if (opt.value === (currentPlan || '')) opt.selected = true;
+      modalMemberPlanSelect.appendChild(opt);
+    }
   }
 
   function openMemberModal(member) {
@@ -2414,13 +2486,19 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   // Init
   (async function init() {
-    if (typeof copyPlanOptionsFromNewPlan === 'function') {
-      copyPlanOptionsFromNewPlan();
+    try {
+      updateSmsModeUi && updateSmsModeUi();
+
+      // Viktig: planer først (brukes av add/edit/filter i Medlemmer)
+      await loadPlansForMemberUi();
+
+      await loadMembers();
+      await loadOrders();
+      await loadPlansAdmin();   // fanen "Medlemskap & priser"
+    } catch (e) {
+      console.error('Init-feil:', e);
+      // Server-status-indikatoren settes ellers av dine eksisterende kall; her logger vi bare.
     }
-    updateSmsModeUi && updateSmsModeUi();
-    await loadMembers();
-    await loadOrders();
-    await loadPlansAdmin();   // 👈 viktig
   })();
 
 </script>
