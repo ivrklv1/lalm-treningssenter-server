@@ -114,16 +114,24 @@ const IL_DISCOUNT_PLANS = [
 ];
 
 // ----------------------------
-// Logging til access.log
+// Logging til access.log (PERSISTENT på Render)
 // ----------------------------
-const ACCESS_LOG = path.join(__dirname, 'access.log');
+const ACCESS_LOG = path.join(DATA_DIR, 'access.log');
+
 function appendAccessLog(line) {
-  try {
-    fs.appendFileSync(ACCESS_LOG, line, 'utf-8');
-  } catch (e) {
-    console.error('Kunne ikke skrive til access.log:', e.message);
-  }
+  const row = line.endsWith('\n') ? line : line + '\n';
+
+  // Skriv til persistent disk (/data)
+  fs.appendFile(ACCESS_LOG, row, (err) => {
+    if (err) {
+      console.error('Kunne ikke skrive til access.log:', err.message);
+    }
+  });
+
+  // I tillegg: logg til stdout (Render Logs) – veldig nyttig ved feilsøk
+  console.log('[ACCESS]', row.trim());
 }
+
 // ----------------------------
 // Normalisering av telefonnummer
 // ----------------------------
