@@ -558,7 +558,7 @@
     <button class="tab-button active" data-tab="members">Medlemmer</button>
     <button class="tab-button" data-tab="plans">Medlemskap & priser</button>
     <button class="tab-button" data-tab="sms">SMS</button>
-    <button class="tab-button" data-tab="orders">Logg</button>
+    <button class="tab-button" data-tab="logs">Logg</button>
     <button class="tab-button" data-tab="tools">Verktøy / NIF</button>
   </div>
 
@@ -911,89 +911,48 @@
 
         <!-- UNDERFANE: VIPPS -->
         <div id="logtab-vipps">
-          <!-- TAB: ORDRE -->
-          <section id="tab-orders" class="tab-panel">
-            <section class="card">
-             <div class="card-title-row" style="margin-bottom:8px;">
-                <div>
-                  <div class="card-title">Vipps-ordrer</div>
-                  <div class="card-subtitle">
-                    Viser siste betalinger via Vipps Checkout.
-                  </div>
-                </div>
-                <div>
-                  <span class="badge-small">
-                    Totalt: <span id="ordersCount">0</span>
-                  </span>
-                </div>
+          <div class="card-title-row" style="margin-bottom:8px;">
+            <div>
+              <div class="card-title">Vipps-ordrer</div>
+              <div class="card-subtitle">
+                Viser siste betalinger via Vipps Checkout.
               </div>
+            </div>
+            <div>
+              <span class="badge-small">
+                Totalt: <span id="ordersCount">0</span>
+              </span>
+            </div>
+          </div>
 
-              <div class="table-wrapper" style="max-height: 360px;">
-                <div class="scroll">
-                  <table>
-                    <thead>
-                    <tr>
-                      <th>OrderId</th>
-                      <th>Status</th>
-                      <th>Plan</th>
-                      <th>Beløp</th>
-                      <th>E-post</th>
-                      <th>Opprettet</th>
-                    </tr>
-                    </thead>
-                    <tbody id="ordersTableBody">
-                    <tr>
-                      <td colspan="6" class="text-muted">Laster ordrer…</td>
-                    </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div id="ordersError" class="mt-1 small tag-danger" style="display:none;"></div>
-            </section>
-          </section>
-                <div class="card-title-row" style="margin-bottom:8px;">
-                  <div>
-                    <div class="card-title">Vipps-ordrer</div>
-                    <div class="card-subtitle">
-                      Viser siste betalinger via Vipps Checkout.
-                    </div>
-                  </div>
-                  <div>
-                    <span class="badge-small">
-                      Totalt: <span id="ordersCount">0</span>
-                    </span>
-                  </div>
-                </div>
-
-                <div class="table-wrapper" style="max-height: 360px;">
-                  <div class="scroll">
-                   <table>
-                      <thead>
-                        <tr>
-                         <th>OrderId</th>
-                          <th>Status</th>
-                          <th>Plan</th>
-                          <th>Beløp</th>
-                          <th>E-post</th>
-                          <th>Opprettet</th>
-                        </tr>
-                      </thead>
-                      <tbody id="ordersTableBody">
-                       <tr>
-                         <td colspan="6" class="text-muted">Laster ordrer…</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                <div id="ordersError" class="mt-1 small tag-danger" style="display:none;"></div>
-              </div>
+          <div class="table-wrapper" style="max-height: 360px;">
+            <div class="scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>OrderId</th>
+                    <th>Status</th>
+                    <th>Plan</th>
+                    <th>Beløp</th>
+                    <th>E-post</th>
+                    <th>Opprettet</th>
+                  </tr>
+                </thead>
+                <tbody id="ordersTableBody">
+                  <tr>
+                    <td colspan="6" class="text-muted">Laster ordrer…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div id="ordersError" class="mt-1 small tag-danger" style="display:none;"></div>
+        </div>
 
         <!-- UNDERFANE: DØR -->
         <div id="logtab-door" style="display:none;">
           <div class="card-title-row" style="margin-bottom:8px;">
-           <div>
+            <div>
               <div class="card-title">Dør-logg</div>
               <div class="card-subtitle">Siste hendelser fra access.log (maks 500 linjer).</div>
             </div>
@@ -1006,7 +965,7 @@
             <div class="scroll">
               <table>
                 <thead>
-                 <tr>
+                  <tr>
                     <th>Linje</th>
                   </tr>
                 </thead>
@@ -1021,49 +980,6 @@
 
           <div id="doorLogError" class="mt-1 small tag-danger" style="display:none;"></div>
         </div>
-
-      </section>
-    </section>
-
-    <!-- TAB: ORDRE -->
-    <section id="tab-orders" class="tab-panel">
-      <section class="card">
-        <div class="card-title-row" style="margin-bottom:8px;">
-          <div>
-            <div class="card-title">Vipps-ordrer</div>
-            <div class="card-subtitle">
-              Viser siste betalinger via Vipps Checkout.
-            </div>
-          </div>
-          <div>
-            <span class="badge-small">
-              Totalt: <span id="ordersCount">0</span>
-            </span>
-          </div>
-        </div>
-
-        <div class="table-wrapper" style="max-height: 360px;">
-          <div class="scroll">
-            <table>
-              <thead>
-              <tr>
-                <th>OrderId</th>
-                <th>Status</th>
-                <th>Plan</th>
-                <th>Beløp</th>
-                <th>E-post</th>
-                <th>Opprettet</th>
-              </tr>
-              </thead>
-              <tbody id="ordersTableBody">
-              <tr>
-                <td colspan="6" class="text-muted">Laster ordrer…</td>
-              </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div id="ordersError" class="mt-1 small tag-danger" style="display:none;"></div>
       </section>
     </section>
 
@@ -1810,7 +1726,6 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
 
   // ------- Logg (underfaner) -------
-
   const logSubtabsEl = document.getElementById('logSubtabs');
   const logtabVippsEl = document.getElementById('logtab-vipps');
   const logtabDoorEl  = document.getElementById('logtab-door');
@@ -1820,19 +1735,16 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   const doorLogError = document.getElementById('doorLogError');
 
   function setLogSubtab(which) {
-    // toggle buttons
     const btns = logSubtabsEl ? logSubtabsEl.querySelectorAll('button[data-logtab]') : [];
     btns.forEach(b => b.classList.toggle('active', b.dataset.logtab === which));
 
-    // toggle panels
     if (logtabVippsEl) logtabVippsEl.style.display = (which === 'vipps') ? 'block' : 'none';
     if (logtabDoorEl)  logtabDoorEl.style.display  = (which === 'door')  ? 'block' : 'none';
 
-    // lazy-load
     if (which === 'vipps') {
       if (!allOrders || !allOrders.length) loadOrders();
     } else if (which === 'door') {
-    loadDoorLog();
+      loadDoorLog();
     }
   }
 
@@ -1862,18 +1774,14 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         return;
       }
 
-      // Vis nyeste først
       const show = [...lines].reverse();
 
       doorLogBody.innerHTML = '';
       show.forEach((line) => {
         const tr = document.createElement('tr');
-        const safe = String(line)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-
-        tr.innerHTML = `<td style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.78rem; white-space: pre-wrap;">${safe}</td>`;
+        tr.innerHTML =
+          `<td style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+                     font-size: 0.78rem; white-space: pre-wrap;">${escapeHtml(line)}</td>`;
         doorLogBody.appendChild(tr);
       });
     } catch (e) {
@@ -1886,9 +1794,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     }
   }
 
-  if (btnRefreshDoorLog) {
-    btnRefreshDoorLog.addEventListener('click', loadDoorLog);
-  }
+  if (btnRefreshDoorLog) btnRefreshDoorLog.addEventListener('click', loadDoorLog);
 
 
   // ------- Verktøy -------
@@ -2681,7 +2587,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     }
   });
 
-  // FANER
+  // ------- FANER -------
   const tabButtons = document.querySelectorAll('.tab-button');
   const tabPanels = document.querySelectorAll('.tab-panel');
 
@@ -2694,6 +2600,11 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       btn.classList.add('active');
       const panel = document.getElementById('tab-' + target);
       if (panel) panel.classList.add('active');
+
+      // Default underfane når "Logg" åpnes
+      if (target === 'logs' && typeof setLogSubtab === 'function') {
+        setLogSubtab('vipps');
+      }
     });
   });
 
