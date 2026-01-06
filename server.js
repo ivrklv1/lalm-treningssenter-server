@@ -473,22 +473,51 @@ function updateOrderStatus(orderId, status, extra = {}) {
 }
 
 // ----------------------------
-// Enkel basic auth for admin-API
+// Basic auth for admin-API (støtter flere brukere)
 // ----------------------------
-const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASS = process.env.ADMIN_PASS || 'changeme';
 
 function basicAuth(req, res, next) {
   const auth = req.headers.authorization || '';
   const [type, credentials] = auth.split(' ');
+
   if (type === 'Basic' && credentials) {
-    const decoded = Buffer.from(credentials, 'base64').toString();
+    const decoded = Buffer.from(credentials, 'base64').toString('utf8');
     const [user, pass] = decoded.split(':');
-    if (user === ADMIN_USER && pass === ADMIN_PASS) return next();
+
+    // 1) Ny løsning: ADMIN_USERS=user1:pass1,user2:pass2
+    const rawUsers = String(process.env.ADMIN_USERS || '').trim();
+    if (rawUsers) {
+      const users = rawUsers
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(pair => {
+          const [u, p] = pair.split(':');
+          return { u, p };
+        });
+
+      const ok = users.some(x => x.u === user && x.p === pass);
+      if (ok) {
+        req.adminUser = user;
+        return next();
+      }
+    }
+
+    // 2) Fallback (midlertidig): gammel ADMIN_USER / ADMIN_PASS
+    const legacyUser = process.env.ADMIN_USER;
+    const legacyPass = process.env.ADMIN_PASS;
+    if (legacyUser && legacyPass) {
+      if (user === legacyUser && pass === legacyPass) {
+        req.adminUser = user;
+        return next();
+      }
+    }
   }
+
   res.set('WWW-Authenticate', 'Basic realm="Admin-sone"');
   return res.status(401).send('Du må logge inn for å få tilgang');
 }
+
 
 // ----------------------------
 // Hjelpefunksjoner for navn, telefon, epost
