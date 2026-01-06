@@ -2096,15 +2096,26 @@ app.post('/door/open', openingHoursGuard, async (req, res) => {
     await gcOpen(doorConfig[doorId].gateIndex);
 
     const source = member ? 'MEMBER' : 'DROPIN';
-    const who = member
-      ? (member.email || member.phone || 'ukjent')
-      : `${dropin.email} (dropin)`;
+
+    const rawName = member
+      ? String(member?.name || '').trim()
+      : String(dropin?.name || '').trim();
+
+    const displayName =
+      rawName && !rawName.includes('@')
+       ? rawName
+        : (member
+            ? (member.email || member.phone || 'ukjent')
+            : (dropin?.mobile || dropin?.email || 'dropin'));
 
     const ts = new Date().toLocaleString('nb-NO', { timeZone: 'Europe/Oslo' });
 
     appendAccessLog(
-      `${ts} email=${who} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=OPEN_${source}\n`
+      `${ts} name=${displayName} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=OPEN_${source}\n`
     );
+
+
+
 
     return res.json({ ok: true, source });
   } catch (e) {

@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "0eb1cbe0-847e-4c6d-b7e3-f9566c72015e"
+      }
+    },
+    "android": {
+      "package": "com.ivrklv1.gymserver"
+    }
+  }
+}

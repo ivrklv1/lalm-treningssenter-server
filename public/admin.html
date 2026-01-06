@@ -558,7 +558,7 @@
     <button class="tab-button active" data-tab="members">Medlemmer</button>
     <button class="tab-button" data-tab="plans">Medlemskap & priser</button>
     <button class="tab-button" data-tab="sms">SMS</button>
-    <button class="tab-button" data-tab="orders">Vipps-ordrer</button>
+    <button class="tab-button" data-tab="orders">Logg</button>
     <button class="tab-button" data-tab="tools">Verktøy / NIF</button>
   </div>
 
@@ -891,6 +891,137 @@
           <button id="sendSmsBtn" class="btn-secondary">📩 Send SMS</button>
           <span id="smsStatus" class="small" style="margin-left:8px;"></span>
         </div>
+      </section>
+    </section>
+
+    <!-- TAB: LOGG -->
+    <section id="tab-logs" class="tab-panel">
+      <section class="card">
+       <div class="card-title-row" style="margin-bottom:10px;">
+          <div>
+            <div class="card-title">Logg</div>
+            <div class="card-subtitle">Vipps-ordrer og dør-hendelser (access.log).</div>
+          </div>
+
+          <div class="pill-row" id="logSubtabs">
+            <button type="button" class="pill active" data-logtab="vipps">Vipps-ordrer</button>
+            <button type="button" class="pill" data-logtab="door">Dør-logg</button>
+          </div>
+        </div>
+
+        <!-- UNDERFANE: VIPPS -->
+        <div id="logtab-vipps">
+          <!-- TAB: ORDRE -->
+          <section id="tab-orders" class="tab-panel">
+            <section class="card">
+             <div class="card-title-row" style="margin-bottom:8px;">
+                <div>
+                  <div class="card-title">Vipps-ordrer</div>
+                  <div class="card-subtitle">
+                    Viser siste betalinger via Vipps Checkout.
+                  </div>
+                </div>
+                <div>
+                  <span class="badge-small">
+                    Totalt: <span id="ordersCount">0</span>
+                  </span>
+                </div>
+              </div>
+
+              <div class="table-wrapper" style="max-height: 360px;">
+                <div class="scroll">
+                  <table>
+                    <thead>
+                    <tr>
+                      <th>OrderId</th>
+                      <th>Status</th>
+                      <th>Plan</th>
+                      <th>Beløp</th>
+                      <th>E-post</th>
+                      <th>Opprettet</th>
+                    </tr>
+                    </thead>
+                    <tbody id="ordersTableBody">
+                    <tr>
+                      <td colspan="6" class="text-muted">Laster ordrer…</td>
+                    </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div id="ordersError" class="mt-1 small tag-danger" style="display:none;"></div>
+            </section>
+          </section>
+                <div class="card-title-row" style="margin-bottom:8px;">
+                  <div>
+                    <div class="card-title">Vipps-ordrer</div>
+                    <div class="card-subtitle">
+                      Viser siste betalinger via Vipps Checkout.
+                    </div>
+                  </div>
+                  <div>
+                    <span class="badge-small">
+                      Totalt: <span id="ordersCount">0</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div class="table-wrapper" style="max-height: 360px;">
+                  <div class="scroll">
+                   <table>
+                      <thead>
+                        <tr>
+                         <th>OrderId</th>
+                          <th>Status</th>
+                          <th>Plan</th>
+                          <th>Beløp</th>
+                          <th>E-post</th>
+                          <th>Opprettet</th>
+                        </tr>
+                      </thead>
+                      <tbody id="ordersTableBody">
+                       <tr>
+                         <td colspan="6" class="text-muted">Laster ordrer…</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div id="ordersError" class="mt-1 small tag-danger" style="display:none;"></div>
+              </div>
+
+        <!-- UNDERFANE: DØR -->
+        <div id="logtab-door" style="display:none;">
+          <div class="card-title-row" style="margin-bottom:8px;">
+           <div>
+              <div class="card-title">Dør-logg</div>
+              <div class="card-subtitle">Siste hendelser fra access.log (maks 500 linjer).</div>
+            </div>
+            <div class="btn-row" style="margin:0;">
+              <button id="btnRefreshDoorLog" class="btn-secondary">Oppdater</button>
+            </div>
+          </div>
+
+          <div class="table-wrapper" style="max-height: 360px;">
+            <div class="scroll">
+              <table>
+                <thead>
+                 <tr>
+                    <th>Linje</th>
+                  </tr>
+                </thead>
+                <tbody id="doorLogBody">
+                  <tr>
+                    <td class="text-muted">Laster dør-logg…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="doorLogError" class="mt-1 small tag-danger" style="display:none;"></div>
+        </div>
+
       </section>
     </section>
 
@@ -1677,6 +1808,88 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       ordersErrorEl.style.display = 'block';
     }
   }
+
+  // ------- Logg (underfaner) -------
+
+  const logSubtabsEl = document.getElementById('logSubtabs');
+  const logtabVippsEl = document.getElementById('logtab-vipps');
+  const logtabDoorEl  = document.getElementById('logtab-door');
+
+  const btnRefreshDoorLog = document.getElementById('btnRefreshDoorLog');
+  const doorLogBody = document.getElementById('doorLogBody');
+  const doorLogError = document.getElementById('doorLogError');
+
+  function setLogSubtab(which) {
+    // toggle buttons
+    const btns = logSubtabsEl ? logSubtabsEl.querySelectorAll('button[data-logtab]') : [];
+    btns.forEach(b => b.classList.toggle('active', b.dataset.logtab === which));
+
+    // toggle panels
+    if (logtabVippsEl) logtabVippsEl.style.display = (which === 'vipps') ? 'block' : 'none';
+    if (logtabDoorEl)  logtabDoorEl.style.display  = (which === 'door')  ? 'block' : 'none';
+
+    // lazy-load
+    if (which === 'vipps') {
+      if (!allOrders || !allOrders.length) loadOrders();
+    } else if (which === 'door') {
+    loadDoorLog();
+    }
+  }
+
+  if (logSubtabsEl) {
+    logSubtabsEl.addEventListener('click', (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest('button[data-logtab]') : null;
+      if (!btn) return;
+      setLogSubtab(btn.dataset.logtab);
+    });
+  }
+
+  async function loadDoorLog() {
+    if (!doorLogBody) return;
+
+    if (doorLogError) doorLogError.style.display = 'none';
+    doorLogBody.innerHTML = '<tr><td class="text-muted">Laster dør-logg…</td></tr>';
+
+    try {
+      const res = await fetch('/api/admin/logs');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+
+      const data = await res.json();
+      const lines = (data && Array.isArray(data.lines)) ? data.lines : [];
+
+      if (!lines.length) {
+        doorLogBody.innerHTML = '<tr><td class="text-muted">Ingen logglinjer funnet.</td></tr>';
+        return;
+      }
+
+      // Vis nyeste først
+      const show = [...lines].reverse();
+
+      doorLogBody.innerHTML = '';
+      show.forEach((line) => {
+        const tr = document.createElement('tr');
+        const safe = String(line)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+
+        tr.innerHTML = `<td style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.78rem; white-space: pre-wrap;">${safe}</td>`;
+        doorLogBody.appendChild(tr);
+      });
+    } catch (e) {
+      console.error('Feil ved henting av access.log:', e);
+      doorLogBody.innerHTML = '<tr><td class="text-muted">Kunne ikke laste dør-logg.</td></tr>';
+      if (doorLogError) {
+        doorLogError.textContent = 'Feil ved henting av dør-logg: ' + e.message;
+        doorLogError.style.display = 'block';
+      }
+    }
+  }
+
+  if (btnRefreshDoorLog) {
+    btnRefreshDoorLog.addEventListener('click', loadDoorLog);
+  }
+
 
   // ------- Verktøy -------
 
