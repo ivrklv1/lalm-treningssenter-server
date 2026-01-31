@@ -3640,6 +3640,149 @@ app.get('/vipps/order-status/:orderId', (req, res) => {
 });
 
 
+
+/**
+ * Admin-endpoint: preview SMS-mottakere (sender INGENTING)
+ * body kan være:
+ *  - { recipientMode: 'segment', segment: 'active'|'inactive'|'all' }
+ *  - { recipientMode: 'selected', phones: string[] }
+ *  - { recipientMode: 'plan', planKeys: string[], onlyActive?: boolean }
+ *
+ * return: { ok, mode, attempted, sample: [{name,email,phone,planKey,active}] }
+ */
+app.post('/admin/sms/preview', basicAuth, (req, res) => {
+  try {
+    const { recipientMode, segment, phones: phonesRaw, planKeys: planKeysRaw, onlyActive } = req.body || {};
+
+    const members = getMembers();
+
+    const sampleFromPhones = (phones) => {
+      // bygg en rask indeks fra normalisert telefon -> medlem (første treff)
+      const phoneToMember = new Map();
+      for (const m of members) {
+        const candidatePhone = m.phone || m.mobile || m.phoneFull;
+        const norm = normalizePhone(candidatePhone);
+        if (!norm) continue;
+        if (!phoneToMember.has(norm)) phoneToMember.set(norm, m);
+      }
+
+      const out = [];
+      for (const p of phones.slice(0, 20)) {
+        const m = phoneToMember.get(p);
+        out.push({
+          name: (m && (m.name || m.fullName)) || null,
+          email: (m && m.email) || null,
+          phone: p,
+          planKey: (m && (m.planKey || m.plan || m.membershipKey)) || null,
+          active: (m && !!m.active) || false,
+        });
+      }
+      return out;
+    };
+
+    // 1) Selected / phones
+    if (Array.isArray(phonesRaw) && phonesRaw.length > 0) {
+      const seen = new Set();
+      const phones = [];
+      for (const p of phonesRaw) {
+        const norm = normalizePhone(p);
+        if (!norm) continue;
+        if (seen.has(norm)) continue;
+        seen.add(norm);
+        phones.push(norm);
+      }
+      return res.json({
+        ok: true,
+        mode: 'selected',
+        attempted: phones.length,
+        sample: sampleFromPhones(phones),
+      });
+    }
+
+    // 2) Plan-modus
+    if ((recipientMode === 'plan') || (Array.isArray(planKeysRaw) && planKeysRaw.length > 0)) {
+      const wanted = new Set(
+        (Array.isArray(planKeysRaw) ? planKeysRaw : [])
+          .map(k => String(k || '').trim())
+          .filter(Boolean)
+      );
+
+      let targets = members.filter((m) => {
+        const key = String(m.planKey || m.plan || m.membershipKey || '').trim();
+        if (!key) return false;
+        return wanted.has(key);
+      });
+
+      const onlyAct = (onlyActive === undefined) ? true : !!onlyActive;
+      if (onlyAct) targets = targets.filter((m) => !!m.active);
+
+      const seen = new Set();
+      const phones = [];
+      for (const m of targets) {
+        const candidatePhone = m.phone || m.mobile || m.phoneFull;
+        const norm = normalizePhone(candidatePhone);
+        if (!norm) continue;
+        if (seen.has(norm)) continue;
+        seen.add(norm);
+        phones.push(norm);
+      }
+
+      const sample = targets.slice(0, 20).map((m) => ({
+        name: m.name || m.fullName || null,
+        email: m.email || null,
+        phone: normalizePhone(m.phone || m.mobile || m.phoneFull) || null,
+        planKey: m.planKey || m.plan || m.membershipKey || null,
+        active: !!m.active,
+      })).filter(x => x.phone);
+
+      return res.json({
+        ok: true,
+        mode: 'plan',
+        planKeys: Array.from(wanted),
+        onlyActive: onlyAct,
+        attempted: phones.length,
+        sample,
+      });
+    }
+
+    // 3) Segment
+    const seg = String(segment || 'all');
+    let targets = members;
+    if (seg === 'active') targets = members.filter((m) => !!m.active);
+    else if (seg === 'inactive') targets = members.filter((m) => !m.active);
+
+    const seen = new Set();
+    const phones = [];
+    for (const m of targets) {
+      const candidatePhone = m.phone || m.mobile || m.phoneFull;
+      const norm = normalizePhone(candidatePhone);
+      if (!norm) continue;
+      if (seen.has(norm)) continue;
+      seen.add(norm);
+      phones.push(norm);
+    }
+
+    const sample = targets.slice(0, 20).map((m) => ({
+      name: m.name || m.fullName || null,
+      email: m.email || null,
+      phone: normalizePhone(m.phone || m.mobile || m.phoneFull) || null,
+      planKey: m.planKey || m.plan || m.membershipKey || null,
+      active: !!m.active,
+    })).filter(x => x.phone);
+
+    return res.json({
+      ok: true,
+      mode: 'segment',
+      segment: seg,
+      attempted: phones.length,
+      sample,
+    });
+  } catch (err) {
+    console.error('sms preview error:', err);
+    return res.status(500).json({ error: 'SMS preview feilet.' });
+  }
+});
+
 /**
  * Admin-endpoint: send SMS til medlemmer
  * body: { message: string, segment: 'active' | 'inactive' | 'all' }
@@ -3693,7 +3836,73 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
       });
     }
 
-    // 2) Ellers -> segment (aktive / inaktive / alle)
+    
+    // 2) Hvis frontend sender planKeys -> send til medlemmer på valgte planer (Plan-modus)
+    const { recipientMode, planKeys: planKeysRaw, onlyActive } = req.body || {};
+    if ((recipientMode === 'plan') || (Array.isArray(planKeysRaw) && planKeysRaw.length > 0)) {
+      const wanted = new Set(
+        (Array.isArray(planKeysRaw) ? planKeysRaw : [])
+          .map(k => String(k || '').trim())
+          .filter(Boolean)
+      );
+
+      const members = getMembers();
+
+      let targets = members.filter((m) => {
+        const key = String(m.planKey || m.plan || m.membershipKey || '').trim();
+        if (!key) return false;
+        return wanted.has(key);
+      });
+
+      const onlyAct = (onlyActive === undefined) ? true : !!onlyActive;
+      if (onlyAct) {
+        targets = targets.filter((m) => !!m.active);
+      }
+
+      const seen = new Set();
+      const phones = [];
+
+      for (const m of targets) {
+        const candidatePhone = m.phone || m.mobile || m.phoneFull;
+        if (!candidatePhone) continue;
+
+        const norm = normalizePhone(candidatePhone);
+        if (!norm) continue;
+        if (seen.has(norm)) continue;
+
+        seen.add(norm);
+        phones.push(norm);
+      }
+
+      if (!phones.length) {
+        return res.status(400).json({ error: 'Fant ingen mottakere for valgte planer.' });
+      }
+
+      let sent = 0;
+      let failed = 0;
+
+      for (const p of phones) {
+        try {
+          await sendSms(p, message);
+          sent++;
+        } catch (e) {
+          failed++;
+        }
+      }
+
+      return res.json({
+        ok: true,
+        mode: 'plan',
+        planKeys: Array.from(wanted),
+        onlyActive: onlyAct,
+        totalCandidates: targets.length,
+        attempted: phones.length,
+        sent,
+        failed,
+      });
+    }
+
+// 2) Ellers -> segment (aktive / inaktive / alle)
     const seg = String(segment || 'all');
 
     const members = getMembers();

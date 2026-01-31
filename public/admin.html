@@ -848,9 +848,13 @@
             <input type="radio" name="smsMode" value="segment" checked />
             Segment (aktive / inaktive / alle)
           </label>
-          <label>
+          <label style="margin-right: 12px;">
             <input type="radio" name="smsMode" value="selected" />
             Valgte medlemmer (huk av i lista)
+          </label>
+          <label>
+            <input type="radio" name="smsMode" value="plans" />
+            Plan(er)
           </label>
         </div>
 
@@ -861,6 +865,31 @@
             <option value="inactive">Inaktive medlemmer</option>
             <option value="all">Alle medlemmer</option>
           </select>
+
+        <div id="smsPlansWrapper" class="mt-2" style="display:none;">
+          <div class="small" style="margin-bottom:6px;">
+            <strong>Planer</strong> (huk av en eller flere)
+          </div>
+          <div id="smsPlansList" style="display:flex; flex-wrap:wrap; gap:10px;"></div>
+
+          <div class="mt-2 small">
+            <label style="margin-right: 14px;">
+              <input type="checkbox" id="smsPlansOnlyActive" checked />
+              Kun aktive medlemmer
+            </label>
+          </div>
+        </div>
+
+        <div class="mt-2" style="display:flex; align-items:center; gap:10px;">
+          <button id="smsPreviewBtn" class="btn-secondary">👀 Forhåndsvis mottakere</button>
+          <span id="smsPreviewStatus" class="small text-muted"></span>
+        </div>
+
+        <div id="smsPreviewBox" class="mt-2 small" style="display:none; padding:10px; border:1px solid var(--border); border-radius:12px; background:#ffffff;">
+          <div><strong>Mottakere:</strong> <span id="smsPreviewCount">0</span></div>
+          <div id="smsPreviewSample" class="mt-1 text-muted"></div>
+        </div>
+
         </div>
 
         <div class="mt-3 small">
@@ -1112,8 +1141,23 @@
   const smsSelectAllEl = document.getElementById('smsSelectAll');
   const smsMembersBodyEl = document.getElementById('smsMembersBody');
   const smsSegmentWrapperEl = document.getElementById('smsSegmentWrapper');
+  const smsPlansWrapperEl = document.getElementById('smsPlansWrapper');
+  const smsPlansListEl = document.getElementById('smsPlansList');
+  const smsPlansOnlyActiveEl = document.getElementById('smsPlansOnlyActive');
+  const smsPreviewBtn = document.getElementById('smsPreviewBtn');
+  const smsPreviewStatusEl = document.getElementById('smsPreviewStatus');
+  const smsPreviewBoxEl = document.getElementById('smsPreviewBox');
+  const smsPreviewCountEl = document.getElementById('smsPreviewCount');
+  const smsPreviewSampleEl = document.getElementById('smsPreviewSample');
   const sendSmsBtn = document.getElementById('sendSmsBtn');
   const SMS_API_URL = '/admin/sms/broadcast';
+  const SMS_PREVIEW_URL = '/admin/sms/preview';
+
+  // SMS: invalidér preview når noe endres
+  if (smsMessageEl) smsMessageEl.addEventListener('input', invalidateSmsPreview);
+  if (smsSegmentEl) smsSegmentEl.addEventListener('change', invalidateSmsPreview);
+  if (smsPlansOnlyActiveEl) smsPlansOnlyActiveEl.addEventListener('change', invalidateSmsPreview);
+
 
   // Plans (plans.json)
   const plansTableBody = document.getElementById('plansTableBody');
@@ -1164,6 +1208,9 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
 
   let allMembers = [];
+  let smsPreviewOk = false;
+  let smsPreviewLastKey = '';
+  let plansCache = [];
   let allOrders = [];
   let allPlans = [];
   let smsMembers = [];
@@ -1226,6 +1273,9 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
     // Filter
     buildPlanOptions(filterPlan, allPlans, { includeAll: true, includePlaceholder: false });
+
+    // SMS: plan-velger
+    try { renderSmsPlans(allPlans); } catch (_) {}
 
     // Modal planselect (hvis modal allerede er åpen / selectedMember finnes)
     try {
@@ -2326,16 +2376,202 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     return checked ? checked.value : 'segment';
   }
 
-  function updateSmsModeUi() {
-    if (!smsSegmentWrapperEl) return;
-    const mode = getSmsMode();
-    if (mode === 'segment') {
-      smsSegmentWrapperEl.style.opacity = '1';
-      smsSegmentWrapperEl.style.pointerEvents = 'auto';
-    } else {
-      smsSegmentWrapperEl.style.opacity = '0.4';
-      smsSegmentWrapperEl.style.pointerEvents = 'none';
+
+
+  function invalidateSmsPreview() {
+    smsPreviewOk = false;
+    smsPreviewLastKey = '';
+    if (smsPreviewStatusEl) smsPreviewStatusEl.textContent = '';
+    if (smsPreviewBoxEl) smsPreviewBoxEl.style.display = 'none';
+    if (sendSmsBtn) sendSmsBtn.disabled = true;
+  }
+
+  function buildSmsPreviewKey(payload) {
+    // deterministisk nøkkel for å vite om preview er fersk
+    try {
+      return JSON.stringify(payload);
+    } catch (_) {
+      return String(Date.now());
     }
+  }
+
+  function renderSmsPlans(plans) {
+    plansCache = Array.isArray(plans) ? plans : [];
+    if (!smsPlansListEl) return;
+
+    smsPlansListEl.innerHTML = '';
+    const list = plansCache;
+
+    if (!list.length) {
+      smsPlansListEl.innerHTML = '<span class="text-muted">Ingen planer funnet.</span>';
+      return;
+    }
+
+    list.forEach((p) => {
+      const key = String(p.id || p.key || '').trim();
+      if (!key) return;
+      const label = String(p.name || p.title || p.label || key);
+
+      const wrap = document.createElement('label');
+      wrap.style.display = 'inline-flex';
+      wrap.style.alignItems = 'center';
+      wrap.style.gap = '6px';
+      wrap.style.padding = '6px 10px';
+      wrap.style.border = '1px solid var(--border)';
+      wrap.style.borderRadius = '999px';
+      wrap.style.background = '#fff';
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'smsPlanCheckbox';
+      cb.setAttribute('data-plankey', key);
+
+      cb.addEventListener('change', () => {
+        invalidateSmsPreview();
+      });
+
+      const t = document.createElement('span');
+      t.textContent = label;
+
+      wrap.appendChild(cb);
+      wrap.appendChild(t);
+      smsPlansListEl.appendChild(wrap);
+    });
+  }
+
+  function getSelectedSmsPlanKeys() {
+    const keys = [];
+    document.querySelectorAll('.smsPlanCheckbox:checked').forEach(cb => {
+      const k = cb.getAttribute('data-plankey');
+      if (k) keys.push(k);
+    });
+    return keys;
+  }
+
+  async function previewSmsRecipients() {
+    const mode = getSmsMode();
+    const message = (smsMessageEl && smsMessageEl.value) ? smsMessageEl.value.trim() : '';
+
+    if (!message) {
+      smsStatusEl.textContent = 'Meldingen kan ikke være tom.';
+      smsStatusEl.style.color = '#b91c1c';
+      return;
+    }
+
+    const payload = { recipientMode: mode, message };
+
+    if (mode === 'segment') {
+      payload.segment = smsSegmentEl ? smsSegmentEl.value : 'all';
+    } else if (mode === 'selected') {
+      const selectedPhones = [];
+      document.querySelectorAll('.smsMemberCheckbox:checked').forEach(cb => {
+        const p = cb.getAttribute('data-phone');
+        if (p) selectedPhones.push(p);
+      });
+      if (!selectedPhones.length) {
+        smsStatusEl.textContent = 'Ingen medlemmer er huket av.';
+        smsStatusEl.style.color = '#b91c1c';
+        return;
+      }
+      payload.phones = selectedPhones;
+    } else if (mode === 'plans') {
+      const planKeys = getSelectedSmsPlanKeys();
+      if (!planKeys.length) {
+        smsStatusEl.textContent = 'Ingen planer er valgt.';
+        smsStatusEl.style.color = '#b91c1c';
+        return;
+      }
+      payload.planKeys = planKeys;
+      payload.onlyActive = smsPlansOnlyActiveEl ? !!smsPlansOnlyActiveEl.checked : true;
+    }
+
+    // preview-endepunktet trenger ikke "message", men vi tar det med i nøkkelen (så preview blir ugyldig ved tekstendring)
+    const previewPayload = { ...payload };
+    delete previewPayload.message;
+
+    const key = buildSmsPreviewKey(payload);
+
+    if (smsPreviewStatusEl) {
+      smsPreviewStatusEl.textContent = 'Henter mottakere…';
+      smsPreviewStatusEl.style.color = '#374151';
+    }
+
+    try {
+      const res = await fetch(SMS_PREVIEW_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(previewPayload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        const msg = data.error || ('Preview feilet (HTTP ' + res.status + ')');
+        if (smsPreviewStatusEl) {
+          smsPreviewStatusEl.textContent = msg;
+          smsPreviewStatusEl.style.color = '#b91c1c';
+        }
+        invalidateSmsPreview();
+        return;
+      }
+
+      const attempted = Number(data.attempted || 0);
+      const sample = Array.isArray(data.sample) ? data.sample : [];
+
+      if (smsPreviewCountEl) smsPreviewCountEl.textContent = String(attempted);
+
+      if (smsPreviewSampleEl) {
+        if (!attempted) {
+          smsPreviewSampleEl.textContent = 'Ingen mottakere funnet.';
+        } else if (!sample.length) {
+          smsPreviewSampleEl.textContent = 'OK.';
+        } else {
+          const lines = sample.map(s => {
+            const name = s.name || s.email || '(ukjent)';
+            const plan = s.planKey ? (' · ' + s.planKey) : '';
+            const active = s.active ? ' · aktiv' : ' · inaktiv';
+            return `${name}${plan}${active}`;
+          });
+          smsPreviewSampleEl.innerHTML = lines.slice(0, 10).map(l => `<div>• ${escapeHtml(l)}</div>`).join('') +
+            (attempted > 10 ? `<div class="text-muted">… +${attempted - 10} flere</div>` : '');
+        }
+      }
+
+      if (smsPreviewBoxEl) smsPreviewBoxEl.style.display = 'block';
+      if (smsPreviewStatusEl) {
+        smsPreviewStatusEl.textContent = 'Preview klar.';
+        smsPreviewStatusEl.style.color = '#065f46';
+      }
+
+      smsPreviewOk = true;
+      smsPreviewLastKey = key;
+      if (sendSmsBtn) sendSmsBtn.disabled = false;
+    } catch (err) {
+      console.error('sms preview error', err);
+      if (smsPreviewStatusEl) {
+        smsPreviewStatusEl.textContent = 'Preview feilet.';
+        smsPreviewStatusEl.style.color = '#b91c1c';
+      }
+      invalidateSmsPreview();
+    }
+  }
+
+  function updateSmsModeUi() {
+    const mode = getSmsMode();
+
+    // segment wrapper
+    if (smsSegmentWrapperEl) {
+      const on = (mode === 'segment');
+      smsSegmentWrapperEl.style.opacity = on ? '1' : '0.4';
+      smsSegmentWrapperEl.style.pointerEvents = on ? 'auto' : 'none';
+    }
+
+    // plans wrapper
+    if (smsPlansWrapperEl) {
+      smsPlansWrapperEl.style.display = (mode === 'plans') ? 'block' : 'none';
+    }
+
+    // reset preview when mode changes
+    invalidateSmsPreview();
   }
 
   function renderSmsMembers() {
@@ -2393,15 +2629,11 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       return;
     }
 
-    const payload = { message };
+    const payload = { recipientMode: mode, message };
 
     if (mode === 'segment') {
-      if (smsSegmentEl) {
-        payload.segment = smsSegmentEl.value;
-      } else {
-        payload.segment = 'all';
-      }
-    } else {
+      payload.segment = smsSegmentEl ? smsSegmentEl.value : 'all';
+    } else if (mode === 'selected') {
       const selectedPhones = [];
       document.querySelectorAll('.smsMemberCheckbox:checked').forEach(cb => {
         const p = cb.getAttribute('data-phone');
@@ -2414,6 +2646,23 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         return;
       }
       payload.phones = selectedPhones;
+    } else if (mode === 'plans') {
+      const planKeys = getSelectedSmsPlanKeys();
+      if (!planKeys.length) {
+        smsStatusEl.textContent = 'Ingen planer er valgt.';
+        smsStatusEl.style.color = '#b91c1c';
+        return;
+      }
+      payload.planKeys = planKeys;
+      payload.onlyActive = smsPlansOnlyActiveEl ? !!smsPlansOnlyActiveEl.checked : true;
+    }
+
+    // Krev forhåndsvisning før sending (for å unngå feilutsendelser)
+    const key = buildSmsPreviewKey(payload);
+    if (!smsPreviewOk || smsPreviewLastKey !== key) {
+      smsStatusEl.textContent = 'Kjør forhåndsvisning før du sender.';
+      smsStatusEl.style.color = '#b91c1c';
+      return;
     }
 
     if (!confirm('Send SMS nå?')) return;
@@ -2566,12 +2815,26 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       document.querySelectorAll('.smsMemberCheckbox').forEach(cb => {
         cb.checked = checked;
       });
+      invalidateSmsPreview();
+    });
+  }
+
+  // invalidér preview ved avhuking i medlemslista
+  if (smsMembersBodyEl) {
+    smsMembersBodyEl.addEventListener('change', (e) => {
+      if (e.target && e.target.classList && e.target.classList.contains('smsMemberCheckbox')) {
+        invalidateSmsPreview();
+      }
     });
   }
 
   document.querySelectorAll('input[name="smsMode"]').forEach(rb => {
     rb.addEventListener('change', updateSmsModeUi);
   });
+
+  if (smsPreviewBtn) {
+    smsPreviewBtn.addEventListener('click', previewSmsRecipients);
+  }
 
   if (sendSmsBtn) {
     sendSmsBtn.addEventListener('click', sendSmsFromPanel);
@@ -2624,6 +2887,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   (async function init() {
     try {
       updateSmsModeUi && updateSmsModeUi();
+      try { invalidateSmsPreview(); } catch (_) {}
 
       // Viktig: planer først (brukes av add/edit/filter i Medlemmer)
       await loadPlansForMemberUi();
