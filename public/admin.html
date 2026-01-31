@@ -1317,8 +1317,9 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       return name.includes(q) || email.includes(q) || phone.includes(q);
     });
 
-    statsTotalCount.textContent = allMembers.length;
-    statsActiveCount.textContent = allMembers.filter(m => m.active).length;
+    // Tellerne skal følge det brukeren ser (planfilter + søk)
+    statsTotalCount.textContent = filtered.length;
+    statsActiveCount.textContent = filtered.filter(m => m.active).length;
 
     if (!filtered.length) {
       membersTableBody.innerHTML = '<tr><td colspan="4" class="text-muted">Ingen medlemmer funnet.</td></tr>';
