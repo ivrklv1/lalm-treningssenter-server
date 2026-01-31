@@ -3646,22 +3646,65 @@ app.get('/vipps/order-status/:orderId', (req, res) => {
  */
 app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
   try {
-    const { message, segment } = req.body || {};
+    const { message, segment, phones: phonesRaw } = req.body || {};
 
-    if (!message || !message.trim()) {
+    if (!message || !String(message).trim()) {
       return res.status(400).json({ error: 'Meldingen kan ikke være tom.' });
     }
 
-    // Bruk eksisterende helper
+    // 1) Hvis frontend sender "phones" -> send kun til disse (Valgte medlemmer)
+    if (Array.isArray(phonesRaw) && phonesRaw.length > 0) {
+      const seen = new Set();
+      const phones = [];
+
+      for (const p of phonesRaw) {
+        const norm = normalizePhone(p);
+        if (!norm) continue;
+        if (seen.has(norm)) continue;
+        seen.add(norm);
+        phones.push(norm);
+      }
+
+      if (phones.length === 0) {
+        return res.status(400).json({
+          error: 'Fant ingen gyldige telefonnummer i valgte mottakere.',
+        });
+      }
+
+      let sent = 0;
+      let failed = 0;
+
+      for (const phone of phones) {
+        try {
+          await sendSms(phone, String(message).trim());
+          sent++;
+        } catch (err) {
+          console.error('Feil ved SMS til', phone, err.message);
+          failed++;
+        }
+      }
+
+      return res.json({
+        ok: true,
+        mode: 'selected',
+        attempted: phones.length,
+        sent,
+        failed,
+      });
+    }
+
+    // 2) Ellers -> segment (aktive / inaktive / alle)
+    const seg = String(segment || 'all');
+
     const members = getMembers();
 
     let targets = members;
-    if (segment === 'active') {
+    if (seg === 'active') {
       targets = members.filter((m) => m.active); // feltet heter "active"
-    } else if (segment === 'inactive') {
+    } else if (seg === 'inactive') {
       targets = members.filter((m) => !m.active);
     }
-    // segment === 'all' → ingen ekstra filtrering
+    // seg === 'all' → ingen ekstra filtrering
 
     // Plukk ut unike telefonnummer
     const seen = new Set();
@@ -3691,7 +3734,7 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
 
     for (const phone of phones) {
       try {
-        await sendSms(phone, message);
+        await sendSms(phone, String(message).trim());
         sent++;
       } catch (err) {
         console.error('Feil ved SMS til', phone, err.message);
@@ -3701,7 +3744,8 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
 
     return res.json({
       ok: true,
-      segment: segment || 'all',
+      mode: 'segment',
+      segment: seg,
       totalCandidates: targets.length,
       attempted: phones.length,
       sent,
