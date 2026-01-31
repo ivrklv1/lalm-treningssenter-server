@@ -3795,6 +3795,16 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
       return res.status(400).json({ error: 'Meldingen kan ikke være tom.' });
     }
 
+    // TEST-SPERRE: blokker segment=all (og default) under testing
+    const hasPhones = Array.isArray(phonesRaw) && phonesRaw.length > 0;
+    const segMode = String(segment || 'all').toLowerCase();
+
+    if (!hasPhones && seg === 'all') {
+      return res.status(400).json({
+       error: 'TEST-SPERRE: sending til "alle" er deaktivert under testing. Bruk "Valgte medlemmer" (phones) eller velg segment active/inactive.'
+     });
+    }
+
     // 1) Hvis frontend sender "phones" -> send kun til disse (Valgte medlemmer)
     if (Array.isArray(phonesRaw) && phonesRaw.length > 0) {
       const seen = new Set();
