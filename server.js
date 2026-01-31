@@ -3799,7 +3799,7 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
     const hasPhones = Array.isArray(phonesRaw) && phonesRaw.length > 0;
     const segMode = String(segment || 'all').toLowerCase();
 
-    if (!hasPhones && seg === 'all') {
+    if (!hasPhones && segMode === 'all') {
       return res.status(400).json({
        error: 'TEST-SPERRE: sending til "alle" er deaktivert under testing. Bruk "Valgte medlemmer" (phones) eller velg segment active/inactive.'
      });
