@@ -3702,13 +3702,13 @@ app.post('/admin/members/:memberId/send-sms', basicAuth, async (req, res) => {
 
   const msisdn = normalizedPhone.replace('+', '');
   const baseLog = {
-    id: randomUUID(),
+    id: crypto.randomUUID(),
     memberId,
     memberName: member.name || member.fullName || null,
     phone: msisdn,
     message,
     sentAt: new Date().toISOString(),
-    sentBy: (req.adminUser && (req.adminUser.username || req.adminUser.name || req.adminUser.email)) || null,
+    sentBy: req.adminUser || null,
   };
 
   try {
