@@ -873,6 +873,30 @@ async function sendSms(phone, message) {
   return d;
 }
 
+const SMS_LOG_FILE = path.join(DATA_DIR, 'sms-log.json');
+
+function getSmsLog() {
+  try {
+    if (!fs.existsSync(SMS_LOG_FILE)) return [];
+    const raw = fs.readFileSync(SMS_LOG_FILE, 'utf8');
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.error('[SMS_LOG] Kunne ikke lese sms-log.json:', err);
+    return [];
+  }
+}
+
+function appendSmsLog(entry) {
+  try {
+    const items = getSmsLog();
+    items.push(entry);
+    fs.writeFileSync(SMS_LOG_FILE, JSON.stringify(items, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[SMS_LOG] Kunne ikke skrive sms-log.json:', err);
+  }
+}
+
 /**
  * Spesialisert funksjon for innloggingskode
  */
@@ -3650,6 +3674,72 @@ app.get('/vipps/order-status/:orderId', (req, res) => {
  *
  * return: { ok, mode, attempted, sample: [{name,email,phone,planKey,active}] }
  */
+app.post('/admin/members/:memberId/send-sms', basicAuth, async (req, res) => {
+  const memberId = String(req.params.memberId || '').trim();
+  const message = String((req.body && req.body.message) || '').trim();
+
+  if (!memberId) {
+    return res.status(400).json({ ok: false, error: 'Ugyldig medlem-id.' });
+  }
+  if (!message) {
+    return res.status(400).json({ ok: false, error: 'Meldingen kan ikke være tom.' });
+  }
+  if (message.length > 459) {
+    return res.status(400).json({ ok: false, error: 'Meldingen kan maks være 459 tegn.' });
+  }
+
+  const members = getMembers();
+  const member = members.find((m) => String(m.id || '').trim() === memberId);
+  if (!member) {
+    return res.status(404).json({ ok: false, error: 'Medlem ikke funnet.' });
+  }
+
+  const rawPhone = member.phone || member.mobile || member.phoneFull;
+  const normalizedPhone = normalizePhone(rawPhone);
+  if (!normalizedPhone) {
+    return res.status(400).json({ ok: false, error: 'Medlemmet mangler gyldig telefonnummer.' });
+  }
+
+  const msisdn = normalizedPhone.replace('+', '');
+  const baseLog = {
+    id: randomUUID(),
+    memberId,
+    memberName: member.name || member.fullName || null,
+    phone: msisdn,
+    message,
+    sentAt: new Date().toISOString(),
+    sentBy: (req.adminUser && (req.adminUser.username || req.adminUser.name || req.adminUser.email)) || null,
+  };
+
+  try {
+    const eurobateResponse = await sendSms(normalizedPhone, message);
+    appendSmsLog({
+      ...baseLog,
+      status: 'sent',
+      eurobateResponse,
+    });
+
+    return res.json({
+      ok: true,
+      memberId,
+      phone: msisdn,
+      simulate: eurobateConfig.simulate === 1,
+      eurobateResponse,
+    });
+  } catch (err) {
+    appendSmsLog({
+      ...baseLog,
+      status: 'failed',
+      error: err.message,
+    });
+    return res.status(502).json({
+      ok: false,
+      error: 'SMS-sending feilet.',
+      details: err.message,
+    });
+  }
+});
+
 app.post('/admin/sms/preview', basicAuth, (req, res) => {
   try {
     const { recipientMode, segment, phones: phonesRaw, planKeys: planKeysRaw, onlyActive } = req.body || {};

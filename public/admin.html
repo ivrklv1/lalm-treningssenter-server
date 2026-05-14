@@ -622,6 +622,7 @@
                 <option value="TEST_1KR">TEST – 1 kr</option>
               </select>
               <button id="btnChangePlan" class="btn-secondary">Lagre ny plan</button>
+              <button id="btnSingleSms" class="btn-secondary">✉️ Send SMS</button>
               <button id="btnDeleteMember" class="btn-secondary" style="background:#fef2f2; border:1px solid #fecaca; color:#b91c1c;">🗑 Slett medlem</button>
             </div>
             <div id="memberActionsMsg" class="mt-1 small"></div>
@@ -1071,6 +1072,31 @@
    </div>
 </div>
 
+<div id="singleSmsModal" class="modal-backdrop" style="display:none;">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="singleSmsTitle">
+    <div class="modal-header">
+      <div class="modal-title" id="singleSmsTitle">Send SMS</div>
+      <button class="modal-close-btn" id="singleSmsCloseBtn" aria-label="Lukk">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="small"><strong>Navn:</strong> <span id="singleSmsName"></span></div>
+      <div class="small mt-1"><strong>Telefon:</strong> <span id="singleSmsPhone"></span></div>
+      <label for="singleSmsMessage" class="mt-2">Melding</label>
+      <textarea id="singleSmsMessage" rows="6" maxlength="459" placeholder="Skriv melding..."></textarea>
+      <div id="singleSmsCounter" class="small text-muted mt-1">0 / 459</div>
+      <div class="btn-row mt-1" style="justify-content:flex-start;">
+        <button id="singleSmsTemplate1" class="btn-secondary" type="button">Template 1</button>
+        <button id="singleSmsTemplate2" class="btn-secondary" type="button">Template 2</button>
+      </div>
+      <div class="btn-row mt-2">
+        <button id="singleSmsSendBtn" class="btn-primary" type="button">Send</button>
+        <button id="singleSmsCancelBtn" class="btn-secondary" type="button">Avbryt</button>
+      </div>
+      <div id="singleSmsStatus" class="small mt-1"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 
   // ---------- Utils ----------
@@ -1116,10 +1142,22 @@
   const memberActionsEl = document.getElementById('memberActions');
   const selectedMemberLabelEl = document.getElementById('selectedMemberLabel');
   const btnToggleActiveMember = document.getElementById('btnToggleActive');
+  const btnSingleSms = document.getElementById('btnSingleSms');
   const btnDeleteMember = document.getElementById('btnDeleteMember');
   const changePlanSelect = document.getElementById('changePlanSelect');
   const btnChangePlan = document.getElementById('btnChangePlan');
   const memberActionsMsg = document.getElementById('memberActionsMsg');
+  const singleSmsModal = document.getElementById('singleSmsModal');
+  const singleSmsCloseBtn = document.getElementById('singleSmsCloseBtn');
+  const singleSmsCancelBtn = document.getElementById('singleSmsCancelBtn');
+  const singleSmsName = document.getElementById('singleSmsName');
+  const singleSmsPhone = document.getElementById('singleSmsPhone');
+  const singleSmsMessage = document.getElementById('singleSmsMessage');
+  const singleSmsCounter = document.getElementById('singleSmsCounter');
+  const singleSmsTemplate1 = document.getElementById('singleSmsTemplate1');
+  const singleSmsTemplate2 = document.getElementById('singleSmsTemplate2');
+  const singleSmsSendBtn = document.getElementById('singleSmsSendBtn');
+  const singleSmsStatus = document.getElementById('singleSmsStatus');
 
   // Vipps-ordrer
   const ordersTableBody = document.getElementById('ordersTableBody');
@@ -1284,6 +1322,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
 
   let selectedMember = null;
+  const SINGLE_SMS_TEMPLATE_1 = 'Hei! Vi har registrert at din tilgang til Lalm Treningssenter kan ha blitt brukt av andre enn deg. Medlemskapet er personlig og kan ikke deles. Ved gjentakelse kan tilgangen bli sperret. Ta kontakt dersom dette skyldes en misforståelse. Mvh Lalm Treningssenter';
+  const SINGLE_SMS_TEMPLATE_2 = 'Hei. Vi har registrert gjentatt bruk av din tilgang av personer uten eget medlemskap. Dette er brudd på medlemsvilkårene. Tilgangen din kan bli sperret dersom det skjer igjen. Ta kontakt med oss dersom du mener dette er feil. Mvh Lalm Treningssenter';
   let currentPlanFilter = 'all';
 
 
@@ -1496,6 +1536,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         );
         if (updated) {
           selectedMember.name = updated.name || selectedMember.name;
+          selectedMember.id = updated.id || selectedMember.id;
+          selectedMember.phone = updated.phone || updated.mobile || updated.phoneFull || selectedMember.phone;
           selectedMember.plan = updated.plan || selectedMember.plan;
           selectedMember.active = !!updated.active;
         } else {
@@ -1565,8 +1607,10 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     if (!m) return;
 
     selectedMember = {
+      id: m.id || '',
       email: m.email || '',
       name: m.name || '',
+      phone: m.phone || m.mobile || m.phoneFull || '',
       plan: m.plan || '',
       active: !!m.active,
     };
@@ -1672,6 +1716,57 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       }
     } finally {
       if (btnDeleteMember) btnDeleteMember.disabled = false;
+    }
+  }
+
+  function updateSingleSmsCounter() {
+    if (!singleSmsMessage || !singleSmsCounter) return;
+    singleSmsCounter.textContent = singleSmsMessage.value.length + ' / 459';
+  }
+
+  function openSingleSmsModal() {
+    if (!selectedMember || !selectedMember.id || !singleSmsModal) return;
+    singleSmsName.textContent = selectedMember.name || 'Uten navn';
+    singleSmsPhone.textContent = selectedMember.phone || 'Ingen telefon';
+    singleSmsMessage.value = '';
+    singleSmsStatus.textContent = '';
+    updateSingleSmsCounter();
+    singleSmsModal.style.display = 'flex';
+  }
+
+  function closeSingleSmsModal() {
+    if (singleSmsModal) singleSmsModal.style.display = 'none';
+  }
+
+  async function sendSingleSms() {
+    if (!selectedMember || !selectedMember.id) return;
+    const message = (singleSmsMessage.value || '').trim();
+    if (!message) {
+      singleSmsStatus.textContent = 'Meldingen kan ikke være tom.';
+      singleSmsStatus.className = 'small mt-1 tag-danger';
+      return;
+    }
+    if (!confirm('Send SMS to ' + (selectedMember.name || 'member') + '?')) return;
+
+    singleSmsSendBtn.disabled = true;
+    singleSmsStatus.textContent = 'Sender...';
+    singleSmsStatus.className = 'small mt-1 text-muted';
+
+    try {
+      const res = await fetch('/admin/members/' + encodeURIComponent(selectedMember.id) + '/send-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || data.details || ('HTTP ' + res.status));
+      singleSmsStatus.textContent = 'SMS sendt.';
+      singleSmsStatus.className = 'small mt-1 tag-success';
+    } catch (e) {
+      singleSmsStatus.textContent = 'Feil: ' + e.message;
+      singleSmsStatus.className = 'small mt-1 tag-danger';
+    } finally {
+      singleSmsSendBtn.disabled = false;
     }
   }
 
@@ -2796,6 +2891,38 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
   if (btnDeleteMember) {
     btnDeleteMember.addEventListener('click', deleteMember);
+  }
+  if (btnSingleSms) {
+    btnSingleSms.addEventListener('click', openSingleSmsModal);
+  }
+  if (singleSmsMessage) {
+    singleSmsMessage.addEventListener('input', updateSingleSmsCounter);
+  }
+  if (singleSmsTemplate1) {
+    singleSmsTemplate1.addEventListener('click', () => {
+      singleSmsMessage.value = SINGLE_SMS_TEMPLATE_1;
+      updateSingleSmsCounter();
+    });
+  }
+  if (singleSmsTemplate2) {
+    singleSmsTemplate2.addEventListener('click', () => {
+      singleSmsMessage.value = SINGLE_SMS_TEMPLATE_2;
+      updateSingleSmsCounter();
+    });
+  }
+  if (singleSmsSendBtn) {
+    singleSmsSendBtn.addEventListener('click', sendSingleSms);
+  }
+  if (singleSmsCancelBtn) {
+    singleSmsCancelBtn.addEventListener('click', closeSingleSmsModal);
+  }
+  if (singleSmsCloseBtn) {
+    singleSmsCloseBtn.addEventListener('click', closeSingleSmsModal);
+  }
+  if (singleSmsModal) {
+    singleSmsModal.addEventListener('click', (e) => {
+      if (e.target === singleSmsModal) closeSingleSmsModal();
+    });
   }
 
   btnReloadMembers.addEventListener('click', () => {
