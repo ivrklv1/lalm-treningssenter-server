@@ -90,6 +90,7 @@ try {
 const MEMBERS_FILE = path.join(DATA_DIR, 'members.json');
 const ORDERS_FILE  = path.join(DATA_DIR, 'orders.json');
 const PLANS_FILE   = path.join(DATA_DIR, 'plans.json');
+const LEGAL_FILE   = path.join(DATA_DIR, 'legal.json');
 
 const TRIPLETEX_SUBSCRIPTION_ENABLED =
   (process.env.TRIPLETEX_SUBSCRIPTION_ENABLED || 'true')
@@ -378,6 +379,59 @@ function savePlans(plans) {
     );
   } catch (e) {
     console.error('Kunne ikke skrive plans.json til', PLANS_FILE, e.message);
+  }
+}
+
+function getDefaultLegalDocuments() {
+  return {
+    terms: {
+      version: '2026-05-14',
+      title: 'Vilkår for medlemskap i Lalm Treningssenter',
+      content: 'Placeholder: Denne teksten må erstattes med offisiell versjon av medlemsvilkår.',
+      updatedAt: '2026-05-14T12:00:00.000Z',
+      requiresReacceptance: false,
+    },
+    privacy: {
+      version: '2026-05-14',
+      title: 'Personvernerklæring for Lalm Treningssenter',
+      content: 'Placeholder: Denne teksten må erstattes med offisiell versjon av personvernerklæringen.',
+      updatedAt: '2026-05-14T12:00:00.000Z',
+      requiresReacceptance: false,
+    },
+  };
+}
+
+function getLegalDocuments() {
+  try {
+    if (!fs.existsSync(LEGAL_FILE)) {
+      return getDefaultLegalDocuments();
+    }
+    const raw = fs.readFileSync(LEGAL_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      return getDefaultLegalDocuments();
+    }
+    return {
+      ...getDefaultLegalDocuments(),
+      ...parsed,
+    };
+  } catch (e) {
+    console.error('Kunne ikke lese legal.json fra', LEGAL_FILE, '- returnerer standarddokumenter:', e.message);
+    return getDefaultLegalDocuments();
+  }
+}
+
+function saveLegalDocuments(documents) {
+  try {
+    fs.writeFileSync(
+      LEGAL_FILE,
+      JSON.stringify(documents, null, 2),
+      'utf-8',
+    );
+    return true;
+  } catch (e) {
+    console.error('Kunne ikke skrive legal.json til', LEGAL_FILE, e.message);
+    return false;
   }
 }
 
@@ -1220,6 +1274,62 @@ app.get('/api/plans', (req, res) => {
     });
 
   res.json(publicPlans);
+});
+
+app.get('/api/legal', (req, res) => {
+  const legal = getLegalDocuments();
+  res.json(legal);
+});
+
+app.get('/api/legal/terms', (req, res) => {
+  const legal = getLegalDocuments();
+  res.json(legal.terms);
+});
+
+app.get('/api/legal/privacy', (req, res) => {
+  const legal = getLegalDocuments();
+  res.json(legal.privacy);
+});
+
+app.post('/admin/legal', basicAuth, (req, res) => {
+  const { type, version, title, content, requiresReacceptance } = req.body || {};
+
+  if (type !== 'terms' && type !== 'privacy') {
+    return res.status(400).json({ ok: false, error: 'type_must_be_terms_or_privacy' });
+  }
+  if (!version) {
+    return res.status(400).json({ ok: false, error: 'version_required' });
+  }
+  if (!title) {
+    return res.status(400).json({ ok: false, error: 'title_required' });
+  }
+  if (!content) {
+    return res.status(400).json({ ok: false, error: 'content_required' });
+  }
+  if (
+    requiresReacceptance !== undefined &&
+    typeof requiresReacceptance !== 'boolean'
+  ) {
+    return res.status(400).json({ ok: false, error: 'requiresReacceptance_must_be_boolean' });
+  }
+
+  const legal = getLegalDocuments();
+  legal[type] = {
+    version,
+    title,
+    content,
+    updatedAt: new Date().toISOString(),
+    requiresReacceptance:
+      requiresReacceptance === undefined
+        ? false
+        : requiresReacceptance,
+  };
+
+  const saved = saveLegalDocuments(legal);
+  if (!saved) {
+    return res.status(500).json({ ok: false, error: 'legal_save_failed' });
+  }
+  res.json({ ok: true, type, document: legal[type] });
 });
 
 // Admin: hent alle medlemskap (også inaktive)
