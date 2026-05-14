@@ -1606,6 +1606,14 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     const m = allMembers.find((mm) => (mm.email || '') === email);
     if (!m) return;
 
+    const smsRecipientKey =
+      (m.id && String(m.id).trim()) ||
+      (m.email && String(m.email).trim().toLowerCase()) ||
+      (m.phone && String(m.phone).trim()) ||
+      (m.mobile && String(m.mobile).trim()) ||
+      (m.phoneFull && String(m.phoneFull).trim()) ||
+      '';
+
     selectedMember = {
       id: m.id || '',
       email: m.email || '',
@@ -1613,6 +1621,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       phone: m.phone || m.mobile || m.phoneFull || '',
       plan: m.plan || '',
       active: !!m.active,
+      smsRecipientKey,
     };
 
     membersTableBody.querySelectorAll('tr').forEach((tr) => {
@@ -1725,7 +1734,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
 
   function openSingleSmsModal() {
-    if (!selectedMember || !selectedMember.id || !singleSmsModal) return;
+    if (!selectedMember || !selectedMember.smsRecipientKey || !singleSmsModal) return;
     singleSmsName.textContent = selectedMember.name || 'Uten navn';
     singleSmsPhone.textContent = selectedMember.phone || 'Ingen telefon';
     singleSmsMessage.value = '';
@@ -1739,7 +1748,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
 
   async function sendSingleSms() {
-    if (!selectedMember || !selectedMember.id) return;
+    if (!selectedMember || !selectedMember.smsRecipientKey) return;
     const message = (singleSmsMessage.value || '').trim();
     if (!message) {
       singleSmsStatus.textContent = 'Meldingen kan ikke være tom.';
@@ -1753,7 +1762,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     singleSmsStatus.className = 'small mt-1 text-muted';
 
     try {
-      const res = await fetch('/admin/members/' + encodeURIComponent(selectedMember.id) + '/send-sms', {
+      const res = await fetch('/admin/members/' + encodeURIComponent(selectedMember.smsRecipientKey) + '/send-sms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message })
