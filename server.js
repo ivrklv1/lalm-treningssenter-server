@@ -428,8 +428,10 @@ function saveLegalDocuments(documents) {
       JSON.stringify(documents, null, 2),
       'utf-8',
     );
+    return true;
   } catch (e) {
     console.error('Kunne ikke skrive legal.json til', LEGAL_FILE, e.message);
+    return false;
   }
 }
 
@@ -1323,7 +1325,10 @@ app.post('/admin/legal', basicAuth, (req, res) => {
         : requiresReacceptance,
   };
 
-  saveLegalDocuments(legal);
+  const saved = saveLegalDocuments(legal);
+  if (!saved) {
+    return res.status(500).json({ ok: false, error: 'legal_save_failed' });
+  }
   res.json({ ok: true, type, document: legal[type] });
 });
 
