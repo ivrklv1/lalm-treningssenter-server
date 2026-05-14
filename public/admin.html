@@ -835,6 +835,9 @@
             <div class="card-subtitle">
               Send meldinger til segmenter eller valgte medlemmer.
             </div>
+            <div class="small text-muted mt-1">
+              For SMS til én person: gå til Medlemmer → velg medlem → Send SMS. Denne siden brukes for meldinger til flere medlemmer.
+            </div>
           </div>
         </div>
 
@@ -843,42 +846,23 @@
           <textarea id="smsMessage" rows="3" placeholder="Skriv SMS-meldingen her…"></textarea>
         </div>
 
-        <div class="mt-2 small">
-          <strong>Velg mottakere:</strong><br />
-          <label style="margin-right: 12px;">
-            <input type="radio" name="smsMode" value="segment" checked />
-            Segment (aktive / inaktive / alle)
-          </label>
-          <label style="margin-right: 12px;">
-            <input type="radio" name="smsMode" value="selected" />
-            Valgte medlemmer (huk av i lista)
-          </label>
-          <label>
-            <input type="radio" name="smsMode" value="plans" />
-            Plan(er)
-          </label>
-        </div>
-
-        <div id="smsSegmentWrapper" class="mt-2">
-          <label for="smsSegment"><strong>Segment</strong></label>
-          <select id="smsSegment">
+        <div class="mt-2">
+          <label for="smsRecipients"><strong>Mottakere</strong></label>
+          <select id="smsRecipients">
+            <option value="">Velg mottakere...</option>
             <option value="active">Aktive medlemmer</option>
             <option value="inactive">Inaktive medlemmer</option>
             <option value="all">Alle medlemmer</option>
+            <option value="selected">Valgte medlemmer i listen</option>
+            <option value="plan">Medlemmer på valgt plan</option>
           </select>
+        </div>
 
         <div id="smsPlansWrapper" class="mt-2" style="display:none;">
-          <div class="small" style="margin-bottom:6px;">
-            <strong>Planer</strong> (huk av en eller flere)
-          </div>
-          <div id="smsPlansList" style="display:flex; flex-wrap:wrap; gap:10px;"></div>
-
-          <div class="mt-2 small">
-            <label style="margin-right: 14px;">
-              <input type="checkbox" id="smsPlansOnlyActive" checked />
-              Kun aktive medlemmer
-            </label>
-          </div>
+          <label for="smsPlanSelect"><strong>Plan</strong></label>
+          <select id="smsPlanSelect">
+            <option value="">Velg plan...</option>
+          </select>
         </div>
 
         <div class="mt-2" style="display:flex; align-items:center; gap:10px;">
@@ -888,16 +872,16 @@
 
         <div id="smsPreviewBox" class="mt-2 small" style="display:none; padding:10px; border:1px solid var(--border); border-radius:12px; background:#ffffff;">
           <div><strong>Mottakere:</strong> <span id="smsPreviewCount">0</span></div>
-          <div id="smsPreviewSample" class="mt-1 text-muted"></div>
+          <div id="smsPreviewSample" class="mt-1 text-muted" style="max-height:220px; overflow:auto;"></div>
         </div>
 
         </div>
 
-        <div class="mt-3 small">
+        <div id="smsSelectedMembersWrapper" class="mt-3 small" style="display:none;">
           <strong>Medlemsliste for avhuking</strong>
         </div>
 
-        <div style="max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; margin-top: 6px; background:#ffffff;">
+        <div id="smsMembersListWrapper" style="display:none; max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; margin-top: 6px; background:#ffffff;">
           <table style="width:100%; border-collapse: collapse; font-size:0.75rem;">
             <thead style="position: sticky; top:0; background: #f3f4f6;">
             <tr>
@@ -923,6 +907,21 @@
         </div>
       </section>
     </section>
+    <div id="smsConfirmModal" class="modal-overlay" style="display:none;">
+      <div class="modal-content" style="max-width:520px;">
+        <button id="smsConfirmClose" class="modal-close" aria-label="Lukk">×</button>
+        <div class="modal-title">Bekreft SMS-utsending</div>
+        <div id="smsConfirmText" class="small mt-2"></div>
+        <div class="mt-2">
+          <label><strong>Melding</strong></label>
+          <div id="smsConfirmMessage" class="small" style="white-space:pre-wrap; border:1px solid var(--border); border-radius:10px; background:#fff; padding:10px;"></div>
+        </div>
+        <div class="mt-3" style="display:flex; justify-content:flex-end; gap:8px;">
+          <button id="smsConfirmCancel" class="btn-secondary">Avbryt</button>
+          <button id="smsConfirmSend" class="btn-primary">Send SMS</button>
+        </div>
+      </div>
+    </div>
 
     <!-- TAB: LOGG -->
     <section id="tab-logs" class="tab-panel">
@@ -1176,27 +1175,32 @@
 
   // SMS
   const smsMessageEl = document.getElementById('smsMessage');
-  const smsSegmentEl = document.getElementById('smsSegment');
+  const smsRecipientsEl = document.getElementById('smsRecipients');
   const smsStatusEl = document.getElementById('smsStatus');
   const smsSelectAllEl = document.getElementById('smsSelectAll');
   const smsMembersBodyEl = document.getElementById('smsMembersBody');
-  const smsSegmentWrapperEl = document.getElementById('smsSegmentWrapper');
+  const smsSelectedMembersWrapperEl = document.getElementById('smsSelectedMembersWrapper');
+  const smsMembersListWrapperEl = document.getElementById('smsMembersListWrapper');
   const smsPlansWrapperEl = document.getElementById('smsPlansWrapper');
-  const smsPlansListEl = document.getElementById('smsPlansList');
-  const smsPlansOnlyActiveEl = document.getElementById('smsPlansOnlyActive');
+  const smsPlanSelectEl = document.getElementById('smsPlanSelect');
   const smsPreviewBtn = document.getElementById('smsPreviewBtn');
   const smsPreviewStatusEl = document.getElementById('smsPreviewStatus');
   const smsPreviewBoxEl = document.getElementById('smsPreviewBox');
   const smsPreviewCountEl = document.getElementById('smsPreviewCount');
   const smsPreviewSampleEl = document.getElementById('smsPreviewSample');
   const sendSmsBtn = document.getElementById('sendSmsBtn');
+  const smsConfirmModalEl = document.getElementById('smsConfirmModal');
+  const smsConfirmCloseEl = document.getElementById('smsConfirmClose');
+  const smsConfirmCancelEl = document.getElementById('smsConfirmCancel');
+  const smsConfirmSendEl = document.getElementById('smsConfirmSend');
+  const smsConfirmTextEl = document.getElementById('smsConfirmText');
+  const smsConfirmMessageEl = document.getElementById('smsConfirmMessage');
   const SMS_API_URL = '/admin/sms/broadcast';
   const SMS_PREVIEW_URL = '/admin/sms/preview';
 
   // SMS: invalidér preview når noe endres
   if (smsMessageEl) smsMessageEl.addEventListener('input', invalidateSmsPreview);
-  if (smsSegmentEl) smsSegmentEl.addEventListener('change', invalidateSmsPreview);
-  if (smsPlansOnlyActiveEl) smsPlansOnlyActiveEl.addEventListener('change', invalidateSmsPreview);
+  if (smsRecipientsEl) smsRecipientsEl.addEventListener('change', invalidateSmsPreview);
 
 
   // Plans (plans.json)
@@ -2484,9 +2488,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   // ------- SMS -------
 
-  function getSmsMode() {
-    const checked = document.querySelector('input[name="smsMode"]:checked');
-    return checked ? checked.value : 'segment';
+  function getSmsSelection() {
+    return smsRecipientsEl ? smsRecipientsEl.value : '';
   }
 
 
@@ -2510,13 +2513,11 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   function renderSmsPlans(plans) {
     plansCache = Array.isArray(plans) ? plans : [];
-    if (!smsPlansListEl) return;
-
-    smsPlansListEl.innerHTML = '';
+    if (!smsPlanSelectEl) return;
+    smsPlanSelectEl.innerHTML = '<option value="">Velg plan...</option>';
     const list = plansCache;
 
     if (!list.length) {
-      smsPlansListEl.innerHTML = '<span class="text-muted">Ingen planer funnet.</span>';
       return;
     }
 
@@ -2525,44 +2526,15 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       if (!key) return;
       const label = String(p.name || p.title || p.label || key);
 
-      const wrap = document.createElement('label');
-      wrap.style.display = 'inline-flex';
-      wrap.style.alignItems = 'center';
-      wrap.style.gap = '6px';
-      wrap.style.padding = '6px 10px';
-      wrap.style.border = '1px solid var(--border)';
-      wrap.style.borderRadius = '999px';
-      wrap.style.background = '#fff';
-
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.className = 'smsPlanCheckbox';
-      cb.setAttribute('data-plankey', key);
-
-      cb.addEventListener('change', () => {
-        invalidateSmsPreview();
-      });
-
-      const t = document.createElement('span');
-      t.textContent = label;
-
-      wrap.appendChild(cb);
-      wrap.appendChild(t);
-      smsPlansListEl.appendChild(wrap);
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = label;
+      smsPlanSelectEl.appendChild(option);
     });
-  }
-
-  function getSelectedSmsPlanKeys() {
-    const keys = [];
-    document.querySelectorAll('.smsPlanCheckbox:checked').forEach(cb => {
-      const k = cb.getAttribute('data-plankey');
-      if (k) keys.push(k);
-    });
-    return keys;
   }
 
   async function previewSmsRecipients() {
-    const mode = getSmsMode();
+    const selection = getSmsSelection();
     const message = (smsMessageEl && smsMessageEl.value) ? smsMessageEl.value.trim() : '';
 
     if (!message) {
@@ -2571,11 +2543,15 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       return;
     }
 
-    const payload = { recipientMode: mode, message };
+    if (!selection) {
+      smsStatusEl.textContent = 'Velg mottakere først.';
+      smsStatusEl.style.color = '#b91c1c';
+      return;
+    }
 
-    if (mode === 'segment') {
-      payload.segment = smsSegmentEl ? smsSegmentEl.value : 'all';
-    } else if (mode === 'selected') {
+    const payload = { recipientMode: selection === 'selected' ? 'selected' : (selection === 'plan' ? 'plans' : 'segment'), message };
+    if (payload.recipientMode === 'segment') payload.segment = selection;
+    if (payload.recipientMode === 'selected') {
       const selectedPhones = [];
       document.querySelectorAll('.smsMemberCheckbox:checked').forEach(cb => {
         const p = cb.getAttribute('data-phone');
@@ -2587,15 +2563,15 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         return;
       }
       payload.phones = selectedPhones;
-    } else if (mode === 'plans') {
-      const planKeys = getSelectedSmsPlanKeys();
-      if (!planKeys.length) {
-        smsStatusEl.textContent = 'Ingen planer er valgt.';
+    } else if (payload.recipientMode === 'plans') {
+      const planKey = smsPlanSelectEl ? smsPlanSelectEl.value : '';
+      if (!planKey) {
+        smsStatusEl.textContent = 'Velg en plan.';
         smsStatusEl.style.color = '#b91c1c';
         return;
       }
-      payload.planKeys = planKeys;
-      payload.onlyActive = smsPlansOnlyActiveEl ? !!smsPlansOnlyActiveEl.checked : true;
+      payload.planKeys = [planKey];
+      payload.onlyActive = true;
     }
 
     // preview-endepunktet trenger ikke "message", men vi tar det med i nøkkelen (så preview blir ugyldig ved tekstendring)
@@ -2640,12 +2616,12 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         } else {
           const lines = sample.map(s => {
             const name = s.name || s.email || '(ukjent)';
-            const plan = s.planKey ? (' · ' + s.planKey) : '';
-            const active = s.active ? ' · aktiv' : ' · inaktiv';
-            return `${name}${plan}${active}`;
+            const phone = s.phone || s.mobile || '';
+            const status = typeof s.active === 'boolean' ? (s.active ? 'aktiv' : 'inaktiv') : (s.status || '');
+            const plan = s.planKey || s.plan || '';
+            return `${name}${phone ? ' · ' + phone : ''}${status ? ' · ' + status : ''}${plan ? ' · ' + plan : ''}`;
           });
-          smsPreviewSampleEl.innerHTML = lines.slice(0, 10).map(l => `<div>• ${escapeHtml(l)}</div>`).join('') +
-            (attempted > 10 ? `<div class="text-muted">… +${attempted - 10} flere</div>` : '');
+          smsPreviewSampleEl.innerHTML = lines.map(l => `<div>• ${escapeHtml(l)}</div>`).join('');
         }
       }
 
@@ -2657,7 +2633,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
       smsPreviewOk = true;
       smsPreviewLastKey = key;
-      if (sendSmsBtn) sendSmsBtn.disabled = false;
+      if (sendSmsBtn) sendSmsBtn.disabled = !message || !smsPreviewOk || attempted < 1;
     } catch (err) {
       console.error('sms preview error', err);
       if (smsPreviewStatusEl) {
@@ -2669,19 +2645,10 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
 
   function updateSmsModeUi() {
-    const mode = getSmsMode();
-
-    // segment wrapper
-    if (smsSegmentWrapperEl) {
-      const on = (mode === 'segment');
-      smsSegmentWrapperEl.style.opacity = on ? '1' : '0.4';
-      smsSegmentWrapperEl.style.pointerEvents = on ? 'auto' : 'none';
-    }
-
-    // plans wrapper
-    if (smsPlansWrapperEl) {
-      smsPlansWrapperEl.style.display = (mode === 'plans') ? 'block' : 'none';
-    }
+    const selection = getSmsSelection();
+    if (smsPlansWrapperEl) smsPlansWrapperEl.style.display = (selection === 'plan') ? 'block' : 'none';
+    if (smsSelectedMembersWrapperEl) smsSelectedMembersWrapperEl.style.display = (selection === 'selected') ? 'block' : 'none';
+    if (smsMembersListWrapperEl) smsMembersListWrapperEl.style.display = (selection === 'selected') ? 'block' : 'none';
 
     // reset preview when mode changes
     invalidateSmsPreview();
@@ -2734,7 +2701,13 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     if (!smsMessageEl) return;
 
     const message = smsMessageEl.value.trim();
-    const mode = getSmsMode();
+    const selection = getSmsSelection();
+
+    if (!selection) {
+      smsStatusEl.textContent = 'Velg mottakere først.';
+      smsStatusEl.style.color = '#b91c1c';
+      return;
+    }
 
     if (!message) {
       smsStatusEl.textContent = 'Meldingen kan ikke være tom.';
@@ -2742,11 +2715,10 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       return;
     }
 
-    const payload = { recipientMode: mode, message };
-
-    if (mode === 'segment') {
-      payload.segment = smsSegmentEl ? smsSegmentEl.value : 'all';
-    } else if (mode === 'selected') {
+    const payload = { recipientMode: selection === 'selected' ? 'selected' : (selection === 'plan' ? 'plans' : 'segment'), message };
+    if (payload.recipientMode === 'segment') {
+      payload.segment = selection;
+    } else if (payload.recipientMode === 'selected') {
       const selectedPhones = [];
       document.querySelectorAll('.smsMemberCheckbox:checked').forEach(cb => {
         const p = cb.getAttribute('data-phone');
@@ -2759,15 +2731,15 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         return;
       }
       payload.phones = selectedPhones;
-    } else if (mode === 'plans') {
-      const planKeys = getSelectedSmsPlanKeys();
-      if (!planKeys.length) {
-        smsStatusEl.textContent = 'Ingen planer er valgt.';
+    } else if (payload.recipientMode === 'plans') {
+      const planKey = smsPlanSelectEl ? smsPlanSelectEl.value : '';
+      if (!planKey) {
+        smsStatusEl.textContent = 'Velg en plan.';
         smsStatusEl.style.color = '#b91c1c';
         return;
       }
-      payload.planKeys = planKeys;
-      payload.onlyActive = smsPlansOnlyActiveEl ? !!smsPlansOnlyActiveEl.checked : true;
+      payload.planKeys = [planKey];
+      payload.onlyActive = true;
     }
 
     // Krev forhåndsvisning før sending (for å unngå feilutsendelser)
@@ -2778,7 +2750,27 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       return;
     }
 
-    if (!confirm('Send SMS nå?')) return;
+    const previewCount = Number((smsPreviewCountEl && smsPreviewCountEl.textContent) || 0);
+    if (previewCount < 1) return;
+    smsConfirmTextEl.textContent = previewCount === 1 ? 'Du sender SMS til 1 mottaker.' : `Du sender SMS til ${previewCount} mottakere.`;
+    smsConfirmMessageEl.textContent = message;
+    smsConfirmModalEl.style.display = 'flex';
+    const confirmed = await new Promise(resolve => {
+      const close = () => {
+        smsConfirmModalEl.style.display = 'none';
+        smsConfirmSendEl.onclick = null;
+        smsConfirmCancelEl.onclick = null;
+        smsConfirmCloseEl.onclick = null;
+        resolve(false);
+      };
+      smsConfirmSendEl.onclick = () => {
+        smsConfirmModalEl.style.display = 'none';
+        resolve(true);
+      };
+      smsConfirmCancelEl.onclick = close;
+      smsConfirmCloseEl.onclick = close;
+    });
+    if (!confirmed) return;
 
     try {
       smsStatusEl.textContent = 'Sender...';
@@ -2986,9 +2978,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     });
   }
 
-  document.querySelectorAll('input[name="smsMode"]').forEach(rb => {
-    rb.addEventListener('change', updateSmsModeUi);
-  });
+  if (smsRecipientsEl) smsRecipientsEl.addEventListener('change', updateSmsModeUi);
+  if (smsPlanSelectEl) smsPlanSelectEl.addEventListener('change', invalidateSmsPreview);
 
   if (smsPreviewBtn) {
     smsPreviewBtn.addEventListener('click', previewSmsRecipients);
