@@ -3675,10 +3675,10 @@ app.get('/vipps/order-status/:orderId', (req, res) => {
  * return: { ok, mode, attempted, sample: [{name,email,phone,planKey,active}] }
  */
 app.post('/admin/members/:memberId/send-sms', basicAuth, async (req, res) => {
-  const memberId = String(req.params.memberId || '').trim();
+  const memberKey = String(req.params.memberId || '').trim();
   const message = String((req.body && req.body.message) || '').trim();
 
-  if (!memberId) {
+  if (!memberKey) {
     return res.status(400).json({ ok: false, error: 'Ugyldig medlem-id.' });
   }
   if (!message) {
@@ -3689,10 +3689,24 @@ app.post('/admin/members/:memberId/send-sms', basicAuth, async (req, res) => {
   }
 
   const members = getMembers();
-  const member = members.find((m) => String(m.id || '').trim() === memberId);
-  if (!member) {
-    return res.status(404).json({ ok: false, error: 'Medlem ikke funnet.' });
+  const memberKeyLower = memberKey.toLowerCase();
+  const memberKeyPhone = normalizePhone(memberKey);
+  const matchedMembers = members.filter((m) => {
+    const idMatch = String(m.id || '').trim() === memberKey;
+    const emailMatch = String(m.email || '').trim().toLowerCase() === memberKeyLower;
+    const phoneMatch = !!memberKeyPhone && normalizePhone(m.phone || m.mobile || m.phoneFull) === memberKeyPhone;
+    return idMatch || emailMatch || phoneMatch;
+  });
+  if (matchedMembers.length !== 1) {
+    return res.status(404).json({
+      ok: false,
+      error: matchedMembers.length === 0
+        ? 'Fant ingen medlem med den valgte mottakernøkkelen.'
+        : 'Fant flere medlemmer med den valgte mottakernøkkelen. Velg et mer spesifikt medlem.',
+    });
   }
+  const member = matchedMembers[0];
+  const resolvedMemberId = String(member.id || '').trim() || memberKey;
 
   const rawPhone = member.phone || member.mobile || member.phoneFull;
   const normalizedPhone = normalizePhone(rawPhone);
@@ -3703,7 +3717,7 @@ app.post('/admin/members/:memberId/send-sms', basicAuth, async (req, res) => {
   const msisdn = normalizedPhone.replace('+', '');
   const baseLog = {
     id: crypto.randomUUID(),
-    memberId,
+    memberId: resolvedMemberId,
     memberName: member.name || member.fullName || null,
     phone: msisdn,
     message,
@@ -3721,7 +3735,7 @@ app.post('/admin/members/:memberId/send-sms', basicAuth, async (req, res) => {
 
     return res.json({
       ok: true,
-      memberId,
+      memberId: resolvedMemberId,
       phone: msisdn,
       simulate: eurobateConfig.simulate === 1,
       eurobateResponse,
