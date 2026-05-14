@@ -2571,6 +2571,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         return;
       }
       payload.planKeys = [planKey];
+      payload.onlyActive = true;
     }
 
     // preview-endepunktet trenger ikke "message", men vi tar det med i nøkkelen (så preview blir ugyldig ved tekstendring)
@@ -2738,6 +2739,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         return;
       }
       payload.planKeys = [planKey];
+      payload.onlyActive = true;
     }
 
     // Krev forhåndsvisning før sending (for å unngå feilutsendelser)
