@@ -1064,6 +1064,7 @@
        </div>
        <div class="btn-row mt-3">
          <button id="modalToggleActiveBtn" class="btn-secondary">Pause / aktiver</button>
+         <button id="modalSingleSmsBtn" class="btn-secondary">📩 Send SMS</button>
          <button id="modalSavePlanBtn" class="btn-primary">Lagre plan</button>
          <button id="modalDeleteBtn" class="btn-secondary" style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;">🗑 Slett</button>
        </div>
@@ -1133,6 +1134,7 @@
   const modalMemberIl = document.getElementById('modalMemberIl');
   const modalMemberStatus = document.getElementById('modalMemberStatus');
   const modalToggleActiveBtn = document.getElementById('modalToggleActiveBtn');
+  const modalSingleSmsBtn = document.getElementById('modalSingleSmsBtn');
   const modalSavePlanBtn = document.getElementById('modalSavePlanBtn');
   const modalDeleteBtn = document.getElementById('modalDeleteBtn');
   const modalCloseBtn = document.getElementById('modalCloseBtn');
@@ -1468,6 +1470,13 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   function openMemberModal(member) {
     if (!memberModal || !member) return;
+    member.smsRecipientKey =
+      (member.id && String(member.id).trim()) ||
+      (member.email && String(member.email).trim().toLowerCase()) ||
+      (member.phone && String(member.phone).trim()) ||
+      (member.mobile && String(member.mobile).trim()) ||
+      (member.phoneFull && String(member.phoneFull).trim()) ||
+      '';
     selectedMember = member;
 
     modalMemberName.textContent = member.name || 'Uten navn';
@@ -2900,6 +2909,19 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
   if (btnDeleteMember) {
     btnDeleteMember.addEventListener('click', deleteMember);
+  }
+  if (modalSingleSmsBtn) {
+    modalSingleSmsBtn.addEventListener('click', () => {
+      if (!selectedMember) return;
+      if (!selectedMember.smsRecipientKey) {
+        selectedMember.smsRecipientKey =
+          (selectedMember.id && String(selectedMember.id).trim()) ||
+          (selectedMember.email && String(selectedMember.email).trim().toLowerCase()) ||
+          (selectedMember.phone && String(selectedMember.phone).trim()) ||
+          '';
+      }
+      openSingleSmsModal();
+    });
   }
   if (btnSingleSms) {
     btnSingleSms.addEventListener('click', openSingleSmsModal);
