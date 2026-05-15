@@ -558,6 +558,7 @@
     <button class="tab-button active" data-tab="members">Medlemmer</button>
     <button class="tab-button" data-tab="plans">Medlemskap & priser</button>
     <button class="tab-button" data-tab="sms">SMS</button>
+    <button class="tab-button" data-tab="legal">Vilkår/personvern</button>
     <button class="tab-button" data-tab="logs">Logg</button>
     <button class="tab-button" data-tab="tools">Verktøy / NIF</button>
   </div>
@@ -923,6 +924,57 @@
       </section>
     </section>
 
+    <!-- TAB: VILKÅR / PERSONVERN -->
+    <section id="tab-legal" class="tab-panel">
+      <section class="card">
+        <div class="card-title-row">
+          <div>
+            <div class="card-title">Vilkår og personvern</div>
+            <div class="card-subtitle">
+              Rediger juridiske dokumenter for app/nettside.
+            </div>
+          </div>
+        </div>
+
+        <div class="input-grid mt-2">
+          <div>
+            <label for="legalDocType">Dokumenttype</label>
+            <select id="legalDocType">
+              <option value="terms">Vilkår</option>
+              <option value="privacy">Personvern</option>
+            </select>
+          </div>
+          <div>
+            <label for="legalVersion">Versjon</label>
+            <input id="legalVersion" type="text" placeholder="f.eks. 2026-05" />
+          </div>
+        </div>
+
+        <div class="mt-2">
+          <label for="legalTitle">Tittel</label>
+          <input id="legalTitle" type="text" placeholder="Tittel" />
+        </div>
+
+        <div class="mt-2">
+          <label for="legalContent">Innhold</label>
+          <textarea id="legalContent" rows="14" placeholder="Skriv dokumentinnhold her..."></textarea>
+        </div>
+
+        <div class="mt-2 small">
+          <label style="margin-right: 12px;">
+            <input type="checkbox" id="legalRequiresReacceptance" />
+            Krev ny godkjenning ved neste innlogging
+          </label>
+        </div>
+
+        <div class="btn-row mt-2">
+          <button id="btnLegalFetch" class="btn-secondary">Hent</button>
+          <button id="btnLegalSave" class="btn-primary">Lagre</button>
+        </div>
+        <div id="legalMsg" class="mt-1 small"></div>
+      </section>
+    </section>
+
     <!-- TAB: LOGG -->
     <section id="tab-logs" class="tab-panel">
       <section class="card">
@@ -1152,6 +1204,16 @@
   const sendSmsBtn = document.getElementById('sendSmsBtn');
   const SMS_API_URL = '/admin/sms/broadcast';
   const SMS_PREVIEW_URL = '/admin/sms/preview';
+
+  // Legal
+  const legalDocTypeEl = document.getElementById('legalDocType');
+  const legalVersionEl = document.getElementById('legalVersion');
+  const legalTitleEl = document.getElementById('legalTitle');
+  const legalContentEl = document.getElementById('legalContent');
+  const legalRequiresReacceptanceEl = document.getElementById('legalRequiresReacceptance');
+  const btnLegalFetch = document.getElementById('btnLegalFetch');
+  const btnLegalSave = document.getElementById('btnLegalSave');
+  const legalMsgEl = document.getElementById('legalMsg');
 
   // SMS: invalidér preview når noe endres
   if (smsMessageEl) smsMessageEl.addEventListener('input', invalidateSmsPreview);
@@ -2840,6 +2902,76 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     sendSmsBtn.addEventListener('click', sendSmsFromPanel);
   }
 
+  async function loadLegalDocument() {
+    if (!legalDocTypeEl) return;
+    const type = legalDocTypeEl.value === 'privacy' ? 'privacy' : 'terms';
+    if (legalMsgEl) {
+      legalMsgEl.className = 'mt-1 small text-muted';
+      legalMsgEl.textContent = 'Henter dokument...';
+    }
+    try {
+      const res = await fetch('/api/legal');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+
+      const doc = data && data[type] ? data[type] : {};
+      legalVersionEl.value = doc.version || '';
+      legalTitleEl.value = doc.title || '';
+      legalContentEl.value = doc.content || '';
+      legalRequiresReacceptanceEl.checked = !!doc.requiresReacceptance;
+
+      if (legalMsgEl) {
+        legalMsgEl.className = 'mt-1 small tag-success';
+        legalMsgEl.textContent = 'Dokument hentet.';
+      }
+    } catch (e) {
+      if (legalMsgEl) {
+        legalMsgEl.className = 'mt-1 small tag-danger';
+        legalMsgEl.textContent = 'Feil ved henting: ' + (e.message || 'Ukjent feil');
+      }
+    }
+  }
+
+  async function saveLegalDocument() {
+    if (!legalDocTypeEl) return;
+    const payload = {
+      type: legalDocTypeEl.value === 'privacy' ? 'privacy' : 'terms',
+      version: (legalVersionEl.value || '').trim(),
+      title: (legalTitleEl.value || '').trim(),
+      content: legalContentEl.value || '',
+      requiresReacceptance: !!legalRequiresReacceptanceEl.checked
+    };
+
+    if (legalMsgEl) {
+      legalMsgEl.className = 'mt-1 small text-muted';
+      legalMsgEl.textContent = 'Lagrer...';
+    }
+
+    try {
+      const res = await fetch('/admin/legal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+
+      if (legalMsgEl) {
+        legalMsgEl.className = 'mt-1 small tag-success';
+        legalMsgEl.textContent = 'Dokument lagret.';
+      }
+    } catch (e) {
+      if (legalMsgEl) {
+        legalMsgEl.className = 'mt-1 small tag-danger';
+        legalMsgEl.textContent = 'Feil ved lagring: ' + (e.message || 'Ukjent feil');
+      }
+    }
+  }
+
+  if (legalDocTypeEl) legalDocTypeEl.addEventListener('change', loadLegalDocument);
+  if (btnLegalFetch) btnLegalFetch.addEventListener('click', loadLegalDocument);
+  if (btnLegalSave) btnLegalSave.addEventListener('click', saveLegalDocument);
+
   if (btnAddPlanRow) {
     btnAddPlanRow.addEventListener('click', addPlanRow);
   }
@@ -2879,6 +3011,9 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       // Default underfane når "Logg" åpnes
       if (target === 'logs' && typeof setLogSubtab === 'function') {
         setLogSubtab('vipps');
+      }
+      if (target === 'legal') {
+        loadLegalDocument();
       }
     });
   });
