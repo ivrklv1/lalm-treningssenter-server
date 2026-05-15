@@ -1293,17 +1293,20 @@ app.get('/api/legal/privacy', (req, res) => {
 
 app.post('/admin/legal', basicAuth, (req, res) => {
   const { type, version, title, content, requiresReacceptance } = req.body || {};
+  const versionTrimmed = typeof version === 'string' ? version.trim() : '';
+  const titleTrimmed = typeof title === 'string' ? title.trim() : '';
+  const contentTrimmed = typeof content === 'string' ? content.trim() : '';
 
   if (type !== 'terms' && type !== 'privacy') {
     return res.status(400).json({ ok: false, error: 'type_must_be_terms_or_privacy' });
   }
-  if (!version) {
+  if (!versionTrimmed) {
     return res.status(400).json({ ok: false, error: 'version_required' });
   }
-  if (!title) {
+  if (!titleTrimmed) {
     return res.status(400).json({ ok: false, error: 'title_required' });
   }
-  if (!content) {
+  if (!contentTrimmed) {
     return res.status(400).json({ ok: false, error: 'content_required' });
   }
   if (
@@ -1315,9 +1318,9 @@ app.post('/admin/legal', basicAuth, (req, res) => {
 
   const legal = getLegalDocuments();
   legal[type] = {
-    version,
-    title,
-    content,
+    version: versionTrimmed,
+    title: titleTrimmed,
+    content: contentTrimmed,
     updatedAt: new Date().toISOString(),
     requiresReacceptance:
       requiresReacceptance === undefined
