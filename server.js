@@ -383,22 +383,23 @@ function savePlans(plans) {
 }
 
 function getDefaultLegalDocuments() {
+  // Test snapshot from the preserved local app; does not change production.
   return {
-    terms: {
-      version: '2026-05-14',
-      title: 'Vilkår for medlemskap i Lalm Treningssenter',
-      content: 'Placeholder: Denne teksten må erstattes med offisiell versjon av medlemsvilkår.',
-      updatedAt: '2026-05-14T12:00:00.000Z',
-      requiresReacceptance: false,
-    },
-    privacy: {
-      version: '2026-05-14',
-      title: 'Personvernerklæring for Lalm Treningssenter',
-      content: 'Placeholder: Denne teksten må erstattes med offisiell versjon av personvernerklæringen.',
-      updatedAt: '2026-05-14T12:00:00.000Z',
-      requiresReacceptance: false,
-    },
-  };
+  "terms": {
+    "version": "TEST-2026-10-26",
+    "title": "Medlemsvilkår – TEST",
+    "content": "Medlemsvilkår\n\nVilkår for medlemskap ved Lalm Treningssenter.\n\n1. Generelt\n\nLalm Treningssenter drives av Lalm Idrettslag. Disse vilkårene gjelder for alle som har medlemskap eller drop-in ved senteret. Ved å tegne medlemskap eller kjøpe drop-in godtar du vilkårene.\n\n2. Medlemskap og bindingstid\n\n• Medlemskap tegnes i Lalm Treningssenter-appen.\n\n• Medlemskap kan ha bindingstid (f.eks. 12 måneder) eller være uten binding, slik det fremgår av produktet i appen.\n\n• Ved medlemskap med binding løper avtalen i bindingstiden uavhengig av bruk.\n\n3. Betaling\n\n• Betaling skjer via Vipps eller annen løsning tilgjengelig i appen.\n\n• Medlemskap løper månedsvis og fornyes automatisk til det sies opp.\n\n• Årlig administrasjonsgebyr kan tilkomme, slik det er oppgitt på nettside/app.\n\n• Manglende betaling kan føre til sperret adgang til senteret.\n\n4. Oppsigelse\n\n• Oppsigelse sendes skriftlig til Lalm Idrettslag på e-post.\n\n• For medlemskap uten binding gjelder ordinær oppsigelsestid på én måned regnet fra første månedsskifte etter oppsigelse.\n\n• Medlemskap med binding kan normalt ikke sies opp før bindingstiden er over, med mindre annet følger av lov eller særskilt avtale.\n\n5. Pause / frys\n\nMulighet for midlertidig frys av medlemskap kan gis ved særskilte grunner (for eksempel langvarig sykdom). Dokumentasjon kan kreves. Henvendelse gjøres skriftlig til Lalm Idrettslag.\n\n6. Adgang og bruk\n\n• Adgang er personlig og knyttet til din bruker i appen.\n\n• Det er ikke tillatt å slippe andre inn på senteret med din adgang.\n\n• Brudd på adgangsregler kan føre til utestengelse uten refusjon.\n\n• Aldersgrensen for bruk av treningssenteret er 18 år. Personer fra og med 15 år kan benytte senteret kun i følge med en ansvarlig voksen. Alle må ha gyldig medlemskap.\n\n7. Ansvar og egenrisiko\n\n• All trening skjer på eget ansvar.\n\n• Lalm Treningssenter og Lalm Idrettslag er ikke ansvarlig for tap av eller skade på personlige eiendeler.\n\n• Medlemmet plikter å bruke utstyr på en trygg og forsvarlig måte.\n\n8. Trivselsregler\n\n• Vis hensyn til andre medlemmer og ansatte/frivillige.\n\n• Rydd på plass utstyr etter bruk og tørk av apparater.\n\n• Det er ikke tillatt med rusmidler eller dopingmidler på senteret.\n\n9. Endringer\n\nLalm Idrettslag kan gjøre endringer i priser og vilkår. Ved vesentlige endringer vil medlemmer bli varslet i rimelig tid via app/nettside eller e-post.\n\n10. Kontakt\n\nSpørsmål om medlemskap og vilkår kan rettes til post@lalmil.no.",
+    "updatedAt": "2026-10-26T11:21:36.992Z",
+    "requiresReacceptance": false
+  },
+  "privacy": {
+    "version": "TEST-2026-10-26",
+    "title": "Personvernerklæring – TEST",
+    "content": "Personvernerklæring\n\nHer forklarer vi hvordan Lalm Treningssenter behandler personopplysninger og hvilke rettigheter du har.\n\n1. Behandlingsansvarlig\n\nLalm Treningssenter drives av Lalm Idrettslag (org.nr. 975 439 453), som er behandlingsansvarlig for personopplysninger i medlemssystem, adgangsløsning og tilhørende tjenester.\n\n2. Hvilke opplysninger vi samler inn\n\nVi behandler kun opplysninger som er nødvendige for å kunne tilby medlemskap og adgang til treningssenteret, blant annet:\n\n• Navn\n\n• Telefonnummer og e-postadresse\n\n• Fødselsår eller fødselsdato ved behov for alderskontroll\n\n• Medlemskapstype og betalingsstatus\n\n• Logg over når adgang benyttes (for eksempel ved bruk av QR-kode)\n\n3. Formål med behandlingen\n\n• Administrere medlemskap og drop-in\n\n• Håndtere betaling og fakturering\n\n• Sikre trygg og korrekt bruk av adgangssystemet\n\n• Sende nødvendig informasjon til medlemmer\n\n4. Behandlingsgrunnlag\n\nBehandling av personopplysninger skjer hovedsakelig fordi det er nødvendig for å oppfylle medlemsavtalen. I tillegg behandles enkelte opplysninger for å oppfylle rettslige forpliktelser, for eksempel etter regnskapslovgivningen. I noen tilfeller kan behandlingen være basert på samtykke.\n\n5. Lagringstid\n\n• Opplysninger knyttet til medlemskap lagres så lenge medlemskapet er aktivt, og i en begrenset periode etterpå ved behov.\n\n• Regnskapsdata lagres i henhold til gjeldende lovkrav.\n\n• Adgangslogger lagres kun så lenge det er nødvendig for drift og sikkerhet.\n\n6. Kameraovervåkning\n\nLalm Treningssenter benytter kameraovervåkning i deler av lokalene for å ivareta sikkerhet og forebygge uønskede hendelser.\n\n• Kameraer er plassert i fellesarealer og ved inngang\n\n• Det er ikke kameraovervåkning i garderober, toaletter eller dusj\n\n• Opptak lagres i inntil 7 dager og slettes automatisk\n\n• Opptak gjennomgås kun ved behov, for eksempel ved uønskede hendelser\n\nBehandlingsgrunnlaget for kameraovervåkning er berettiget interesse, jf. personvernforordningen (GDPR) artikkel 6 nr. 1 bokstav f.\n\n7. Deling av opplysninger\n\nVi deler ikke personopplysninger med tredjeparter utover det som er nødvendig for drift av betaling, medlemssystem og adgangskontroll.\n\n• Betalingstjenester (for eksempel Vipps)\n\n• IT- og driftspartnere under databehandleravtale\n\n8. Dine rettigheter\n\n• Rett til innsyn\n\n• Rett til retting\n\n• Rett til sletting der vilkår er oppfylt\n\n• Rett til begrensning av behandling i enkelte tilfeller\n\n9. Informasjonssikkerhet\n\nVi benytter tekniske og organisatoriske tiltak for å beskytte personopplysninger, inkludert tilgangskontroll, logging og begrenset tilgang til systemer med persondata.\n\n10. Endringer i personvernerklæringen\n\nPersonvernerklæringen kan oppdateres ved behov. Oppdatert versjon vil alltid være tilgjengelig på nettsiden til Lalm Treningssenter.\n\n11. Kontakt\n\nHar du spørsmål om personvern eller ønsker å utøve dine rettigheter, kan du kontakte oss på:\n\npost@lalmil.no\n\nLalm Treningssenter – en del av Lalm Idrettslag (org.nr. 975 439 453).",
+    "updatedAt": "2026-10-26T11:21:36.992Z",
+    "requiresReacceptance": false
+  }
+};
 }
 
 function getLegalDocuments() {
