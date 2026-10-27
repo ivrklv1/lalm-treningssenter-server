@@ -29,6 +29,49 @@ const {
 
 
 const app = express();
+const LEGAL_TEST_SERVICE_ID = 'srv-d83i8amgvqtc73f0sveg';
+const LEGAL_TEST_ONLY = process.env.RENDER_SERVICE_ID === LEGAL_TEST_SERVICE_ID ||
+  process.env.LEGAL_TEST_ONLY === 'true';
+
+if (LEGAL_TEST_ONLY) {
+  const forbiddenKeys = [
+    'EUROBATE_USER', 'EUROBATE_PASSWORD',
+    'TELL_API_KEY', 'TELL_HWID', 'TELL_APP_ID', 'TELL_MASTER_PASSWORD',
+    'VIPPS_CLIENT_ID', 'VIPPS_CLIENT_SECRET', 'VIPPS_SUBSCRIPTION_KEY', 'VIPPS_MSN',
+    'TRIPLETEX_CONSUMER_TOKEN', 'TRIPLETEX_EMPLOYEE_TOKEN',
+    'BACKUP_S3_ACCESS_KEY_ID', 'BACKUP_S3_SECRET_ACCESS_KEY',
+  ];
+  if ((process.env.RENDER_SERVICE_ID && process.env.RENDER_SERVICE_ID !== LEGAL_TEST_SERVICE_ID) ||
+      process.env.DATA_DIR !== '/tmp/lalm-legal-test-data' ||
+      process.env.APPLE_TEST_PHONE !== '+4710000000' ||
+      !/^\d{6}$/.test(process.env.APPLE_TEST_CODE || '') ||
+      forbiddenKeys.some(key => process.env[key])) {
+    throw new Error('Legal-test requires isolated storage, synthetic login and no integration credentials.');
+  }
+
+  app.use(cors());
+  app.use(express.json());
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && req.path === '/') {
+      return res.json({ ok: true, legalTestOnly: true, sms: false, payments: false, doors: false });
+    }
+    if (req.method === 'GET' &&
+        ['/api/legal', '/api/legal/terms', '/api/legal/privacy', '/api/plans'].includes(req.path)) {
+      return next();
+    }
+    if (req.method === 'POST' &&
+        ['/auth/send-code', '/auth/verify-code'].includes(req.path) &&
+        normalizePhone(req.body?.phone) === process.env.APPLE_TEST_PHONE) {
+      return next();
+    }
+    return res.status(403).json({
+      ok: false,
+      error: 'legal_test_only',
+      message: 'Testmiljø: bare testinnlogging, vilkår og personvern er tilgjengelig. SMS, betaling og døråpning er sperret.',
+    });
+  });
+}
+
 const PORT = Number(process.env.PORT || 3000);
 
 // ----------------------------
@@ -2369,8 +2412,8 @@ app.post('/auth/verify-code', async (req, res) => {
         ok: true,
         isMember: true,
         member: {
-          email: 'apple-test@lalmtreningssenter.no',
-          name: 'Apple Testbruker',
+          email: LEGAL_TEST_ONLY ? 'legal-test@example.invalid' : 'apple-test@lalmtreningssenter.no',
+          name: LEGAL_TEST_ONLY ? 'Lalm dokumenttest' : 'Apple Testbruker',
           phone: phoneNormalized,
         },
         testUser: true,
@@ -4279,7 +4322,7 @@ app.post('/internal/tripletex/retry', async (req, res) => {
 // Optional: run a retry pass periodically (useful if Render Cron is not available).
 // Enable by setting TRIPLETEX_RETRY_INTERVAL_MINUTES (e.g. 5).
 const TRIPLETEX_RETRY_INTERVAL_MINUTES = Number(process.env.TRIPLETEX_RETRY_INTERVAL_MINUTES || 0);
-if (TRIPLETEX_RETRY_INTERVAL_MINUTES > 0) {
+if (!LEGAL_TEST_ONLY && TRIPLETEX_RETRY_INTERVAL_MINUTES > 0) {
   const ms = Math.max(1, TRIPLETEX_RETRY_INTERVAL_MINUTES) * 60 * 1000;
   console.log(`[TRIPLETEX] Retry scheduler enabled: every ${TRIPLETEX_RETRY_INTERVAL_MINUTES} min`);
   setInterval(async () => {
