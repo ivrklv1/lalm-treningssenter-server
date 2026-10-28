@@ -26,6 +26,7 @@ const {
   approveSubscriptionInvoice,
   stopTripletexSubscriptionForOrder,
 } = require('./tripletexClient');
+const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
 
 
 const app = express();
@@ -2669,11 +2670,19 @@ if (src === 'web') {
     }
     const cleanPhone = digits; // 8 siffer
 
-    // 5) Sjekk om det finnes aktivt medlem med samme tlf/e-post
-    const existingMember = findMemberByPhoneOrEmail(phoneFull, email);
-    if (existingMember && existingMember.active && isValidUntilOk(existingMember)) {
+    // 5) Avvis dobbeltkjøp, men tillat overgang fra aktiv drop-in/korttid
+    // til ordinært medlemskap for samme telefonnummer.
+    const ordinaryPurchase = selected.type !== 'dropin' &&
+      selected.type !== 'short_term' && !(selected.shortTermDays > 0) &&
+      !computeValidUntilForPurchase(membershipKey);
+    const activeExisting = findCheckoutConflict(
+      getMembers(), phoneFull, email, ordinaryPurchase, isValidUntilOk
+    );
+    const requestedEmail = String(email || '').trim().toLowerCase();
+
+    if (activeExisting) {
       appendAccessLog(
-        `[${new Date().toISOString()}] VIPPS_CHECKOUT_BLOCKED_EXISTING_MEMBER phone=${phoneFull} email=${(email || '').toLowerCase()} memberId=${existingMember.id}\n`
+        `[${new Date().toISOString()}] VIPPS_CHECKOUT_BLOCKED_EXISTING_MEMBER phone=${phoneFull} email=${requestedEmail} memberId=${activeExisting.id}\n`
       );
 
       return res.status(400).json({
@@ -3573,6 +3582,11 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
             if (m.validUntil) delete m.validUntil;
           }
 
+          upgradeTemporaryEmail(
+            m, updatedOrder.email, members,
+            !updatedOrder.isShortOrDropin && !computedValidUntil
+          );
+
           // Oppdater metadata
           m.updatedAt = new Date().toISOString();
 
@@ -3643,6 +3657,11 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           } else {
             if (existing.validUntil) delete existing.validUntil;
          }
+
+          upgradeTemporaryEmail(
+            existing, updatedOrder.email, members,
+            !updatedOrder.isShortOrDropin && !computedValidUntil
+          );
 
           // Sørg for at email finnes som streng (app forventer ofte string)
           if (!existing.email) existing.email = placeholderEmail;
