@@ -26,6 +26,7 @@ const {
   approveSubscriptionInvoice,
   stopTripletexSubscriptionForOrder,
 } = require('./tripletexClient');
+const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
 
 
 const app = express();
@@ -2512,11 +2513,19 @@ if (src === 'web') {
     }
     const cleanPhone = digits; // 8 siffer
 
-    // 5) Sjekk om det finnes aktivt medlem med samme tlf/e-post
-    const existingMember = findMemberByPhoneOrEmail(phoneFull, email);
-    if (existingMember && existingMember.active && isValidUntilOk(existingMember)) {
+    // 5) Avvis dobbeltkjøp, men tillat overgang fra aktiv drop-in/korttid
+    // til ordinært medlemskap for samme telefonnummer.
+    const ordinaryPurchase = selected.type !== 'dropin' &&
+      selected.type !== 'short_term' && !(selected.shortTermDays > 0) &&
+      !computeValidUntilForPurchase(membershipKey);
+    const activeExisting = findCheckoutConflict(
+      getMembers(), phoneFull, email, ordinaryPurchase, isValidUntilOk
+    );
+    const requestedEmail = String(email || '').trim().toLowerCase();
+
+    if (activeExisting) {
       appendAccessLog(
-        `[${new Date().toISOString()}] VIPPS_CHECKOUT_BLOCKED_EXISTING_MEMBER phone=${phoneFull} email=${(email || '').toLowerCase()} memberId=${existingMember.id}\n`
+        `[${new Date().toISOString()}] VIPPS_CHECKOUT_BLOCKED_EXISTING_MEMBER phone=${phoneFull} email=${requestedEmail} memberId=${activeExisting.id}\n`
       );
 
       return res.status(400).json({
@@ -3383,10 +3392,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         // VIKTIG: finn medlem i SAMME array som skal lagres
         const m = members.find((x) => {
           const candidatePhone = x.phone || x.phoneFull || x.mobile || null;
-          const normalized = candidatePhone
-            ? String(candidatePhone).replace(/\D/g, '')
-            : null;
-         return normalized === String(phone).replace(/\D/g, '');
+          return normalizePhone(candidatePhone) === normalizePhone(phone);
         })
 
         if (m) {
@@ -3415,6 +3421,11 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
            // Ordinært medlemskap → ingen tidsbegrensning
             if (m.validUntil) delete m.validUntil;
           }
+
+          upgradeTemporaryEmail(
+            m, updatedOrder.email, members,
+            !updatedOrder.isShortOrDropin && !computedValidUntil
+          );
 
           // Oppdater metadata
           m.updatedAt = new Date().toISOString();
@@ -3462,9 +3473,10 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
 
        // 1) Finn eksisterende medlem: primært telefon, sekundært e-post
        //    (for drop-in/korttid kan e-post være placeholder)
-        const existing =
-          findMemberByPhoneOrEmail(phoneNormalized, null) ||
-          findMemberByPhoneOrEmail(null, placeholderEmail);
+        const existing = members.find((m) =>
+          (phoneNormalized && normalizePhone(m.phone || m.mobile || m.phoneFull) === phoneNormalized) ||
+          String(m.email || '').trim().toLowerCase() === placeholderEmail
+        );
 
         const computedValidUntil = computeValidUntilForPurchase(planKey);
 
@@ -3486,6 +3498,11 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           } else {
             if (existing.validUntil) delete existing.validUntil;
          }
+
+          upgradeTemporaryEmail(
+            existing, updatedOrder.email, members,
+            !updatedOrder.isShortOrDropin && !computedValidUntil
+          );
 
           // Sørg for at email finnes som streng (app forventer ofte string)
           if (!existing.email) existing.email = placeholderEmail;
