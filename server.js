@@ -27,6 +27,7 @@ const {
   stopTripletexSubscriptionForOrder,
 } = require('./tripletexClient');
 const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
+const { datesForPaidMembership } = require('./membershipDates');
 
 
 const app = express();
@@ -2593,6 +2594,7 @@ if (src === 'web') {
         type: planObj.type || null,
         shortTermDays: planObj.shortTermDays || 0,
         signupFee: planObj.signupFee || 0,
+        bindingMonths: planObj.bindingMonths == null ? null : Number(planObj.bindingMonths),
       };
     }
     }
@@ -2600,16 +2602,19 @@ if (src === 'web') {
     if (!selected) {
       const membershipMap = {
         LALM_IL_BINDING: {
+          bindingMonths: 12,
           amount: 34900,
           text: 'Lalm IL-medlem - 12 mnd binding',
           prorate: true,
         },
         STANDARD_BINDING: {
+          bindingMonths: 12,
           amount: 44900,
           text: 'Standard - 12 mnd binding',
           prorate: true,
         },
         HYTTE_BINDING: {
+          bindingMonths: 12,
           amount: 16900,
           text: 'Hyttemedlemskap - 12 mnd binding',
           prorate: true,
@@ -2623,11 +2628,13 @@ if (src === 'web') {
         },
 
         LALM_IL_UBIND: {
+          bindingMonths: 0,
           amount: 44900,
           text: 'Lalm IL-medlem – uten binding',
           prorate: true,
         },
         STANDARD_UBIND: {
+          bindingMonths: 0,
           amount: 54900,
           text: 'Standard – uten binding',
           prorate: true,
@@ -2884,6 +2891,8 @@ if (src === 'web') {
       orderId,
       status: 'PENDING',
       membershipKey,
+      bindingMonths: selected.bindingMonths == null ? null : selected.bindingMonths,
+      isShortOrDropin,
       phone: cleanPhone,
       phoneFull,
       name: name || '',
@@ -3021,7 +3030,7 @@ async function vippsAutoCapture(orderId, amountInOre, transactionText) {
       appendAccessLog(
         `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_OK orderId=${orderId}\n`
       );
-      return true;
+      return { ok: true, timeStamp: res.data?.transactionInfo?.timeStamp || null };
     } else {
       appendAccessLog(
         `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_BAD_STATUS orderId=${orderId} httpStatus=${res.status} body=${JSON.stringify(
@@ -3484,6 +3493,9 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       (body.transactionSummary && body.transactionSummary.transactionId) ||
       null;
 
+    let paymentTime = ['SALE', 'CAPTURED'].includes(newStatus)
+      ? body.transactionInfo?.timeStamp || null : null;
+
     // 3.1 AUTO-CAPTURE: hvis Vipps sier RESERVED/RESERVE → prøv å belaste
     if (['RESERVE', 'RESERVED'].includes(status)) {
       try {
@@ -3501,8 +3513,9 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           captureText
         );
 
-        if (captureOk) {
+        if (captureOk?.ok) {
           newStatus = 'CAPTURED';
+          paymentTime = captureOk.timeStamp;
           appendAccessLog(
             `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_STATUS_UPDATED orderId=${orderId} newStatus=CAPTURED\n`
           );
@@ -3527,6 +3540,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     const updatedOrder = updateOrderStatus(orderId, newStatus, {
       vippsTransactionStatus: status,
       vippsReference,
+      ...(['SALE', 'CAPTURED'].includes(newStatus) && paymentTime ? { paidAt: paymentTime } : {}),
     });
 
     appendAccessLog(
@@ -3704,6 +3718,22 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
             `[${new Date().toISOString()}] VIPPS_CREATED_MEMBER orderId=${orderId} memberId=${memberId} plan=${newMember.plan} validUntil=${newMember.validUntil || 'null'}\n`
          );
        }
+      }
+
+      // Bindingsdato stopper ikke medlemskapet. Bruk bare bekreftet betaling
+      // og planlengden som ble lagret på ordren ved checkout.
+      if (['SALE', 'CAPTURED'].includes(newStatus) &&
+          !updatedOrder.isShortOrDropin &&
+          !computeValidUntilForPurchase(updatedOrder.membershipKey) &&
+          updatedOrder.bindingMonths != null && updatedOrder.paidAt && memberId) {
+        const member = members.find(m => m.id === memberId);
+        if (member && !member.membershipStartDate) {
+          const dates = datesForPaidMembership(updatedOrder.paidAt, updatedOrder.bindingMonths);
+          if (dates) {
+            Object.assign(member, dates, { membershipStartOrderId: orderId });
+            membersChanged = true;
+          }
+        }
       }
 
       // Persistér kun hvis endringer
