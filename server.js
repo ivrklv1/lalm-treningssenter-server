@@ -28,6 +28,7 @@ const {
 } = require('./tripletexClient');
 const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
 const { datesForPaidMembership } = require('./membershipDates');
+const { createVisitStats } = require('./visitStats');
 
 
 const app = express();
@@ -58,7 +59,7 @@ if (LEGAL_TEST_ONLY) {
       return res.json({ ok: true, legalTestOnly: true, sms: false, payments: false, doors: false });
     }
     if (req.method === 'GET' &&
-        ['/api/legal', '/api/legal/terms', '/api/legal/privacy', '/api/plans'].includes(req.path)) {
+        ['/api/legal', '/api/legal/terms', '/api/legal/privacy', '/api/plans', '/api/visit-pattern'].includes(req.path)) {
       return next();
     }
     if (req.method === 'POST' &&
@@ -136,6 +137,15 @@ const MEMBERS_FILE = path.join(DATA_DIR, 'members.json');
 const ORDERS_FILE  = path.join(DATA_DIR, 'orders.json');
 const PLANS_FILE   = path.join(DATA_DIR, 'plans.json');
 const LEGAL_FILE   = path.join(DATA_DIR, 'legal.json');
+const visitStats = createVisitStats({ dataDir: DATA_DIR });
+
+function recordVisitSafely(visitorKey) {
+  try {
+    visitStats.record({ visitorKey });
+  } catch (error) {
+    console.error('Kunne ikke lagre besøkstime:', error.message);
+  }
+}
 
 const TRIPLETEX_SUBSCRIPTION_ENABLED =
   (process.env.TRIPLETEX_SUBSCRIPTION_ENABLED || 'true')
@@ -1092,6 +1102,16 @@ async function sendWelcomeMembershipSms(order, member) {
 // ----------------------------
 app.use(cors());
 app.use(express.json());
+
+app.get('/api/visit-pattern', (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=3600');
+    return res.json(visitStats.summary());
+  } catch (error) {
+    console.error('Kunne ikke lese besøkstimer:', error.message);
+    return res.status(500).json({ available: false, error: 'visit_pattern_unavailable' });
+  }
+});
 
 // ----------------------------
 // Statisk servering (admin.html ligger i /public)
@@ -2127,6 +2147,8 @@ app.post('/access', async (req, res) => {
     }
 
     await gcOpen(doorConfig[doorId].gateIndex);
+    const visitorId = member.id || member.phoneFull || member.phone || member.email;
+    if (visitorId) recordVisitSafely(`member:${visitorId}`);
 
     const ts = new Date().toLocaleString('nb-NO', { timeZone: 'Europe/Oslo' });
     appendAccessLog(`${ts} email=${email} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=OPEN_LEGACY\n`);
@@ -2282,6 +2304,10 @@ app.post('/door/open', openingHoursGuard, async (req, res) => {
     }
 
     await gcOpen(doorConfig[doorId].gateIndex);
+    const visitorId = member
+      ? member.id || member.phoneFull || member.phone || member.email
+      : dropin.token;
+    if (visitorId) recordVisitSafely(`${member ? 'member' : 'dropin'}:${visitorId}`);
 
     const source = member ? 'MEMBER' : 'DROPIN';
 
