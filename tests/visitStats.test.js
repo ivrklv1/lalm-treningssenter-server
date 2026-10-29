@@ -22,19 +22,23 @@ test('stores only hourly totals and ignores repeated opens within 30 minutes', (
   }
 });
 
-test('averages each weekday and hour over eight completed weeks, including zero days', () => {
+test('averages each weekday and hour over four completed weeks, including zero days', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lalm-visits-'));
   try {
     const stats = createVisitStats({ dataDir });
     stats.record({ visitorKey: 'start', at: '2026-01-01T10:00:00Z' });
-    for (let week = 0; week < 8; week++) {
+    for (let week = 0; week < 4; week++) {
       const date = new Date(Date.UTC(2026, 0, 5 + week * 7, 9, 0));
       stats.record({ visitorKey: `visitor-${week}`, at: date });
     }
-    const result = stats.summary('2026-03-02T12:00:00Z');
+    assert.deepEqual(stats.summary('2026-02-01T12:00:00Z'), {
+      available: false, weeksCollected: 3, weeksRequired: 4,
+    });
+    const result = stats.summary('2026-02-02T12:00:00Z');
     assert.equal(result.available, true);
     assert.equal(result.from, '2026-01-05');
-    assert.equal(result.through, '2026-03-01');
+    assert.equal(result.through, '2026-02-01');
+    assert.equal(result.weeks, 4);
     assert.equal(result.days[0][5], 1); // Monday 10:00–11:00 Oslo
     assert.equal(result.days[1][5], 0);
     assert.equal(result.days.length, 7);
