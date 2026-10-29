@@ -27,6 +27,7 @@ const {
   stopTripletexSubscriptionForOrder,
 } = require('./tripletexClient');
 const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
+const { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime } = require('./membershipDates');
 const { createVisitStats } = require('./visitStats');
 
 
@@ -2447,6 +2448,7 @@ if (src === 'web') {
           if (planObj && typeof planObj.amount === 'number') {
       selected = {
         amount: planObj.amount,
+        bindingMonths: planObj.bindingMonths == null ? null : Number(planObj.bindingMonths),
         text: planObj.text || planObj.name || membershipKey,
         prorate: planObj.prorate !== false,
         type: planObj.type || null,
@@ -2459,16 +2461,19 @@ if (src === 'web') {
     if (!selected) {
       const membershipMap = {
         LALM_IL_BINDING: {
+          bindingMonths: 12,
           amount: 34900,
           text: 'Lalm IL-medlem - 12 mnd binding',
           prorate: true,
         },
         STANDARD_BINDING: {
+          bindingMonths: 12,
           amount: 44900,
           text: 'Standard - 12 mnd binding',
           prorate: true,
         },
         HYTTE_BINDING: {
+          bindingMonths: 12,
           amount: 16900,
           text: 'Hyttemedlemskap - 12 mnd binding',
           prorate: true,
@@ -2482,11 +2487,13 @@ if (src === 'web') {
         },
 
         LALM_IL_UBIND: {
+          bindingMonths: 0,
           amount: 44900,
           text: 'Lalm IL-medlem – uten binding',
           prorate: true,
         },
         STANDARD_UBIND: {
+          bindingMonths: 0,
           amount: 54900,
           text: 'Standard – uten binding',
           prorate: true,
@@ -2743,6 +2750,7 @@ if (src === 'web') {
       orderId,
       status: 'PENDING',
       membershipKey,
+      bindingMonths: selected.bindingMonths == null ? null : selected.bindingMonths,
       phone: cleanPhone,
       phoneFull,
       name: name || '',
@@ -2902,6 +2910,75 @@ async function vippsAutoCapture(orderId, amountInOre, transactionText) {
       } data=${JSON.stringify(e.response?.data || {})}\n`
     );
     return false;
+  }
+}
+
+const membershipDateChecksInFlight = new Set();
+
+async function verifyMembershipDatesFromVippsOnce(orderId) {
+  const order = findOrder(orderId);
+  if (!order || !['SALE', 'CAPTURED'].includes(order.status) || !order.memberId ||
+      order.bindingMonths == null || order.paidAtVerifiedAt || order.isShortOrDropin ||
+      computeValidUntilForPurchase(order.membershipKey)) return false;
+
+  updateOrderStatus(orderId, order.status, { dateVerificationLastAttemptAt: new Date().toISOString() });
+  const apiBase = process.env.VIPPS_ENV === 'test' ? 'https://apitest.vipps.no' : 'https://api.vipps.no';
+  const accessToken = await getVippsAccessToken();
+  const response = await axios.get(`${apiBase}/ecomm/v2/payments/${encodeURIComponent(orderId)}/details`, {
+    timeout: 5000,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY,
+      'Merchant-Serial-Number': process.env.VIPPS_MSN,
+    },
+  });
+  const paidAt = verifiedPaymentTime(response.data, order);
+  if (!paidAt) return false;
+  const dates = datesForPaidMembership(paidAt, order.bindingMonths);
+  if (!dates) return false;
+
+  const members = getMembers();
+  const member = members.find(item => item.id === order.memberId);
+  if (!member) return false;
+  const previousOrder = member.membershipStartOrderId ? findOrder(member.membershipStartOrderId) : null;
+  if (shouldReplaceMembershipDates(
+    member, orderId, paidAt, dates.membershipStartDate, previousOrder?.paidAt
+  )) {
+    Object.assign(member, dates, {
+      membershipStartOrderId: orderId, updatedAt: new Date().toISOString(),
+    });
+    saveMembers(members);
+  }
+  updateOrderStatus(orderId, order.status, {
+    paidAt, paidAtVerifiedAt: new Date().toISOString(),
+  });
+  return true;
+}
+
+async function verifyMembershipDatesFromVipps(orderId) {
+  if (membershipDateChecksInFlight.has(orderId)) return false;
+  membershipDateChecksInFlight.add(orderId);
+  try {
+    return await verifyMembershipDatesFromVippsOnce(orderId);
+  } finally {
+    membershipDateChecksInFlight.delete(orderId);
+  }
+}
+
+async function retryMissingMembershipDates() {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  const pending = getOrders().filter(order =>
+    ['SALE', 'CAPTURED'].includes(order.status) && order.memberId &&
+    order.bindingMonths != null && !order.paidAtVerifiedAt && !order.isShortOrDropin &&
+    !computeValidUntilForPurchase(order.membershipKey) &&
+    (!order.dateVerificationLastAttemptAt || Date.parse(order.dateVerificationLastAttemptAt) < cutoff)
+  ).sort((a, b) => Date.parse(a.dateVerificationLastAttemptAt || 0) - Date.parse(b.dateVerificationLastAttemptAt || 0));
+  for (const order of pending.slice(0, 20)) {
+    try {
+      await verifyMembershipDatesFromVipps(order.orderId);
+    } catch (error) {
+      console.warn('[MEMBERSHIP_DATES_VERIFY_FAILED]', order.orderId, error?.message || String(error));
+    }
   }
 }
 
@@ -3584,6 +3661,12 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         } catch (_) {}
       }
 
+      if (memberId && ['SALE', 'CAPTURED'].includes(newStatus)) {
+        setImmediate(() => verifyMembershipDatesFromVipps(orderId).catch(error => {
+          console.warn('[MEMBERSHIP_DATES_VERIFY_FAILED]', orderId, error?.message || String(error));
+        }));
+      }
+
 
       // 4.3) Tripletex-sync + automatisk godkjenning av abonnement (asynkron – ikke blokkér Vipps-callback)
       setImmediate(() => {
@@ -4211,6 +4294,16 @@ if (TRIPLETEX_RETRY_INTERVAL_MINUTES > 0) {
       console.warn('[TRIPLETEX] retry pass error', e?.message || String(e));
     }
   }, ms);
+}
+
+if (process.env.VIPPS_CLIENT_ID && process.env.VIPPS_CLIENT_SECRET &&
+    process.env.VIPPS_SUBSCRIPTION_KEY && process.env.VIPPS_MSN) {
+  setTimeout(() => retryMissingMembershipDates().catch(error => {
+    console.warn('[MEMBERSHIP_DATES_RETRY_FAILED]', error?.message || String(error));
+  }), 60 * 1000).unref();
+  setInterval(() => retryMissingMembershipDates().catch(error => {
+    console.warn('[MEMBERSHIP_DATES_RETRY_FAILED]', error?.message || String(error));
+  }), 60 * 60 * 1000).unref();
 }
 
 
