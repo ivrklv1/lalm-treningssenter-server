@@ -28,26 +28,36 @@ async function waitForServer(port, child, output) {
 for (const { initialPlan, storedPhone, bindingMonths } of [
   { initialPlan: 'dropin', storedPhone: '+4712345678', bindingMonths: 12 },
   { initialPlan: 'korttid', storedPhone: '+4712345678', bindingMonths: 0 },
+  { initialPlan: 'standard_uten_binding', storedPhone: '+4712345678', bindingMonths: 12 },
 ]) {
-  test(`simulated paid upgrade from ${initialPlan} (${storedPhone}) keeps member and restores real email`, async () => {
+  test(`simulated paid upgrade from ${initialPlan} (${storedPhone}) keeps member and updates dates`, async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lalm-member-upgrade-'));
     const port = await freePort();
     const memberId = `synthetic-${initialPlan}`;
     const orderId = `synthetic-order-${initialPlan}`;
-    const realEmail = `Test.${initialPlan}@example.invalid`;
+    const previousMembership = initialPlan === 'standard_uten_binding';
+    const realEmail = previousMembership ? 'old@example.invalid' : `Test.${initialPlan}@example.invalid`;
+    const purchasedPlan = previousMembership ? 'standard_12mnd_binding' : 'standard';
     fs.writeFileSync(path.join(dataDir, 'members.json'), JSON.stringify([{
       id: memberId,
-      email: 'temp-4712345678@lalmtreningssenter.no',
+      email: previousMembership ? 'old@example.invalid' : 'temp-4712345678@lalmtreningssenter.no',
       phone: storedPhone,
       name: 'Oppdiktet Medlem',
       active: true,
       plan: initialPlan,
-      validUntil: '2099-01-01T23:59:59.000Z',
+      ...(!previousMembership ? { validUntil: '2099-01-01T23:59:59.000Z' } : {}),
+      ...(previousMembership ? {
+        membershipStartDate: '2026-01-10', bindingEndDate: null,
+        bindingMonthsAtStart: 0, membershipStartOrderId: 'previous-order',
+      } : {}),
     }]));
-    fs.writeFileSync(path.join(dataDir, 'orders.json'), JSON.stringify([{
+    fs.writeFileSync(path.join(dataDir, 'orders.json'), JSON.stringify([...(previousMembership ? [{
+      orderId: 'previous-order', status: 'SALE', paidAt: '2026-01-10T12:00:00Z',
+      membershipKey: initialPlan, bindingMonths: 0, memberId,
+    }] : []), {
       orderId,
       status: 'PENDING',
-      membershipKey: 'standard',
+      membershipKey: purchasedPlan,
       ...(bindingMonths == null ? {} : { bindingMonths }),
       phone: '+4712345678',
       phoneFull: '+4712345678',
@@ -87,24 +97,26 @@ for (const { initialPlan, storedPhone, bindingMonths } of [
 
       const members = JSON.parse(fs.readFileSync(path.join(dataDir, 'members.json')));
       const orders = JSON.parse(fs.readFileSync(path.join(dataDir, 'orders.json')));
+      const purchasedOrder = orders.find(order => order.orderId === orderId);
       assert.equal(members.length, 1);
       assert.equal(members[0].id, memberId);
       assert.equal(members[0].email, realEmail.toLowerCase());
-      assert.equal(members[0].plan, 'standard');
+      assert.equal(members[0].plan, purchasedPlan);
       assert.equal(members[0].active, true);
       if (bindingMonths != null) {
         assert.equal(members[0].membershipStartDate, '2026-10-29');
         assert.equal(members[0].bindingEndDate, bindingMonths ? '2027-10-29' : null);
         assert.equal(members[0].membershipStartOrderId, orderId);
-        assert.equal(orders[0].paidAt, '2026-10-29T12:00:00Z');
+        assert.equal(members[0].bindingMonthsAtStart, bindingMonths);
+        assert.equal(purchasedOrder.paidAt, '2026-10-29T12:00:00Z');
       } else {
         assert.equal(Object.hasOwn(members[0], 'membershipStartDate'), false);
       }
       assert.equal(Object.hasOwn(members[0], 'validUntil'), false);
-      assert.equal(orders[0].status, 'SALE');
-      assert.equal(orders[0].memberId, memberId);
-      assert.equal(orders[0].welcomeSmsSent, true);
-      assert.equal(orders[0].tripletexSynced, true);
+      assert.equal(purchasedOrder.status, 'SALE');
+      assert.equal(purchasedOrder.memberId, memberId);
+      assert.equal(purchasedOrder.welcomeSmsSent, true);
+      assert.equal(purchasedOrder.tripletexSynced, true);
       assert.equal(output.includes('TEST BLOCKED AN OUTBOUND CONNECTION'), false, output);
     } finally {
       child.kill('SIGTERM');

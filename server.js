@@ -27,7 +27,7 @@ const {
   stopTripletexSubscriptionForOrder,
 } = require('./tripletexClient');
 const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
-const { datesForPaidMembership } = require('./membershipDates');
+const { datesForPaidMembership, shouldReplaceMembershipDates } = require('./membershipDates');
 const { createVisitStats } = require('./visitStats');
 
 
@@ -3769,9 +3769,13 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
           !computeValidUntilForPurchase(updatedOrder.membershipKey) &&
           updatedOrder.bindingMonths != null && updatedOrder.paidAt && memberId) {
         const member = members.find(m => m.id === memberId);
-        if (member && !member.membershipStartDate) {
+        if (member) {
           const dates = datesForPaidMembership(updatedOrder.paidAt, updatedOrder.bindingMonths);
-          if (dates) {
+          const previousOrder = member.membershipStartOrderId
+            ? findOrder(member.membershipStartOrderId) : null;
+          if (dates && shouldReplaceMembershipDates(
+            member, orderId, updatedOrder.paidAt, dates.membershipStartDate, previousOrder?.paidAt
+          )) {
             Object.assign(member, dates, { membershipStartOrderId: orderId });
             membersChanged = true;
           }

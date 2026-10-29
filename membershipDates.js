@@ -31,4 +31,15 @@ function datesForPaidMembership(paymentTime, bindingMonths) {
   };
 }
 
-module.exports = { datesForPaidMembership };
+function shouldReplaceMembershipDates(member, orderId, paymentTime, nextStartDate, previousPaymentTime) {
+  if (!member.membershipStartDate) return true;
+  if (member.membershipStartOrderId === orderId) return false;
+  if (nextStartDate < member.membershipStartDate) return false;
+  if (nextStartDate > member.membershipStartDate) return true;
+  if (!member.membershipStartOrderId) return true;
+  const previous = Date.parse(previousPaymentTime);
+  const next = Date.parse(paymentTime);
+  return Number.isFinite(previous) && Number.isFinite(next) && next > previous;
+}
+
+module.exports = { datesForPaidMembership, shouldReplaceMembershipDates };
