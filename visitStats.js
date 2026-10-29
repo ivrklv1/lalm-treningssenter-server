@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const DEDUP_MS = 30 * 60 * 1000;
-const WEEKS = 8;
+const WEEKS = 4;
 const FIRST_HOUR = 5;
 const LAST_HOUR = 22;
 
