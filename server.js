@@ -2417,6 +2417,14 @@ app.post('/auth/verify-code', async (req, res) => {
           email: LEGAL_TEST_ONLY ? 'legal-test@example.invalid' : 'apple-test@lalmtreningssenter.no',
           name: LEGAL_TEST_ONLY ? 'Lalm dokumenttest' : 'Apple Testbruker',
           phone: phoneNormalized,
+          ...(LEGAL_TEST_ONLY ? {
+            planName: 'Standard med binding (eksempel)',
+            active: true,
+            membershipStartDate: '2026-10-29',
+            bindingEndDate: '2027-10-29',
+            bindingMonthsAtStart: 12,
+            membershipSample: true,
+          } : {}),
         },
         testUser: true,
       });
@@ -2443,6 +2451,9 @@ app.post('/auth/verify-code', async (req, res) => {
     });
 
     if (member) {
+      const plan = (getPlans() || []).find(p =>
+        p && String(p.id || p.key || '').toLowerCase() === String(member.plan || '').toLowerCase()
+      );
       return res.json({
         ok: true,
         isMember: true,
@@ -2451,6 +2462,11 @@ app.post('/auth/verify-code', async (req, res) => {
           name: member.name || '',
           phone: phoneNormalized,
           validUntil: member.validUntil || null,
+          planName: plan?.name || plan?.text || null,
+          active: Boolean(member.active),
+          membershipStartDate: member.membershipStartDate || null,
+          bindingEndDate: member.bindingEndDate || null,
+          bindingMonthsAtStart: member.bindingMonthsAtStart ?? null,
         },
       });
     }
