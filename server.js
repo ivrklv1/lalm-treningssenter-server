@@ -27,6 +27,7 @@ const {
   stopTripletexSubscriptionForOrder,
 } = require('./tripletexClient');
 const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
+const { createVisitStats } = require('./visitStats');
 
 
 const app = express();
@@ -91,6 +92,15 @@ try {
 const MEMBERS_FILE = path.join(DATA_DIR, 'members.json');
 const ORDERS_FILE  = path.join(DATA_DIR, 'orders.json');
 const PLANS_FILE   = path.join(DATA_DIR, 'plans.json');
+const visitStats = createVisitStats({ dataDir: DATA_DIR });
+
+function recordVisitSafely(visitorKey) {
+  try {
+    visitStats.record({ visitorKey });
+  } catch (error) {
+    console.error('Kunne ikke lagre besøkstime:', error.message);
+  }
+}
 
 const TRIPLETEX_SUBSCRIPTION_ENABLED =
   (process.env.TRIPLETEX_SUBSCRIPTION_ENABLED || 'true')
@@ -1969,6 +1979,8 @@ app.post('/access', async (req, res) => {
     }
 
     await gcOpen(doorConfig[doorId].gateIndex);
+    const visitorId = member.id || member.phoneFull || member.phone || member.email;
+    if (visitorId) recordVisitSafely(`member:${visitorId}`);
 
     const ts = new Date().toLocaleString('nb-NO', { timeZone: 'Europe/Oslo' });
     appendAccessLog(`${ts} email=${email} door=${doorId} gate=${doorConfig[doorId].gateIndex} action=OPEN_LEGACY\n`);
@@ -2124,6 +2136,10 @@ app.post('/door/open', openingHoursGuard, async (req, res) => {
     }
 
     await gcOpen(doorConfig[doorId].gateIndex);
+    const visitorId = member
+      ? member.id || member.phoneFull || member.phone || member.email
+      : dropin.token;
+    if (visitorId) recordVisitSafely(`${member ? 'member' : 'dropin'}:${visitorId}`);
 
     const source = member ? 'MEMBER' : 'DROPIN';
 
