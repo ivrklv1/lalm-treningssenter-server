@@ -30,6 +30,7 @@ const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail')
 const { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus } = require('./membershipDates');
 const { confirmedRefund } = require('./refundReview');
 const { prepareAdminMemberEdit } = require('./memberAdminEdit');
+const { analyzeNifImport } = require('./nifImport');
 const { createVisitStats } = require('./visitStats');
 
 
@@ -1501,6 +1502,21 @@ app.patch('/admin/members/:id/details', basicAuth, (req, res) => {
   }
 });
 
+app.post('/admin/members/:id/tripletex-follow-up/resolve', basicAuth, (req, res) => {
+  const members = getMembers();
+  const member = members.find(item => String(item.id) === String(req.params.id));
+  if (!member) return res.status(404).json({ error: 'member_not_found' });
+  if (member.tripletexFollowUp?.status !== 'pending') {
+    return res.status(409).json({ error: 'no_pending_follow_up' });
+  }
+  member.tripletexFollowUp = {
+    ...member.tripletexFollowUp, status: 'resolved',
+    resolvedAt: new Date().toISOString(), resolvedBy: req.adminUser,
+  };
+  if (!saveMembers(members)) return res.status(500).json({ error: 'could_not_save' });
+  return res.json({ ok: true, followUp: member.tripletexFollowUp });
+});
+
 // Oppdatér medlem (navn, e-post, telefon, plan, aktiv m.m.)
 app.put('/admin/members/:id', basicAuth, (req, res) => {
   const id = String(req.params.id || '').trim();
@@ -1513,6 +1529,12 @@ app.put('/admin/members/:id', basicAuth, (req, res) => {
   }
 
   const member = members[idx];
+  if (Object.hasOwn(body, 'plan') && body.plan !== member.plan) {
+    member.tripletexFollowUp = {
+      reason: 'plan_change', fromPlan: member.plan || null, toPlan: body.plan,
+      createdAt: new Date().toISOString(), createdBy: req.adminUser, status: 'pending',
+    };
+  }
 
   const allowed = [
     'name',
@@ -1544,13 +1566,15 @@ app.delete('/admin/members/:id', basicAuth, (req, res) => {
   const id = String(req.params.id || '').trim();
   const members = getMembers();
 
-  const idx = members.findIndex((m) => String(m.id) === id);
-  if (idx === -1) {
+  const matches = members.filter((m) => String(m.id) === id);
+  if (matches.length === 0) {
     return res.status(404).json({ ok: false, error: 'member_not_found' });
   }
+  if (matches.length > 1) return res.status(409).json({ ok: false, error: 'ambiguous_member_id' });
 
-  const deleted = members.splice(idx, 1)[0];
-  saveMembers(members);
+  if (!saveMembers(members.filter((m) => m !== matches[0]))) {
+    return res.status(500).json({ ok: false, error: 'could_not_save' });
+  }
 
   res.json({ ok: true, deletedId: id });
 });
@@ -1629,19 +1653,23 @@ app.post('/api/admin/members', basicAuth, async (req, res) => {
 
 
 app.post('/api/admin/members/toggle', basicAuth, async (req, res) => {
-  const { email } = req.body || {};
-  if (!email) return res.status(400).json({ error: 'email_required' });
+  const { memberId, email } = req.body || {};
+  if (!memberId && !email) return res.status(400).json({ error: 'member_id_required' });
 
   const members = getMembers();
-  const idx = members.findIndex(m => (m.email || '').toLowerCase() === email.toLowerCase());
-  if (idx === -1) return res.status(404).json({ error: 'not_found' });
+  const matches = members.filter(m => memberId
+    ? String(m.id) === String(memberId)
+    : (m.email || '').toLowerCase() === String(email).toLowerCase());
+  if (!matches.length) return res.status(404).json({ error: 'not_found' });
+  if (matches.length > 1) return res.status(409).json({ error: 'ambiguous_member' });
 
-  members[idx].active = !members[idx].active;
-  saveMembers(members);
+  const member = matches[0];
+  member.active = !member.active;
+  if (!saveMembers(members)) return res.status(500).json({ error: 'could_not_save' });
 
   // TELL-sync fjernet
 
-  res.json({ ok: true, active: members[idx].active });
+  res.json({ ok: true, active: member.active });
 });
 
 // Oppdatere plan for medlem (brukes av nytt admin-UI, via e-post)
@@ -1681,6 +1709,12 @@ app.post('/api/admin/members/update-plan', basicAuth, (req, res) => {
     return res.status(404).json({ ok: false, error: 'member_not_found' });
   }
 
+  if (members[idx].plan !== planKeyLower) {
+    members[idx].tripletexFollowUp = {
+      reason: 'plan_change', fromPlan: members[idx].plan || null, toPlan: planKeyLower,
+      createdAt: new Date().toISOString(), createdBy: req.adminUser, status: 'pending',
+    };
+  }
   members[idx].plan = planKeyLower;
 
   // Re-beregn validUntil for drop-in/korttid, ellers null
@@ -1698,7 +1732,7 @@ app.post('/api/admin/members/update-plan', basicAuth, (req, res) => {
 
 
 
-// Slette medlem (nytt admin-UI, via POST med e-post i body)
+// Eldre klienter kan fortsatt bruke e-post; avvis tvetydige treff.
 app.post('/api/admin/members/delete', basicAuth, (req, res) => {
   const { email } = req.body || {};
   if (!email) {
@@ -1707,18 +1741,19 @@ app.post('/api/admin/members/delete', basicAuth, (req, res) => {
 
   const emailNorm = String(email).toLowerCase();
   const members = getMembers();
-  const filtered = members.filter(
-    (m) => (m.email || '').toLowerCase() !== emailNorm
-  );
-
-  if (filtered.length === members.length) {
+  const matches = members.filter((m) => (m.email || '').toLowerCase() === emailNorm);
+  if (matches.length === 0) {
     return res.status(404).json({ ok: false, error: 'member_not_found' });
+  }
+  if (matches.length > 1) {
+    return res.status(409).json({ ok: false, error: 'ambiguous_email' });
   }
 
   // Vi fjerner ikke automatisk fra TELL her (samme praksis som delete-endpointet over)
-
-  saveMembers(filtered);
-  return res.json({ ok: true, deleted: 1 });
+  if (!saveMembers(members.filter((m) => m !== matches[0]))) {
+    return res.status(500).json({ ok: false, error: 'could_not_save' });
+  }
+  return res.json({ ok: true, deletedId: matches[0].id || null });
 });
 
 app.delete('/api/admin/members', basicAuth, async (req, res) => {
@@ -1726,15 +1761,18 @@ app.delete('/api/admin/members', basicAuth, async (req, res) => {
   if (!email) return res.status(400).json({ error: 'email_required' });
 
   const members = getMembers();
-  const victim = members.find(m => (m.email || '').toLowerCase() === email);
-  const filtered = members.filter(m => (m.email || '').toLowerCase() !== email);
-  if (filtered.length === members.length) {
+  const matches = members.filter(m => (m.email || '').toLowerCase() === email);
+  if (matches.length === 0) {
     return res.status(404).json({ error: 'not_found' });
+  }
+  if (matches.length > 1) {
+    return res.status(409).json({ error: 'ambiguous_email' });
   }
 
   // TELL-sync fjernet (vi fjerner ikke automatisk fra TELL lenger)
-
-  saveMembers(filtered);
+  if (!saveMembers(members.filter((m) => m !== matches[0]))) {
+    return res.status(500).json({ error: 'could_not_save' });
+  }
   res.json({ ok: true });
 });
 
@@ -1835,121 +1873,35 @@ app.post('/api/admin/tell-sync', basicAuth, async (req, res) => {
 });
 
 
-app.post('/api/admin/nif-import', basicAuth, (req, res) => {
-  const { csv } = req.body || {};
-  if (!csv || typeof csv !== 'string') {
-    return res.status(400).json({ ok: false, error: 'csv_required' });
-  }
-
-  let members = getMembers();
-
-  // Bygg opp indekser for raskt oppslag
-  const byEmail = {};
-  const byPhone = {};
-  const byName = {};
-
-  for (const m of members) {
-    const email = (m.email || '').toLowerCase().trim();
-    if (email) byEmail[email] = m;
-
-    if (m.phone) {
-      const p = normalizePhone ? normalizePhone(m.phone) : String(m.phone).trim();
-      if (p) byPhone[p] = m;
-    }
-
-    const fullName = normalizeName(m.name || '');
-    if (fullName) {
-      if (!byName[fullName]) byName[fullName] = [];
-      byName[fullName].push(m);
-    }
-
-    // Nullstill tidligere NIF-flagg før vi importerer nytt
-    if (m.clubMemberSource === 'nif') {
-      m.clubMember = false;
-      m.clubMemberSource = undefined;
-      m.clubMemberSyncedAt = undefined;
-    }
-  }
-
-  let matched = 0;
-  let unmatched = 0;
-  let totalRows = 0;
-  const ambiguous = [];
-
-  const lines = csv.split(/\r?\n/).filter(l => l.trim().length > 0);
-
-  for (const line of lines) {
-    // hopp over header-rad
-    if (line.toLowerCase().includes('fornavn') &&
-        line.toLowerCase().includes('medlemsstatus')) {
-      continue;
-    }
-
-    const parts = line.split(/[;]/).map(p => p.trim());
-    if (parts.length < 6) continue;
-
-    totalRows++;
-
-    const fornavn = parts[0];
-    const etternavn = parts[1];
-    const emailRaw = parts[2];
-    const phoneRaw = parts[3];
-    const medlemsstatus = parts[5];
-
-    // Vi bryr oss kun om "Aktiv" i NIF-lista
-    if (medlemsstatus.toLowerCase() !== 'aktiv') continue;
-
-    const email = (emailRaw || '').toLowerCase().trim();
-    const phone = normalizePhone ? normalizePhone(phoneRaw) : String(phoneRaw || '').trim();
-    const fullName = normalizeName(`${fornavn} ${etternavn}`);
-
-    let candidate = null;
-
-    // 1) e-post
-    if (email && byEmail[email]) {
-      candidate = byEmail[email];
-    }
-    // 2) telefon
-    else if (phone && byPhone[phone]) {
-      candidate = byPhone[phone];
-    }
-    // 3) navn (unik)
-    else if (fullName && byName[fullName] && byName[fullName].length === 1) {
-      candidate = byName[fullName][0];
-    }
-    // Flere med samme navn → logg, men ikke auto-match
-    else if (fullName && byName[fullName] && byName[fullName].length > 1) {
-      ambiguous.push({ fullName, count: byName[fullName].length });
-      unmatched++;
-      continue;
-    }
-
-    if (!candidate) {
-      unmatched++;
-      continue;
-    }
-
-    // Sjekk at denne faktisk har en IL-rabatt-plan
-    if (!candidate.plan || !IL_DISCOUNT_PLANS.includes(candidate.plan)) {
-      unmatched++;
-      continue;
-    }
-
-    candidate.clubMember = true;
-    candidate.clubMemberSource = 'nif';
-    candidate.clubMemberSyncedAt = new Date().toISOString();
-    matched++;
-  }
-
-  saveMembers(members);
-
-  return res.json({
-    ok: true,
-    totalRows,
-    matched,
-    unmatched,
-    ambiguous,
+function prepareNifImport(req) {
+  return analyzeNifImport(req.body?.csv, getMembers(), {
+    normalizePhone,
+    normalizeName,
+    discountPlans: IL_DISCOUNT_PLANS,
+    now: new Date().toISOString(),
   });
+}
+
+app.post('/api/admin/nif-import/preview', basicAuth, (req, res) => {
+  try {
+    const { summary, previewToken } = prepareNifImport(req);
+    return res.json({ ok: true, ...summary, previewToken });
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post('/api/admin/nif-import', basicAuth, (req, res) => {
+  try {
+    const { members, summary, previewToken } = prepareNifImport(req);
+    if (!req.body?.previewToken || req.body.previewToken !== previewToken) {
+      return res.status(409).json({ ok: false, error: 'nif_preview_required' });
+    }
+    if (!saveMembers(members)) return res.status(500).json({ ok: false, error: 'could_not_save' });
+    return res.json({ ok: true, ...summary });
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
 });
 
 app.get('/api/admin/logs', basicAuth, (req, res) => {

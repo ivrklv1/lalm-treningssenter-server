@@ -386,6 +386,15 @@
       transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
     }
 
+    input[type="radio"], input[type="checkbox"] {
+      width: auto;
+      padding: 0;
+      vertical-align: middle;
+    }
+
+    .sms-mode-options { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 6px; }
+    .sms-mode-options label { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+
     textarea {
       resize: vertical;
       min-height: 90px;
@@ -612,33 +621,19 @@
                   <option value="recorded">Registrert startdato</option>
                 </select>
               </div>
+              <div>
+                <label for="filterTripletexFollowUp">Filter: Tripletex-oppfølging</label>
+                <select id="filterTripletexFollowUp">
+                  <option value="">Alle</option>
+                  <option value="pending">Må følges opp</option>
+                </select>
+              </div>
             </div>
-            <div class="small text-muted mt-1">Aktive ordinære medlemmer uten startdato: <strong id="missingMembershipDatesCount">0</strong>. Datoer fylles ikke inn her.</div>
+            <div class="small text-muted mt-1">Aktive ordinære medlemmer uten startdato: <strong id="missingMembershipDatesCount">0</strong>. Planendringer som må kontrolleres i Tripletex: <strong id="tripletexFollowUpCount">0</strong>.</div>
             <div class="btn-row" style="justify-content:flex-start;">
               <button id="btnReloadMembers" class="btn-secondary">⟳ Oppdater liste</button>
             </div>
           </div>
-          <div id="memberActions" class="mt-2" style="display:none;">
-            <div class="small text-muted">
-              Valgt medlem: <span id="selectedMemberLabel">Ingen</span>
-            </div>
-            <div class="btn-row mt-1">
-              <button id="btnToggleActive" class="btn-secondary">Pause / aktiver</button>
-              <select id="changePlanSelect">
-                <option value="">Endre plan…</option>
-                <option value="LALM_IL_BINDING">Lalm IL – 12 mnd binding</option>
-                <option value="STANDARD_BINDING">Standard – 12 mnd binding</option>
-                <option value="HYTTE_BINDING">Hytte – 12 mnd binding</option>
-                <option value="LALM_IL_UBIND">Lalm IL – uten binding</option>
-                <option value="STANDARD_UBIND">Standard – uten binding</option>
-                <option value="TEST_1KR">TEST – 1 kr</option>
-              </select>
-              <button id="btnChangePlan" class="btn-secondary">Lagre ny plan</button>
-              <button id="btnDeleteMember" class="btn-secondary" style="background:#fef2f2; border:1px solid #fecaca; color:#b91c1c;">🗑 Slett medlem</button>
-            </div>
-            <div id="memberActionsMsg" class="mt-1 small"></div>
-          </div>
-
           <div class="table-wrapper mt-2">
              <div class="scroll">
                <table>
@@ -856,19 +851,12 @@
         </div>
 
         <div class="mt-2 small">
-          <strong>Velg mottakere:</strong><br />
-          <label style="margin-right: 12px;">
-            <input type="radio" name="smsMode" value="segment" checked />
-            Segment (aktive / inaktive / alle)
-          </label>
-          <label style="margin-right: 12px;">
-            <input type="radio" name="smsMode" value="selected" />
-            Valgte medlemmer (huk av i lista)
-          </label>
-          <label>
-            <input type="radio" name="smsMode" value="plans" />
-            Plan(er)
-          </label>
+          <strong>Velg mottakere:</strong>
+          <div class="sms-mode-options">
+            <label><input type="radio" name="smsMode" value="segment" checked /> Segment (aktive / inaktive / alle)</label>
+            <label><input type="radio" name="smsMode" value="selected" /> Valgte medlemmer</label>
+            <label><input type="radio" name="smsMode" value="plans" /> Plan(er)</label>
+          </div>
         </div>
 
         <div id="smsSegmentWrapper" class="mt-2">
@@ -878,6 +866,7 @@
             <option value="inactive">Inaktive medlemmer</option>
             <option value="all">Alle medlemmer</option>
           </select>
+        </div>
 
         <div id="smsPlansWrapper" class="mt-2" style="display:none;">
           <div class="small" style="margin-bottom:6px;">
@@ -903,8 +892,7 @@
           <div id="smsPreviewSample" class="mt-1 text-muted"></div>
         </div>
 
-        </div>
-
+        <div id="smsMembersWrapper">
         <div class="mt-3 small">
           <strong>Medlemsliste for avhuking</strong>
         </div>
@@ -927,6 +915,7 @@
             </tr>
             </tbody>
           </table>
+        </div>
         </div>
 
         <div class="mt-2">
@@ -962,10 +951,12 @@
             </div>
             <div>
               <span class="badge-small">
-                Totalt: <span id="ordersCount">0</span>
+                Treff / totalt: <span id="ordersCount">0</span>
               </span>
             </div>
           </div>
+          <label for="orderSearch">Finn ordre (ordre-ID, e-post eller plan)</label>
+          <input id="orderSearch" type="search" placeholder="Søk i ordreloggen…" />
 
           <div class="table-wrapper" style="max-height: 360px;">
             <div class="scroll">
@@ -1003,6 +994,9 @@
               <button id="btnRefreshDoorLog" class="btn-secondary">Oppdater</button>
             </div>
           </div>
+          <label for="doorLogSearch">Finn dørhendelse</label>
+          <input id="doorLogSearch" type="search" placeholder="Søk i de siste 500 logglinjene…" />
+          <div id="doorLogCount" class="small text-muted mt-1"></div>
 
           <div class="table-wrapper" style="max-height: 360px;">
             <div class="scroll">
@@ -1046,10 +1040,13 @@
         <div class="right-column-section">
           <label for="nifTextarea">NIF medlemsimport (CSV fra Excel)</label>
           <textarea id="nifTextarea" placeholder="Lim inn medlemslisten her…"></textarea>
+          <div class="small text-muted mt-1">Forhåndsvisningen viser hvor mange som får eller mister NIF-markering. Ingenting lagres før du bekrefter importen.</div>
           <div class="btn-row mt-1">
-            <button id="btnNifImport" class="btn-secondary">📥 Importer NIF-liste</button>
+            <button id="btnNifPreview" class="btn-secondary">Forhåndsvis endringer</button>
+            <button id="btnNifImport" class="btn-primary" disabled>📥 Bekreft import</button>
             <button id="btnClearNif" class="btn-ghost">Tøm felt</button>
           </div>
+          <div id="nifPreviewSummary" class="mt-1 small" role="status"></div>
           <div id="nifMsg" class="mt-1 small"></div>
         </div>
       </section>
@@ -1098,11 +1095,13 @@
            <label for="modalEditDateReason" class="mt-2">Begrunnelse for datoendring</label>
            <textarea id="modalEditDateReason" maxlength="500" placeholder="Hvilken Vipps-ordre eller avtale ble kontrollert?"></textarea>
          </div>
-         <div class="small text-muted mt-2">Endringer i plan og kontaktinfo oppdaterer ikke fakturering i Tripletex. Aktiv status styres separat.</div>
+         <div class="small text-muted mt-2">Planendring oppdaterer ikke Tripletex. Endret plan merkes for manuell oppfølging. Deaktivering av tilgang stopper ikke fakturering.</div>
+         <div class="small mt-1" id="modalTripletexFollowUp"></div>
+         <button type="button" id="modalResolveTripletexBtn" class="btn-secondary mt-1" style="display:none;">Marker Tripletex som kontrollert</button>
          <div class="small text-muted mt-2">Siste adminendring: <span id="modalLastAdminEdit">Ingen registrert</span></div>
        </div>
        <div class="btn-row mt-3">
-         <button id="modalToggleActiveBtn" class="btn-secondary">Pause / aktiver</button>
+         <button id="modalToggleActiveBtn" class="btn-secondary">Deaktiver / aktiver tilgang</button>
          <button id="modalSaveDetailsBtn" class="btn-primary">Lagre opplysninger</button>
          <button id="modalDeleteBtn" class="btn-secondary" style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;">🗑 Slett</button>
        </div>
@@ -1133,7 +1132,9 @@
   const searchInput = document.getElementById('searchInput');
   const filterPlan = document.getElementById('filterPlan');
   const filterMembershipDates = document.getElementById('filterMembershipDates');
+  const filterTripletexFollowUp = document.getElementById('filterTripletexFollowUp');
   const missingMembershipDatesCount = document.getElementById('missingMembershipDatesCount');
+  const tripletexFollowUpCount = document.getElementById('tripletexFollowUpCount');
   const btnReloadMembers = document.getElementById('btnReloadMembers');
   const newName = document.getElementById('newName');
   const newEmail = document.getElementById('newEmail');
@@ -1158,6 +1159,8 @@
   const modalEditDateReason = document.getElementById('modalEditDateReason');
   const modalDateSource = document.getElementById('modalDateSource');
   const modalLastAdminEdit = document.getElementById('modalLastAdminEdit');
+  const modalTripletexFollowUp = document.getElementById('modalTripletexFollowUp');
+  const modalResolveTripletexBtn = document.getElementById('modalResolveTripletexBtn');
   const modalMemberPlanSelect = document.getElementById('modalMemberPlanSelect');
   const modalMemberStatus = document.getElementById('modalMemberStatus');
   const modalBindingEndDate = document.getElementById('modalBindingEndDate');
@@ -1181,13 +1184,16 @@
   const ordersTableBody = document.getElementById('ordersTableBody');
   const ordersCountEl = document.getElementById('ordersCount');
   const ordersErrorEl = document.getElementById('ordersError');
+  const orderSearch = document.getElementById('orderSearch');
 
   // Verktøy
   const btnTellSync = document.getElementById('btnTellSync');
   const toolsMsg = document.getElementById('toolsMsg');
   const nifTextarea = document.getElementById('nifTextarea');
+  const btnNifPreview = document.getElementById('btnNifPreview');
   const btnNifImport = document.getElementById('btnNifImport');
   const btnClearNif = document.getElementById('btnClearNif');
+  const nifPreviewSummary = document.getElementById('nifPreviewSummary');
   const nifMsg = document.getElementById('nifMsg');
 
   // SMS
@@ -1198,6 +1204,7 @@
   const smsMembersBodyEl = document.getElementById('smsMembersBody');
   const smsSegmentWrapperEl = document.getElementById('smsSegmentWrapper');
   const smsPlansWrapperEl = document.getElementById('smsPlansWrapper');
+  const smsMembersWrapperEl = document.getElementById('smsMembersWrapper');
   const smsPlansListEl = document.getElementById('smsPlansList');
   const smsPlansOnlyActiveEl = document.getElementById('smsPlansOnlyActive');
   const smsPreviewBtn = document.getElementById('smsPreviewBtn');
@@ -1446,8 +1453,10 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     const q = (searchInput.value || '').toLowerCase();
     const planFilter = filterPlan.value || '';
     const dateFilter = filterMembershipDates.value || '';
+    const followUpFilter = filterTripletexFollowUp.value || '';
 
     missingMembershipDatesCount.textContent = allMembers.filter(m => m.active && membershipDateState(m) === 'missing').length;
+    tripletexFollowUpCount.textContent = allMembers.filter(m => m.tripletexFollowUp?.status === 'pending').length;
 
     const filtered = allMembers.filter(m => {
       if (planFilter && (m.plan || '') !== planFilter) return false;
@@ -1455,6 +1464,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       if (dateFilter === 'missing' && !(m.active && dateState === 'missing')) return false;
       if (dateFilter === 'review' && dateState !== 'review') return false;
       if (dateFilter === 'recorded' && dateState !== 'recorded') return false;
+      if (followUpFilter === 'pending' && m.tripletexFollowUp?.status !== 'pending') return false;
       if (!q) return true;
       const name = (m.name || '').toLowerCase();
       const email = (m.email || '').toLowerCase();
@@ -1485,7 +1495,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         tr.dataset.active = m.active ? '1' : '0';
 
         tr.innerHTML = `
-          <td>${escapeHtml(m.name || '–')}</td>
+          <td>${escapeHtml(m.name || '–')}${m.tripletexFollowUp?.status === 'pending' ? '<div class="small tag-danger">Tripletex må kontrolleres</div>' : ''}</td>
           <td>${escapeHtml(m.plan || '–')}</td>
           <td>${ilText}</td>
           <td class="status">
@@ -1568,11 +1578,17 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     modalBindingEndDate.textContent = member.bindingMonthsAtStart === 0 && member.membershipStartDate
       ? 'Ingen binding' : formatMembershipDate(member.bindingEndDate);
     modalMembershipStartOrderId.textContent = member.membershipStartOrderId || 'Ikke registrert';
+    const followUp = member.tripletexFollowUp;
+    modalTripletexFollowUp.textContent = followUp?.status === 'pending'
+      ? `Tripletex må kontrolleres etter planendring: ${followUp.fromPlan || 'ukjent'} → ${followUp.toPlan}.`
+      : followUp?.status === 'resolved' ? `Tripletex kontrollert ${fmtDate(followUp.resolvedAt)}.` : '';
+    modalTripletexFollowUp.className = followUp?.status === 'pending' ? 'small tag-danger mt-1' : 'small text-muted mt-1';
+    modalResolveTripletexBtn.style.display = followUp?.status === 'pending' ? 'inline-block' : 'none';
 
     modalMemberMsg.textContent = '';
     modalToggleActiveBtn.textContent = member.active
-      ? 'Sett som inaktiv (pause)'
-      : 'Aktiver medlem';
+      ? 'Deaktiver tilgang'
+      : 'Aktiver tilgang';
 
     memberModal.style.display = 'flex';
   }
@@ -1595,12 +1611,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     }
   }
 
-  async function deleteMemberByEmail(email) {
-    const res = await fetch('/api/admin/members/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
-    });
+  async function deleteMemberById(id) {
+    const res = await fetch(`/admin/members/${encodeURIComponent(id)}`, { method: 'DELETE' });
     const data = await res.json();
     if (!res.ok || !data.ok) {
       throw new Error(data.error || ('HTTP ' + res.status));
@@ -1640,24 +1652,14 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     }
   }
 
-  async function toggleMemberActive(email) {
-    try {
-      const res = await fetch('/api/admin/members/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-      if (!res.ok) {
-        throw new Error('HTTP ' + res.status);
-      }
-      const data = await res.json();
-      if (!data.ok) {
-        throw new Error(data.error || 'Ukjent feil');
-      }
-      await loadMembers();
-    } catch (e) {
-      alert('Kunne ikke endre status for medlem: ' + e.message);
-    }
+  async function toggleMemberActive(memberId) {
+    const res = await fetch('/api/admin/members/toggle', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberId }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    await loadMembers();
   }
 
   function updateMemberActionsUi() {
@@ -1755,7 +1757,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
 
   async function deleteMember() {
-    if (!selectedMember || !selectedMember.email) return;
+    if (!selectedMember?.id) return;
     if (
       !confirm(
         'Slette medlemmet "' +
@@ -1773,15 +1775,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     if (btnDeleteMember) btnDeleteMember.disabled = true;
 
     try {
-      const res = await fetch('/api/admin/members/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: selectedMember.email }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || 'Ukjent feil');
-      }
+      await deleteMemberById(selectedMember.id);
       if (memberActionsMsg) {
         memberActionsMsg.textContent = 'Medlem slettet.';
         memberActionsMsg.className = 'mt-1 small tag-success';
@@ -1852,14 +1846,18 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   // ------- Vipps-ordrer -------
 
   function renderOrders() {
-    ordersCountEl.textContent = allOrders.length;
+    const query = orderSearch.value.trim().toLowerCase();
+    const matchingOrders = query ? allOrders.filter(order =>
+      [order.orderId, order.email, order.membershipKey, order.status]
+        .some(value => String(value || '').toLowerCase().includes(query))) : allOrders;
+    ordersCountEl.textContent = `${matchingOrders.length} av ${allOrders.length}`;
 
-    if (!allOrders.length) {
-      ordersTableBody.innerHTML = '<tr><td colspan="7" class="text-muted">Ingen ordrer registrert ennå.</td></tr>';
+    if (!matchingOrders.length) {
+      ordersTableBody.innerHTML = `<tr><td colspan="7" class="text-muted">${allOrders.length ? 'Ingen ordrer passer søket.' : 'Ingen ordrer registrert ennå.'}</td></tr>`;
       return;
     }
 
-      const sorted = [...allOrders]
+    const sorted = [...matchingOrders]
     .sort((a, b) => Number(b.refundReview?.state === 'pending') - Number(a.refundReview?.state === 'pending') || new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, 50);
 
@@ -1877,16 +1875,16 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       }
 
       tr.innerHTML = `
-        <td>${o.orderId || '–'}</td>
+        <td>${escapeHtml(o.orderId || '–')}</td>
         <td class="status">
           <div class="status-pill ${statusClass}">
             <span></span>
-            <span>${statusLabel}</span>
+            <span>${escapeHtml(statusLabel)}</span>
           </div>
         </td>
-        <td>${o.membershipKey || '–'}</td>
+        <td>${escapeHtml(o.membershipKey || '–')}</td>
         <td>${fmtAmount(o.amount)}</td>
-        <td>${o.email || '–'}</td>
+        <td>${escapeHtml(o.email || '–')}</td>
         <td>${fmtDate(o.createdAt)}</td>
       `;
       const refundCell = tr.insertCell();
@@ -1962,6 +1960,9 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   const btnRefreshDoorLog = document.getElementById('btnRefreshDoorLog');
   const doorLogBody = document.getElementById('doorLogBody');
   const doorLogError = document.getElementById('doorLogError');
+  const doorLogSearch = document.getElementById('doorLogSearch');
+  const doorLogCount = document.getElementById('doorLogCount');
+  let doorLogLines = [];
 
   function setLogSubtab(which) {
     const btns = logSubtabsEl ? logSubtabsEl.querySelectorAll('button[data-logtab]') : [];
@@ -1985,26 +1986,14 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     });
   }
 
-  async function loadDoorLog() {
-    if (!doorLogBody) return;
-
-    if (doorLogError) doorLogError.style.display = 'none';
-    doorLogBody.innerHTML = '<tr><td class="text-muted">Laster dør-logg…</td></tr>';
-
-    try {
-      const res = await fetch('/api/admin/logs');
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-
-      const data = await res.json();
-      const lines = (data && Array.isArray(data.lines)) ? data.lines : [];
-
-      if (!lines.length) {
-        doorLogBody.innerHTML = '<tr><td class="text-muted">Ingen logglinjer funnet.</td></tr>';
+  function renderDoorLog() {
+      const query = doorLogSearch.value.trim().toLowerCase();
+      const show = [...doorLogLines].reverse().filter(line => String(line).toLowerCase().includes(query));
+      doorLogCount.textContent = `${show.length} av ${doorLogLines.length} linjer vises.`;
+      if (!show.length) {
+        doorLogBody.innerHTML = `<tr><td class="text-muted">${doorLogLines.length ? 'Ingen linjer passer søket.' : 'Ingen logglinjer funnet.'}</td></tr>`;
         return;
       }
-
-      const show = [...lines].reverse();
-
       doorLogBody.innerHTML = '';
       show.forEach((line) => {
         const tr = document.createElement('tr');
@@ -2013,6 +2002,18 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
                      font-size: 0.78rem; white-space: pre-wrap;">${escapeHtml(line)}</td>`;
         doorLogBody.appendChild(tr);
       });
+  }
+
+  async function loadDoorLog() {
+    if (!doorLogBody) return;
+    if (doorLogError) doorLogError.style.display = 'none';
+    doorLogBody.innerHTML = '<tr><td class="text-muted">Laster dør-logg…</td></tr>';
+    try {
+      const res = await fetch('/api/admin/logs');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      doorLogLines = data && Array.isArray(data.lines) ? data.lines : [];
+      renderDoorLog();
     } catch (e) {
       console.error('Feil ved henting av access.log:', e);
       doorLogBody.innerHTML = '<tr><td class="text-muted">Kunne ikke laste dør-logg.</td></tr>';
@@ -2024,6 +2025,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
 
   if (btnRefreshDoorLog) btnRefreshDoorLog.addEventListener('click', loadDoorLog);
+  doorLogSearch.addEventListener('input', renderDoorLog);
+  orderSearch.addEventListener('input', renderOrders);
 
 
   // ------- Verktøy -------
@@ -2047,33 +2050,88 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     }
   }
 
-  async function runNifImport() {
+  let nifPreviewToken = null;
+  let nifPreviewCsv = null;
+  let nifPreviewResult = null;
+
+  function clearNifPreview() {
+    nifPreviewToken = null;
+    nifPreviewCsv = null;
+    nifPreviewResult = null;
+    btnNifImport.disabled = true;
+    nifPreviewSummary.textContent = '';
+  }
+
+  function nifErrorMessage(error) {
+    return {
+      invalid_nif_csv: 'Filen har ingen gyldige aktive medlemsrader. Ingen endringer er gjort.',
+      no_nif_matches: 'Ingen aktive rader kunne kobles til en Lalm IL-plan. Ingen endringer er gjort.',
+      nif_preview_required: 'Medlemsdataene eller filen er endret. Forhåndsvis på nytt.',
+    }[error] || error;
+  }
+
+  async function previewNifImport() {
     const csv = nifTextarea.value.trim();
     if (!csv) {
       nifMsg.textContent = 'Lim inn CSV-data fra NIF først.';
       nifMsg.className = 'mt-1 small tag-danger';
       return;
     }
-    nifMsg.textContent = 'Importer NIF-data...';
+    clearNifPreview();
+    nifMsg.textContent = 'Kontrollerer NIF-data...';
     nifMsg.className = 'mt-1 small text-muted';
-    btnNifImport.disabled = true;
+    btnNifPreview.disabled = true;
     try {
-      const res = await fetch('/api/admin/nif-import', {
+      const res = await fetch('/api/admin/nif-import/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ csv })
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
-      nifMsg.textContent = `Importert. Matchet: ${data.matched}, ikke matchet: ${data.unmatched}.`;
+      if (!res.ok || !data.ok) throw new Error(nifErrorMessage(data.error || ('HTTP ' + res.status)));
+      if (nifTextarea.value.trim() !== csv) return;
+      nifPreviewToken = data.previewToken;
+      nifPreviewCsv = csv;
+      nifPreviewResult = data;
+      nifPreviewSummary.textContent = `Forhåndsvisning: ${data.matched} matchet, ${data.added} får NIF-markering, ${data.removed} mister markering, ${data.unmatched} uten treff, ${data.ambiguous} tvetydige.`;
+      btnNifImport.disabled = false;
+      nifMsg.textContent = 'Kontroller tallene før du bekrefter.';
+      nifMsg.className = 'mt-1 small tag-success';
+    } catch (e) {
+      nifMsg.textContent = 'Forhåndsvisning feilet: ' + e.message;
+      nifMsg.className = 'mt-1 small tag-danger';
+    } finally {
+      btnNifPreview.disabled = false;
+    }
+  }
+
+  async function runNifImport() {
+    const csv = nifTextarea.value.trim();
+    if (!nifPreviewToken || csv !== nifPreviewCsv) {
+      clearNifPreview();
+      nifMsg.textContent = 'Forhåndsvis filen før import.';
+      nifMsg.className = 'mt-1 small tag-danger';
+      return;
+    }
+    if (!confirm(`Bekrefte NIF-import? ${nifPreviewResult.added} får markering og ${nifPreviewResult.removed} mister markering. Fakturering og plan endres ikke.`)) return;
+    btnNifImport.disabled = true;
+    nifMsg.textContent = 'Importerer NIF-data...';
+    nifMsg.className = 'mt-1 small text-muted';
+    try {
+      const res = await fetch('/api/admin/nif-import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csv, previewToken: nifPreviewToken }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(nifErrorMessage(data.error || ('HTTP ' + res.status)));
+      clearNifPreview();
+      nifMsg.textContent = `Importert: ${data.added} fikk NIF-markering, ${data.removed} mistet markering.`;
       nifMsg.className = 'mt-1 small tag-success';
       await loadMembers();
     } catch (e) {
-      console.error('NIF-import error:', e);
-      nifMsg.textContent = 'Feil ved NIF-import: ' + e.message;
+      clearNifPreview();
+      nifMsg.textContent = 'Importen ble ikke lagret: ' + e.message;
       nifMsg.className = 'mt-1 small tag-danger';
-    } finally {
-      btnNifImport.disabled = false;
     }
   }
 
@@ -2724,20 +2782,15 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   function updateSmsModeUi() {
     const mode = getSmsMode();
-
-    // segment wrapper
     if (smsSegmentWrapperEl) {
-      const on = (mode === 'segment');
-      smsSegmentWrapperEl.style.opacity = on ? '1' : '0.4';
-      smsSegmentWrapperEl.style.pointerEvents = on ? 'auto' : 'none';
+      smsSegmentWrapperEl.style.display = mode === 'segment' ? 'block' : 'none';
     }
-
-    // plans wrapper
     if (smsPlansWrapperEl) {
-      smsPlansWrapperEl.style.display = (mode === 'plans') ? 'block' : 'none';
+      smsPlansWrapperEl.style.display = mode === 'plans' ? 'block' : 'none';
     }
-
-    // reset preview when mode changes
+    if (smsMembersWrapperEl) {
+      smsMembersWrapperEl.style.display = mode === 'selected' ? 'block' : 'none';
+    }
     invalidateSmsPreview();
   }
 
@@ -2766,18 +2819,20 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       const statusLabel = m.active ? 'Aktiv' : 'Inaktiv';
 
       const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td style="padding:4px; border-bottom:1px solid #e5e7eb; text-align:center;">
-          <input
-            type="checkbox"
-            class="smsMemberCheckbox"
-            data-phone="${phone}"
-          />
-        </td>
-        <td style="padding:4px; border-bottom:1px solid #e5e7eb;">${name}</td>
-        <td style="padding:4px; border-bottom:1px solid #e5e7eb;">${phone}</td>
-        <td style="padding:4px; border-bottom:1px solid #e5e7eb;">${statusLabel}</td>
-      `;
+      const cell = (value) => {
+        const td = document.createElement('td');
+        td.style.cssText = 'padding:4px; border-bottom:1px solid #e5e7eb;';
+        td.textContent = value;
+        return td;
+      };
+      const selectCell = cell('');
+      selectCell.style.textAlign = 'center';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'smsMemberCheckbox';
+      checkbox.dataset.phone = phone;
+      selectCell.appendChild(checkbox);
+      tr.append(selectCell, cell(name), cell(phone), cell(statusLabel));
       smsMembersBodyEl.appendChild(tr);
     });
 
@@ -2865,6 +2920,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   searchInput.addEventListener('input', () => renderMembers());
   filterPlan.addEventListener('change', () => renderMembers());
   filterMembershipDates.addEventListener('change', () => renderMembers());
+  filterTripletexFollowUp.addEventListener('change', () => renderMembers());
 
     membersTableBody.addEventListener('click', (e) => {
     const row = e.target.closest('tr');
@@ -2888,14 +2944,15 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
   if (modalToggleActiveBtn) {
     modalToggleActiveBtn.addEventListener('click', async () => {
-      if (!selectedMember || !selectedMember.email) return;
+      if (!selectedMember?.id) return;
+      const action = selectedMember.active ? 'deaktivere' : 'aktivere';
+      if (!confirm(`Vil du ${action} tilgangen for dette medlemmet? Faktureringen i Tripletex fortsetter uendret.`)) return;
       modalMemberMsg.textContent = 'Oppdaterer status...';
       modalMemberMsg.className = 'mt-1 small text-muted';
       try {
-        await toggleMemberActive(selectedMember.email);
+        await toggleMemberActive(selectedMember.id);
         modalMemberMsg.textContent = 'Status oppdatert.';
         modalMemberMsg.className = 'mt-1 small tag-success';
-        await loadMembers();
         closeMemberModal();
       } catch (e) {
         modalMemberMsg.textContent = 'Feil: ' + e.message;
@@ -2903,6 +2960,22 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       }
     });
   }
+  modalResolveTripletexBtn.addEventListener('click', async () => {
+    if (!selectedMember?.id || !confirm('Marker som kontrollert først etter at planen er gjennomgått i Tripletex. Fortsette?')) return;
+    modalResolveTripletexBtn.disabled = true;
+    try {
+      const res = await fetch(`/admin/members/${encodeURIComponent(selectedMember.id)}/tripletex-follow-up/resolve`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      await loadMembers();
+      openMemberModal(selectedMember);
+    } catch (e) {
+      modalMemberMsg.textContent = 'Kunne ikke markere som kontrollert: ' + e.message;
+      modalMemberMsg.className = 'mt-1 small tag-danger';
+    } finally {
+      modalResolveTripletexBtn.disabled = false;
+    }
+  });
   if (modalSaveDetailsBtn) {
     modalSaveDetailsBtn.addEventListener('click', async () => {
       if (!selectedMember?.id) {
@@ -2963,14 +3036,14 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
   if (modalDeleteBtn) {
     modalDeleteBtn.addEventListener('click', async () => {
-      if (!selectedMember || !selectedMember.email) return;
+      if (!selectedMember?.id) return;
       if (!confirm('Slette medlemmet "' + (selectedMember.name || selectedMember.email) + '"? Dette kan ikke angres.')) {
         return;
       }
       modalMemberMsg.textContent = 'Sletter medlem...';
       modalMemberMsg.className = 'mt-1 small text-muted';
       try {
-        await deleteMemberByEmail(selectedMember.email);
+        await deleteMemberById(selectedMember.id);
         modalMemberMsg.textContent = 'Medlem slettet.';
         modalMemberMsg.className = 'mt-1 small tag-success';
         await loadMembers();
@@ -2988,8 +3061,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   if (btnToggleActiveMember) {
     btnToggleActiveMember.addEventListener('click', () => {
-      if (selectedMember && selectedMember.email) {
-        toggleMemberActive(selectedMember.email);
+      if (selectedMember?.id) {
+        toggleMemberActive(selectedMember.id);
       }
     });
   }
@@ -3005,9 +3078,12 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     loadOrders();
   });
 
+  btnNifPreview.addEventListener('click', previewNifImport);
   btnNifImport.addEventListener('click', runNifImport);
+  nifTextarea.addEventListener('input', clearNifPreview);
   btnClearNif.addEventListener('click', () => {
     nifTextarea.value = '';
+    clearNifPreview();
     nifMsg.textContent = '';
   });
 
