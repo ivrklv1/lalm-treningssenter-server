@@ -25,12 +25,14 @@ const {
   syncMembershipToTripletex,
   approveSubscriptionInvoice,
   stopTripletexSubscriptionForOrder,
+  listMembershipInvoices,
 } = require('./tripletexClient');
 const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
 const { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus } = require('./membershipDates');
 const { confirmedRefund } = require('./refundReview');
 const { prepareAdminMemberEdit } = require('./memberAdminEdit');
 const { createVisitStats } = require('./visitStats');
+const { memberBillingStatuses } = require('./billingStatus');
 
 
 const app = express();
@@ -1059,6 +1061,19 @@ app.post('/membership/signup', (req, res) => {
 app.get('/admin/members', basicAuth, (req, res) => {
   const members = getMembers();
   res.json(members);
+});
+
+// Lesende kontroll. Betalingsstatus påvirker ikke medlemskap eller adgang i denne fasen.
+app.get('/admin/billing-status', basicAuth, async (req, res) => {
+  try {
+    const fromDate = process.env.BILLING_STATUS_FROM || '2024-01-01';
+    const invoices = await listMembershipInvoices(fromDate);
+    const statuses = memberBillingStatuses(getMembers(), getOrders(), invoices);
+    return res.json({ checkedAt: new Date().toISOString(), fromDate, statuses });
+  } catch (error) {
+    console.error('[BILLING_STATUS_ERROR]', error.message);
+    return res.status(502).json({ error: 'Kunne ikke hente betalingsstatus fra Tripletex' });
+  }
 });
 
 // Sett medlem inaktiv (pause) + stopp abonnement i Tripletex
