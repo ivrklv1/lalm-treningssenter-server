@@ -17,7 +17,7 @@ function sandboxEnv(dataDir) {
     VIPPS_CLIENT_ID: 'synthetic', VIPPS_CLIENT_SECRET: 'synthetic',
     VIPPS_SUBSCRIPTION_KEY: 'synthetic', VIPPS_SANDBOX_ACCESS_TOKEN: token,
     SERVER_URL: serverUrl,
-    VIPPS_CALLBACK_URL: `${serverUrl}/vipps/callback/v2/payments`,
+    VIPPS_CALLBACK_URL: `${serverUrl}/vipps/callback`,
     DATA_DIR: dataDir,
   };
 }
@@ -25,6 +25,8 @@ function sandboxEnv(dataDir) {
 test('sandbox refuses live Vipps, production integrations and shared storage', () => {
   const env = sandboxEnv('/tmp/lalm-vipps-sandbox-unit');
   assert.doesNotThrow(() => validateVippsSandbox(env));
+  assert.equal(new URL(`${env.VIPPS_CALLBACK_URL}/v2/payments/synthetic-order`).pathname,
+    '/vipps/callback/v2/payments/synthetic-order');
   assert.throws(() => validateVippsSandbox({ ...env, VIPPS_ENV: 'production' }), /VIPPS_ENV=test/);
   assert.throws(() => validateVippsSandbox({ ...env, VIPPS_MSN: '411836' }), /VIPPS_MSN=411837/);
   assert.throws(() => validateVippsSandbox({ ...env, TELL_API_KEY: 'synthetic' }), /TELL_API_KEY/);
@@ -79,6 +81,10 @@ test('sandbox exposes only protected Vipps test routes; reservation is unpaid', 
       assert.equal(response.status, 404, `${method} ${route}`);
     }
     const statusUrl = `${base}/vipps/order-status/synthetic-reserve`;
+    const callback = await fetch(`${base}/vipps/callback/v2/payments/unknown-synthetic-order`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+    });
+    assert.equal(callback.status, 200);
     assert.equal((await fetch(statusUrl)).status, 403);
     const authUrl = `${base}/vipps/sandbox-auth-check`;
     assert.equal((await fetch(authUrl)).status, 403);

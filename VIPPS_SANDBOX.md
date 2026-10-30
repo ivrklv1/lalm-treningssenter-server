@@ -19,7 +19,7 @@ Denne grenen er bare for den **separate** Render-webtjenesten [lalm-vipps-sandbo
 | `VIPPS_MSN` | `411837` |
 | `DATA_DIR` | `/tmp/lalm-vipps-sandbox` |
 | `SERVER_URL` | Den nye tjenestens HTTPS-URL, uten avsluttende `/` |
-| `VIPPS_CALLBACK_URL` | `SERVER_URL` + `/vipps/callback/v2/payments` |
+| `VIPPS_CALLBACK_URL` | `SERVER_URL` + `/vipps/callback` (Vipps legger selv til `/v2/payments/{orderId}`) |
 | `VIPPS_CLIENT_ID` | Vipps **test**-verdi, legg direkte i Render |
 | `VIPPS_CLIENT_SECRET` | Vipps **test**-verdi, legg direkte i Render |
 | `VIPPS_SUBSCRIPTION_KEY` | Vipps **test**-verdi, legg direkte i Render |

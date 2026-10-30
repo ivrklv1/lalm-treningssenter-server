@@ -37,7 +37,7 @@ function validateVippsSandbox(env) {
       /lalm-treningssenter-server(?:-legal-test|-1)?\.onrender\.com/i.test(serverUrl)) {
     throw new Error('Vipps sandbox krever egen HTTPS-adresse');
   }
-  if (env.VIPPS_CALLBACK_URL !== `${serverUrl}/vipps/callback/v2/payments`) {
+  if (env.VIPPS_CALLBACK_URL !== `${serverUrl}/vipps/callback`) {
     throw new Error('Vipps sandbox callback må peke til egen tjeneste');
   }
 }
