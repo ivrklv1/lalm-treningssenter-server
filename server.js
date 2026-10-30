@@ -29,6 +29,7 @@ const {
 const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
 const { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus } = require('./membershipDates');
 const { confirmedRefund } = require('./refundReview');
+const { prepareAdminMemberEdit } = require('./memberAdminEdit');
 const { createVisitStats } = require('./visitStats');
 
 
@@ -296,8 +297,10 @@ function saveMembers(members) {
       JSON.stringify(members, null, 2),
       'utf-8',
     );
+    return true;
   } catch (e) {
     console.error('Kunne ikke skrive members.json til', MEMBERS_FILE, e.message);
+    return false;
   }
 }
 
@@ -1480,6 +1483,23 @@ app.delete('/admin/plans/:id', basicAuth, (req, res) => {
 // -----------------------------------------------------
 // Admin: oppdatere / slette medlem via id (nytt admin-UI)
 // -----------------------------------------------------
+
+app.patch('/admin/members/:id/details', basicAuth, (req, res) => {
+  const members = getMembers();
+  const index = members.findIndex(item => String(item.id) === String(req.params.id));
+  if (index < 0) return res.status(404).json({ error: 'Medlemmet finnes ikke' });
+  try {
+    const { member, changedFields } = prepareAdminMemberEdit(
+      members[index], req.body, members, getPlans() || [], req.adminUser, new Date().toISOString()
+    );
+    if (!changedFields.length) return res.json({ ok: true, member, changedFields });
+    members[index] = member;
+    if (!saveMembers(members)) return res.status(500).json({ error: 'Kunne ikke lagre medlemsendringen' });
+    return res.json({ ok: true, member, changedFields });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+});
 
 // Oppdatér medlem (navn, e-post, telefon, plan, aktiv m.m.)
 app.put('/admin/members/:id', basicAuth, (req, res) => {

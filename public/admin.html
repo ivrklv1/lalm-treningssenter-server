@@ -504,6 +504,8 @@
       width: 100%;
       padding: 18px 20px 16px 20px;
       box-shadow: 0 24px 60px rgba(15, 23, 42, 0.5);
+      max-height: 90vh;
+      overflow-y: auto;
     }
 
     .modal-header {
@@ -601,7 +603,17 @@
                   <option value="TEST_1KR">TEST – 1 kr</option>
                 </select>
               </div>
+              <div>
+                <label for="filterMembershipDates">Filter: medlemskapsdatoer</label>
+                <select id="filterMembershipDates">
+                  <option value="">Alle</option>
+                  <option value="missing">Aktive ordinære uten dato</option>
+                  <option value="review">Ufullstendige datoer</option>
+                  <option value="recorded">Registrert startdato</option>
+                </select>
+              </div>
             </div>
+            <div class="small text-muted mt-1">Aktive ordinære medlemmer uten startdato: <strong id="missingMembershipDatesCount">0</strong>. Datoer fylles ikke inn her.</div>
             <div class="btn-row" style="justify-content:flex-start;">
               <button id="btnReloadMembers" class="btn-secondary">⟳ Oppdater liste</button>
             </div>
@@ -636,11 +648,12 @@
                    <th>Plan</th>
                    <th>Lalm IL-medlem</th>
                    <th>Status</th>
+                   <th>Medlemskapsdatoer</th>
                  </tr>
                  </thead>
                  <tbody id="membersTableBody">
                  <tr>
-                   <td colspan="4" class="text-muted">Laster medlemmer...</td>
+                   <td colspan="5" class="text-muted">Laster medlemmer...</td>
                 </tr>
                 </tbody>
               </table>
@@ -1054,17 +1067,43 @@
          <button class="modal-close-btn" id="modalCloseBtn" aria-label="Lukk">&times;</button>
        </div>
        <div class="modal-body">
-         <div class="small">
-           <div><strong>Telefon:</strong> <span id="modalMemberPhone"></span></div>
-           <div class="mt-1"><strong>Plan:</strong></div>
-           <select id="modalMemberPlanSelect" class="mt-1"></select>
-           <div class="mt-1"><strong>Lalm IL-medlem:</strong> <span id="modalMemberIl"></span></div>
-           <div class="mt-1"><strong>Status:</strong> <span id="modalMemberStatus"></span></div>
+         <div class="small text-muted">Medlems-ID: <span id="modalMemberId"></span> · Status: <span id="modalMemberStatus"></span></div>
+         <label for="modalEditName" class="mt-2">Navn</label>
+         <input id="modalEditName" type="text" maxlength="120" autocomplete="name" />
+         <label for="modalEditEmail" class="mt-2">E-post</label>
+         <input id="modalEditEmail" type="email" maxlength="254" autocomplete="email" />
+         <label for="modalEditPhone" class="mt-2">Telefon</label>
+         <input id="modalEditPhone" type="tel" autocomplete="tel" />
+         <label for="modalMemberPlanSelect" class="mt-2">Medlemsplan</label>
+         <select id="modalMemberPlanSelect"></select>
+         <label for="modalEditClubMember" class="mt-2">Lalm IL-medlem</label>
+         <select id="modalEditClubMember"><option value="false">Nei</option><option value="true">Ja</option></select>
+         <label for="modalEditAddress" class="mt-2">Adresse</label>
+         <input id="modalEditAddress" type="text" maxlength="200" autocomplete="street-address" />
+         <div class="input-grid mt-2">
+           <div><label for="modalEditZip">Postnummer</label><input id="modalEditZip" type="text" inputmode="numeric" maxlength="4" autocomplete="postal-code" /></div>
+           <div><label for="modalEditCity">Sted</label><input id="modalEditCity" type="text" maxlength="100" autocomplete="address-level2" /></div>
          </div>
+         <label for="modalEditNotes" class="mt-2">Interne notater</label>
+         <textarea id="modalEditNotes" maxlength="1000"></textarea>
+         <div class="right-column-section">
+           <strong>Medlemskapsdatoer</strong>
+           <div class="small text-muted mt-1">Vipps-bekreftede datoer er låst. For eldre avtaler: kontroller Vipps og vilkår før du legger inn datoer.</div>
+           <div class="small mt-1">Kilde: <span id="modalDateSource"></span> · Ordre-ID: <span id="modalMembershipStartOrderId"></span></div>
+           <label for="modalEditStartDate" class="mt-2">Startdato</label>
+           <input id="modalEditStartDate" type="date" />
+           <label for="modalEditBindingMonths" class="mt-2">Bindingstid</label>
+           <select id="modalEditBindingMonths"><option value="">Ikke registrert</option><option value="0">Uten binding</option><option value="12">12 måneder</option></select>
+           <div class="small mt-1">Registrert bindeslutt: <span id="modalBindingEndDate"></span></div>
+           <label for="modalEditDateReason" class="mt-2">Begrunnelse for datoendring</label>
+           <textarea id="modalEditDateReason" maxlength="500" placeholder="Hvilken Vipps-ordre eller avtale ble kontrollert?"></textarea>
+         </div>
+         <div class="small text-muted mt-2">Endringer i plan og kontaktinfo oppdaterer ikke fakturering i Tripletex. Aktiv status styres separat.</div>
+         <div class="small text-muted mt-2">Siste adminendring: <span id="modalLastAdminEdit">Ingen registrert</span></div>
        </div>
        <div class="btn-row mt-3">
          <button id="modalToggleActiveBtn" class="btn-secondary">Pause / aktiver</button>
-         <button id="modalSavePlanBtn" class="btn-primary">Lagre plan</button>
+         <button id="modalSaveDetailsBtn" class="btn-primary">Lagre opplysninger</button>
          <button id="modalDeleteBtn" class="btn-secondary" style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;">🗑 Slett</button>
        </div>
        <div id="modalMemberMsg" class="mt-1 small"></div>
@@ -1093,6 +1132,8 @@
   const statsTotalCount = document.getElementById('statsTotalCount');
   const searchInput = document.getElementById('searchInput');
   const filterPlan = document.getElementById('filterPlan');
+  const filterMembershipDates = document.getElementById('filterMembershipDates');
+  const missingMembershipDatesCount = document.getElementById('missingMembershipDatesCount');
   const btnReloadMembers = document.getElementById('btnReloadMembers');
   const newName = document.getElementById('newName');
   const newEmail = document.getElementById('newEmail');
@@ -1103,12 +1144,26 @@
   const memberModal = document.getElementById('memberModal');
   const modalMemberName = document.getElementById('modalMemberName');
   const modalMemberEmail = document.getElementById('modalMemberEmail');
-  const modalMemberPhone = document.getElementById('modalMemberPhone');
+  const modalMemberId = document.getElementById('modalMemberId');
+  const modalEditName = document.getElementById('modalEditName');
+  const modalEditEmail = document.getElementById('modalEditEmail');
+  const modalEditPhone = document.getElementById('modalEditPhone');
+  const modalEditClubMember = document.getElementById('modalEditClubMember');
+  const modalEditAddress = document.getElementById('modalEditAddress');
+  const modalEditZip = document.getElementById('modalEditZip');
+  const modalEditCity = document.getElementById('modalEditCity');
+  const modalEditNotes = document.getElementById('modalEditNotes');
+  const modalEditStartDate = document.getElementById('modalEditStartDate');
+  const modalEditBindingMonths = document.getElementById('modalEditBindingMonths');
+  const modalEditDateReason = document.getElementById('modalEditDateReason');
+  const modalDateSource = document.getElementById('modalDateSource');
+  const modalLastAdminEdit = document.getElementById('modalLastAdminEdit');
   const modalMemberPlanSelect = document.getElementById('modalMemberPlanSelect');
-  const modalMemberIl = document.getElementById('modalMemberIl');
   const modalMemberStatus = document.getElementById('modalMemberStatus');
+  const modalBindingEndDate = document.getElementById('modalBindingEndDate');
+  const modalMembershipStartOrderId = document.getElementById('modalMembershipStartOrderId');
   const modalToggleActiveBtn = document.getElementById('modalToggleActiveBtn');
-  const modalSavePlanBtn = document.getElementById('modalSavePlanBtn');
+  const modalSaveDetailsBtn = document.getElementById('modalSaveDetailsBtn');
   const modalDeleteBtn = document.getElementById('modalDeleteBtn');
   const modalCloseBtn = document.getElementById('modalCloseBtn');
   const modalMemberMsg = document.getElementById('modalMemberMsg');
@@ -1355,12 +1410,51 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   // ------- Medlemmer -------
 
+  function formatMembershipDate(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))
+      ? `${value.slice(8, 10)}.${value.slice(5, 7)}.${value.slice(0, 4)}` : 'Ikke registrert';
+  }
+
+  function isOrdinaryMember(member) {
+    const key = String(member.plan || '').toLowerCase();
+    const plan = (allPlans || []).find(p => planKeyOf(p).toLowerCase() === key);
+    return !member.validUntil && !['dropin', 'drop-in', 'drop_in'].includes(key) &&
+      !key.startsWith('korttid') && plan?.type !== 'short_term' && plan?.type !== 'dropin' &&
+      !(Number(plan?.shortTermDays) > 0);
+  }
+
+  function membershipDateState(member) {
+    if (!isOrdinaryMember(member)) return 'short';
+    if (!member.membershipStartDate) return 'missing';
+    const months = Number(member.bindingMonthsAtStart);
+    if (member.bindingMonthsAtStart == null || !Number.isSafeInteger(months) || months < 0 ||
+        (months > 0 && !member.bindingEndDate) || (months === 0 && member.bindingEndDate)) return 'review';
+    return 'recorded';
+  }
+
+  function membershipDateLabel(member) {
+    const state = membershipDateState(member);
+    if (state === 'short') return 'Korttid/drop-in';
+    if (state === 'missing') return 'Mangler startdato';
+    if (state === 'review') return 'Datoer må kontrolleres';
+    return member.bindingEndDate
+      ? `Start: ${formatMembershipDate(member.membershipStartDate)} · Bundet til: ${formatMembershipDate(member.bindingEndDate)}`
+      : `Start: ${formatMembershipDate(member.membershipStartDate)} · Uten binding`;
+  }
+
   function renderMembers() {
     const q = (searchInput.value || '').toLowerCase();
     const planFilter = filterPlan.value || '';
+    const dateFilter = filterMembershipDates.value || '';
+
+    missingMembershipDatesCount.textContent = allMembers.filter(m => m.active && membershipDateState(m) === 'missing').length;
 
     const filtered = allMembers.filter(m => {
       if (planFilter && (m.plan || '') !== planFilter) return false;
+      const dateState = membershipDateState(m);
+      if (dateFilter === 'missing' && !(m.active && dateState === 'missing')) return false;
+      if (dateFilter === 'review' && dateState !== 'review') return false;
+      if (dateFilter === 'recorded' && dateState !== 'recorded') return false;
       if (!q) return true;
       const name = (m.name || '').toLowerCase();
       const email = (m.email || '').toLowerCase();
@@ -1373,7 +1467,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     statsActiveCount.textContent = filtered.filter(m => m.active).length;
 
     if (!filtered.length) {
-      membersTableBody.innerHTML = '<tr><td colspan="4" class="text-muted">Ingen medlemmer funnet.</td></tr>';
+      membersTableBody.innerHTML = '<tr><td colspan="5" class="text-muted">Ingen medlemmer funnet.</td></tr>';
     } else {
       membersTableBody.innerHTML = '';
       filtered.forEach(m => {
@@ -1384,19 +1478,22 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         const statusClass = m.active ? 'status-text-active' : 'status-text-inactive';
 
         // brukes av modalen
+        tr.dataset.id = m.id || '';
         tr.dataset.email = m.email || '';
         tr.dataset.name = m.name || '';
         tr.dataset.plan = m.plan || '';
         tr.dataset.active = m.active ? '1' : '0';
 
         tr.innerHTML = `
-          <td>${m.name || '–'}</td>
-          <td>${m.plan || '–'}</td>
+          <td>${escapeHtml(m.name || '–')}</td>
+          <td>${escapeHtml(m.plan || '–')}</td>
           <td>${ilText}</td>
           <td class="status">
             <span class="status-text ${statusClass}">${statusLabel}</span>
           </td>
         `;
+        const dateCell = tr.insertCell();
+        dateCell.textContent = membershipDateLabel(m);
         membersTableBody.appendChild(tr);
       });
     }
@@ -1425,6 +1522,13 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       if (opt.value === (currentPlan || '')) opt.selected = true;
       modalMemberPlanSelect.appendChild(opt);
     }
+    if (currentPlan && !list.some(p => planKeyOf(p) === currentPlan)) {
+      const current = document.createElement('option');
+      current.value = currentPlan;
+      current.textContent = `${currentPlan} (gjeldende)`;
+      current.selected = true;
+      modalMemberPlanSelect.appendChild(current);
+    }
   }
 
   function openMemberModal(member) {
@@ -1433,15 +1537,37 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
     modalMemberName.textContent = member.name || 'Uten navn';
     modalMemberEmail.textContent = member.email || 'Ingen e-post';
-    modalMemberPhone.textContent = member.phone || 'Ingen telefon';
+    modalMemberId.textContent = member.id || 'Ikke registrert';
+    modalEditName.value = member.name || '';
+    modalEditEmail.value = member.email || '';
+    modalEditPhone.value = member.phone || member.phoneFull || member.mobile || '';
+    modalEditClubMember.value = member.clubMember ? 'true' : 'false';
+    modalEditAddress.value = member.address || '';
+    modalEditZip.value = member.zip || '';
+    modalEditCity.value = member.city || '';
+    modalEditNotes.value = member.notes || '';
 
     fillModalPlanOptions(member.plan || '');
-    modalMemberIl.textContent = member.clubMember ? 'Ja' : 'Nei';
 
     const statusLabel = member.active ? 'Aktiv' : 'Inaktiv';
     const statusClass = member.active ? 'status-text-active' : 'status-text-inactive';
     modalMemberStatus.textContent = statusLabel;
     modalMemberStatus.className = 'status-text ' + statusClass;
+    modalEditStartDate.value = member.membershipStartDate || '';
+    modalEditBindingMonths.value = member.bindingMonthsAtStart == null ? '' : String(member.bindingMonthsAtStart);
+    modalEditStartDate.disabled = Boolean(member.membershipStartOrderId);
+    modalEditBindingMonths.disabled = Boolean(member.membershipStartOrderId);
+    modalEditDateReason.disabled = Boolean(member.membershipStartOrderId);
+    modalEditDateReason.value = '';
+    modalDateSource.textContent = member.membershipStartOrderId ? 'Vipps-ordre' :
+      member.membershipDatesManualReview ? 'Manuell kontroll' : 'Ikke registrert';
+    const lastEdit = Array.isArray(member.adminEditHistory) ? member.adminEditHistory.at(-1) : null;
+    modalLastAdminEdit.textContent = lastEdit
+      ? `${fmtDate(lastEdit.editedAt)} av ${lastEdit.editedBy} (${lastEdit.fields.join(', ')})`
+      : 'Ingen registrert';
+    modalBindingEndDate.textContent = member.bindingMonthsAtStart === 0 && member.membershipStartDate
+      ? 'Ingen binding' : formatMembershipDate(member.bindingEndDate);
+    modalMembershipStartOrderId.textContent = member.membershipStartOrderId || 'Ikke registrert';
 
     modalMemberMsg.textContent = '';
     modalToggleActiveBtn.textContent = member.active
@@ -1491,14 +1617,12 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       const data = await res.json();
       allMembers = Array.isArray(data) ? data : [];
 
-      if (selectedMember && selectedMember.email) {
+      if (selectedMember && selectedMember.id) {
         const updated = allMembers.find(
-          (m) => (m.email || '') === selectedMember.email
+          (m) => m.id === selectedMember.id
         );
         if (updated) {
-          selectedMember.name = updated.name || selectedMember.name;
-          selectedMember.plan = updated.plan || selectedMember.plan;
-          selectedMember.active = !!updated.active;
+          selectedMember = updated;
         } else {
           selectedMember = null;
         }
@@ -1509,7 +1633,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     } catch (e) {
       console.error('Feil ved henting av medlemmer:', e);
       membersTableBody.innerHTML =
-        '<tr><td colspan="4" class="text-muted">Kunne ikke laste medlemmer.</td></tr>';
+        '<tr><td colspan="5" class="text-muted">Kunne ikke laste medlemmer.</td></tr>';
       membersErrorEl.textContent = 'Feil ved henting av medlemmer: ' + e.message;
       membersErrorEl.style.display = 'block';
       setServerStatus(false, 'Feil');
@@ -2740,12 +2864,12 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   searchInput.addEventListener('input', () => renderMembers());
   filterPlan.addEventListener('change', () => renderMembers());
+  filterMembershipDates.addEventListener('change', () => renderMembers());
 
     membersTableBody.addEventListener('click', (e) => {
     const row = e.target.closest('tr');
-    if (!row || !row.dataset || !row.dataset.email) return;
-    const email = row.dataset.email;
-    const member = allMembers.find(m => (m.email || '') === email);
+    if (!row || !row.dataset || !row.dataset.id) return;
+    const member = allMembers.find(m => String(m.id) === row.dataset.id);
     if (member) {
       openMemberModal(member);
     }
@@ -2779,26 +2903,61 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       }
     });
   }
-  if (modalSavePlanBtn) {
-    modalSavePlanBtn.addEventListener('click', async () => {
-      if (!selectedMember || !selectedMember.email) return;
-      const newPlanValue = modalMemberPlanSelect && modalMemberPlanSelect.value;
-      if (!newPlanValue) {
-        modalMemberMsg.textContent = 'Velg en plan først.';
+  if (modalSaveDetailsBtn) {
+    modalSaveDetailsBtn.addEventListener('click', async () => {
+      if (!selectedMember?.id) {
+        modalMemberMsg.textContent = 'Medlemmet mangler ID og kan ikke redigeres her.';
         modalMemberMsg.className = 'mt-1 small tag-danger';
         return;
       }
-      modalMemberMsg.textContent = 'Lagrer plan...';
+      const start = modalEditStartDate.value;
+      const months = modalEditBindingMonths.value === '' ? null : Number(modalEditBindingMonths.value);
+      const datesChanged = !selectedMember.membershipStartOrderId &&
+        (start !== (selectedMember.membershipStartDate || '') || months !== (selectedMember.bindingMonthsAtStart ?? null));
+      const changes = {
+        name: modalEditName.value, clubMember: modalEditClubMember.value === 'true',
+        address: modalEditAddress.value, zip: modalEditZip.value, city: modalEditCity.value,
+        notes: modalEditNotes.value,
+      };
+      if (modalEditEmail.value || selectedMember.email) changes.email = modalEditEmail.value;
+      if (modalEditPhone.value || selectedMember.phone || selectedMember.phoneFull || selectedMember.mobile) changes.phone = modalEditPhone.value;
+      if (modalMemberPlanSelect.value || selectedMember.plan) changes.plan = modalMemberPlanSelect.value;
+      if (datesChanged) {
+        changes.membershipStartDate = start;
+        changes.bindingMonthsAtStart = months;
+        changes.reason = modalEditDateReason.value;
+        if (!confirm('Bindingsdatoene vil bli lagret som manuelt kontrollert. Har du sjekket Vipps-ordre og avtalevilkår?')) return;
+      }
+      const sensitiveChanged = String(changes.email || '').trim().toLowerCase() !== String(selectedMember.email || '').toLowerCase() ||
+        String(changes.phone || '').replace(/\s/g, '') !== String(selectedMember.phone || selectedMember.phoneFull || selectedMember.mobile || '').replace(/\s/g, '') ||
+        String(changes.plan || '') !== String(selectedMember.plan || '');
+      if (sensitiveChanged && !confirm('Endring av kontaktinfo eller plan kan påvirke innlogging og medlemsoversikten. Tripletex oppdateres ikke automatisk. Lagre?')) return;
+      modalSaveDetailsBtn.disabled = true;
+      modalMemberMsg.textContent = 'Lagrer opplysninger...';
       modalMemberMsg.className = 'mt-1 small text-muted';
       try {
-        await updateMemberPlan(selectedMember.email, newPlanValue);
-        modalMemberMsg.textContent = 'Plan oppdatert.';
-        modalMemberMsg.className = 'mt-1 small tag-success';
+        const res = await fetch(`/admin/members/${encodeURIComponent(selectedMember.id)}/details`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
         await loadMembers();
         closeMemberModal();
       } catch (e) {
-        modalMemberMsg.textContent = 'Feil: ' + e.message;
+        const messages = {
+          duplicate_email: 'E-postadressen brukes av et annet medlem.',
+          duplicate_phone: 'Telefonnummeret brukes av et annet medlem.',
+          date_reason_required: 'Skriv en begrunnelse på minst 10 tegn for datoendringen.',
+          vipps_verified_dates_locked: 'Vipps-bekreftede datoer kan ikke endres her.',
+          invalid_membership_start: 'Ugyldig startdato.',
+          invalid_binding_months: 'Velg 0 eller 12 måneder binding.',
+          incomplete_membership_dates: 'Startdato og bindingstid må fylles ut sammen.',
+          future_membership_start: 'Startdato kan ikke ligge i fremtiden.',
+        };
+        modalMemberMsg.textContent = 'Feil: ' + (messages[e.message] || e.message);
         modalMemberMsg.className = 'mt-1 small tag-danger';
+      } finally {
+        modalSaveDetailsBtn.disabled = false;
       }
     });
   }
