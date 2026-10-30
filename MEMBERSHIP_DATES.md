@@ -10,4 +10,6 @@ Endringen fyller ikke inn datoer for eksisterende medlemmer. Historiske datoer k
 
 En refusjon som kommer etter at et medlemskap allerede er aktivert, behandles fortsatt av den eksisterende medlemsflyten. Automatisk deaktivering ved refusjon inngår ikke i denne endringen og må vurderes separat.
 
-Lokale tester bruker oppdiktede ordrer og oppdiktede Vipps-svar med utgående nettverk blokkert. De dekker bekreftet betaling, falsk «betalt»-melding, reservasjon og et utilgjengelig Vipps-oppslag. Testserveren sperrer betaling og kan derfor ikke prøve et ekte Vipps-kjøp. Utkastet må gjennomgås før produksjonsutrulling; deretter må den første reelle ordren kontrolleres uten å starte en testbetaling.
+Lokale tester bruker oppdiktede ordrer og oppdiktede Vipps-svar med utgående nettverk blokkert. De dekker bekreftet betaling, falsk «betalt»-melding, reservasjon og et utilgjengelig Vipps-oppslag. I en separat Vipps Merchant Test-tjeneste ble en 1 kr-testordre reservert, fanget og bekreftet. Testmedlemmet fikk betalingsdag 30.10.2026 som medlemsstart og 30.10.2027 som bindeslutt for 12 måneders binding. Testtjenesten hadde egne nøkler og ingen tilgang til SMS, dørstyring, Tripletex eller produksjonens medlemsdata.
+
+Før produksjonsutrulling må refusjon etter aktivering få en uttrykkelig håndteringsregel. Deretter må den første reelle ordren kontrolleres lesende. Eksisterende medlemmers datoer fylles inn separat etter gjennomgang av historiske ordrer og avtalevilkår.
