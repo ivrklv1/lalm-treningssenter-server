@@ -563,6 +563,9 @@
     .door-event-details { margin-top: 5px; color: var(--muted); }
     .door-event-details summary { cursor: pointer; }
     .door-event-details code { display: block; margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    #ordersTableBody td { overflow-wrap: anywhere; }
+    .order-event-details > div { margin-top: 6px; }
+    .order-event-details button { margin: 6px 6px 0 0; }
 
     @media (max-width: 640px) {
       body { padding: 8px; }
@@ -607,6 +610,8 @@
       #plansTableBody td:nth-child(2) { order: -1; font-weight: 600; }
       #doorLogBody td { display: block; overflow-wrap: anywhere; }
       #doorLogBody td::before { content: none; }
+      #ordersTableBody td { display: block; }
+      #ordersTableBody td::before { content: none; }
       #logtab-door .table-wrapper { max-height: 65vh !important; overflow-y: auto; }
 
       #membersTableBody td:nth-child(1)::before { content: "Navn"; }
@@ -627,13 +632,6 @@
       #plansTableBody td:nth-child(11)::before { content: "Sortering"; }
       #plansTableBody td:nth-child(12)::before { content: "Tripletex ID"; }
       #plansTableBody td:nth-child(13)::before { content: "Tekst"; }
-      #ordersTableBody td:nth-child(1)::before { content: "Ordre-ID"; }
-      #ordersTableBody td:nth-child(2)::before { content: "Status"; }
-      #ordersTableBody td:nth-child(3)::before { content: "Plan"; }
-      #ordersTableBody td:nth-child(4)::before { content: "Beløp"; }
-      #ordersTableBody td:nth-child(5)::before { content: "E-post"; }
-      #ordersTableBody td:nth-child(6)::before { content: "Opprettet"; }
-      #ordersTableBody td:nth-child(7)::before { content: "Refusjon"; }
       #smsMembersBody td:nth-child(1)::before { content: "Velg"; }
       #smsMembersBody td:nth-child(2)::before { content: "Navn"; }
       #smsMembersBody td:nth-child(3)::before { content: "Telefon"; }
@@ -1053,7 +1051,7 @@
               </span>
             </div>
           </div>
-          <label for="orderSearch">Finn ordre (ordre-ID, e-post eller plan)</label>
+          <label for="orderSearch">Finn ordre (navn, ordre-ID, e-post eller plan)</label>
           <input id="orderSearch" type="search" placeholder="Søk i ordreloggen…" />
 
           <div class="table-wrapper" style="max-height: 360px;">
@@ -1061,18 +1059,12 @@
               <table>
                 <thead>
                   <tr>
-                    <th>OrderId</th>
-                    <th>Status</th>
-                    <th>Plan</th>
-                    <th>Beløp</th>
-                    <th>E-post</th>
-                    <th>Opprettet</th>
-                    <th>Refusjon</th>
+                    <th>Ordre</th>
                   </tr>
                 </thead>
                 <tbody id="ordersTableBody">
                   <tr>
-                    <td colspan="7" class="text-muted">Laster ordrer…</td>
+                    <td class="text-muted">Laster ordrer…</td>
                   </tr>
                 </tbody>
               </table>
@@ -1955,15 +1947,20 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   // ------- Vipps-ordrer -------
 
+  function orderMemberName(order) {
+    const member = order.memberId && allMembers.find(m => String(m.id) === String(order.memberId));
+    return member?.name || order.name || order.email || 'Ukjent medlem';
+  }
+
   function renderOrders() {
     const query = orderSearch.value.trim().toLowerCase();
     const matchingOrders = query ? allOrders.filter(order =>
-      [order.orderId, order.email, order.membershipKey, order.status]
+      [order.orderId, order.email, order.membershipKey, order.status, order.name, orderMemberName(order)]
         .some(value => String(value || '').toLowerCase().includes(query))) : allOrders;
     ordersCountEl.textContent = `${matchingOrders.length} av ${allOrders.length}`;
 
     if (!matchingOrders.length) {
-      ordersTableBody.innerHTML = `<tr><td colspan="7" class="text-muted">${allOrders.length ? 'Ingen ordrer passer søket.' : 'Ingen ordrer registrert ennå.'}</td></tr>`;
+      ordersTableBody.innerHTML = `<tr><td class="text-muted">${allOrders.length ? 'Ingen ordrer passer søket.' : 'Ingen ordrer registrert ennå.'}</td></tr>`;
       return;
     }
 
@@ -1978,33 +1975,42 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       const orderPlanText = orderPlan ? adminPlanLabel(orderPlan) : (o.membershipKey || '–');
 
       const status = (o.status || '').toUpperCase();
-      let statusClass = 'status-inactive';
-      let statusLabel = status || '-';
-      if (['RESERVED', 'SALE', 'CAPTURED'].includes(status)) {
-        statusClass = 'status-active';
-      } else if (['CANCELLED', 'FAILED'].includes(status)) {
-        statusClass = 'status-cancelled';
+      const statusLabel = ({ SALE: 'Betalt', CAPTURED: 'Betalt', RESERVED: 'Reservert', PENDING: 'Venter på betaling', CANCELLED: 'Avbrutt', FAILED: 'Feilet' })[status] || status || 'Ukjent status';
+      const cell = tr.insertCell();
+      const header = document.createElement('div');
+      header.className = 'door-event-header';
+      const timeAndName = document.createElement('strong');
+      timeAndName.textContent = `${fmtDate(o.createdAt)} · ${orderMemberName(o)}`;
+      header.appendChild(timeAndName);
+      const description = document.createElement('div');
+      description.className = 'door-event-description';
+      const planAndAmount = document.createElement('span');
+      planAndAmount.textContent = `${orderPlanText} · ${fmtAmount(o.amount)}`;
+      const result = document.createElement('span');
+      result.className = `door-event-result ${['SALE', 'CAPTURED'].includes(status) ? 'success' : ['CANCELLED', 'FAILED'].includes(status) ? 'denied' : ''}`;
+      result.textContent = `· ${statusLabel}`;
+      description.append(planAndAmount, result);
+      const details = document.createElement('details');
+      details.className = 'door-event-details order-event-details';
+      const summary = document.createElement('summary');
+      summary.textContent = 'Ordredetaljer';
+      details.appendChild(summary);
+      for (const [label, value] of [['Ordre-ID', o.orderId], ['E-post', o.email], ['Vipps-status', status]]) {
+        const line = document.createElement('div');
+        line.textContent = `${label}: ${value || '–'}`;
+        details.appendChild(line);
       }
-
-      tr.innerHTML = `
-        <td>${escapeHtml(o.orderId || '–')}</td>
-        <td class="status">
-          <div class="status-pill ${statusClass}">
-            <span></span>
-            <span>${escapeHtml(statusLabel)}</span>
-          </div>
-        </td>
-        <td>${escapeHtml(orderPlanText)}</td>
-        <td>${fmtAmount(o.amount)}</td>
-        <td>${escapeHtml(o.email || '–')}</td>
-        <td>${fmtDate(o.createdAt)}</td>
-      `;
-      const refundCell = tr.insertCell();
       const review = o.refundReview;
       if (review) {
         const label = document.createElement('div');
         label.textContent = `${review.state === 'pending' ? 'Til vurdering' : 'Vurdert'}: ${fmtAmount(review.refundedAmount)} refundert`;
-        refundCell.appendChild(label);
+        details.appendChild(label);
+        if (review.state === 'pending') {
+          const flag = document.createElement('span');
+          flag.className = 'door-event-result denied';
+          flag.textContent = '· Refusjon til vurdering';
+          description.appendChild(flag);
+        }
       }
       if (['SALE', 'CAPTURED'].includes(status) && o.memberId) {
         const checkButton = document.createElement('button');
@@ -2012,16 +2018,17 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         checkButton.className = 'btn-secondary';
         checkButton.textContent = 'Sjekk Vipps';
         checkButton.addEventListener('click', () => checkOrderRefund(o.orderId, checkButton));
-        refundCell.appendChild(checkButton);
+        details.appendChild(checkButton);
         if (review?.state === 'pending') {
           const reviewedButton = document.createElement('button');
           reviewedButton.type = 'button';
           reviewedButton.className = 'btn-secondary';
           reviewedButton.textContent = 'Markér vurdert';
           reviewedButton.addEventListener('click', () => markRefundReviewed(o.orderId, reviewedButton));
-          refundCell.appendChild(reviewedButton);
+          details.appendChild(reviewedButton);
         }
       }
+      cell.append(header, description, details);
       ordersTableBody.appendChild(tr);
     });
   }
@@ -2058,7 +2065,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     } catch (e) {
       console.error('Feil ved henting av ordrer:', e);
       ordersTableBody.innerHTML =
-        '<tr><td colspan="7" class="text-muted">Kunne ikke laste ordrer.</td></tr>';
+        '<tr><td class="text-muted">Kunne ikke laste ordrer.</td></tr>';
       ordersErrorEl.textContent = 'Feil ved henting av ordrer: ' + e.message;
       ordersErrorEl.style.display = 'block';
     }
