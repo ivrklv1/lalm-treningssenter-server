@@ -116,6 +116,7 @@
       border: none;
       background: transparent;
       border-radius: 999px;
+      justify-content: center;
       padding: 9px 18px;
       font-size: 0.9rem;
       cursor: pointer;
@@ -153,6 +154,28 @@
       background: linear-gradient(90deg, #38bdf8, #6366f1);
       transform: scaleX(1);
     }
+
+    .tab-button:focus-visible, .member-open-button:focus-visible {
+      outline: 2px solid var(--accent-strong);
+      outline-offset: 2px;
+    }
+
+    .member-open-button {
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      font: inherit;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+      min-height: 40px;
+    }
+    .member-open-button:hover { text-decoration: underline; }
+    #membersTableBody td { white-space: normal; }
+    .member-read-view { padding: 6px 0; }
+    .member-read-list { display: grid; grid-template-columns: minmax(100px, 36%) minmax(0, 1fr); gap: 10px 12px; margin: 14px 0; }
+    .member-read-list dt { color: var(--muted); font-size: 0.85rem; }
+    .member-read-list dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 
     .tab-panel {
       display: none;
@@ -576,9 +599,10 @@
       header h1 { font-size: 1.2rem; }
       header p { font-size: 0.8rem; }
       .badge { white-space: normal; }
-      .tabs-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-radius: 16px; overflow: visible; margin-top: 12px; }
-      .tab-button { min-width: 0; min-height: 44px; padding: 8px; white-space: normal; font-size: 0.82rem; text-align: center; justify-content: center; }
-      .tab-button:last-child { grid-column: 1 / -1; }
+      .tabs-row { display: flex; flex-wrap: nowrap; overflow-x: auto; border-radius: 14px; margin-top: 12px; padding: 4px; gap: 2px; box-shadow: none; }
+      .tab-button { flex: 1 0 auto; min-width: 0; min-height: 44px; padding: 8px 5px; white-space: nowrap; font-size: 0.92rem; text-align: center; }
+      .tab-button.active { color: #fff; background: var(--accent); }
+      .tab-button.active::after { content: none; }
       .card { padding: 14px; }
       .card-title-row { flex-wrap: wrap; align-items: flex-start; }
       .card-title-row > * { min-width: 0; }
@@ -618,11 +642,11 @@
       #checkoutLogBody td::before { content: none; }
       #logtab-door .table-wrapper { max-height: 65vh !important; overflow-y: auto; }
 
-      #membersTableBody td:nth-child(1)::before { content: "Navn"; }
-      #membersTableBody td:nth-child(2)::before { content: "Plan"; }
-      #membersTableBody td:nth-child(3)::before { content: "Lalm IL"; }
-      #membersTableBody td:nth-child(4)::before { content: "Status"; }
-      #membersTableBody td:nth-child(5)::before { content: "Datoer"; }
+      #membersTableBody tr { flex-direction: row; align-items: center; justify-content: space-between; margin: 0; padding: 0 8px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
+      #membersTableBody td { display: block; width: auto; padding: 8px 4px !important; border: 0; font-size: 0.88rem; }
+      #membersTableBody td:first-child { min-width: 0; flex: 1; }
+      #membersTableBody td::before { content: none; }
+      #membersListWrapper { border: 0; border-radius: 0; background: transparent; }
       #plansTableBody td:nth-child(1)::before { content: "Nøkkel"; }
       #plansTableBody td:nth-child(2)::before { content: "Navn"; }
       #plansTableBody td:nth-child(3)::before { content: "Type"; }
@@ -647,6 +671,10 @@
       .modal-close-btn { min-width: 44px; min-height: 44px; justify-content: center; }
       .modal-card > .btn-row { position: sticky; bottom: -16px; z-index: 2; background: #fff; padding: 10px 0 max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); }
     }
+
+    @media (max-width: 359px) {
+      .tab-button { font-size: 0.875rem; }
+    }
   </style>
 </head>
 <body>
@@ -666,11 +694,11 @@
 
   <!-- FANER -->
   <div class="tabs-row">
-    <button class="tab-button active" data-tab="members">Medlemmer</button>
-    <button class="tab-button" data-tab="plans">Medlemskap & priser</button>
-    <button class="tab-button" data-tab="sms">SMS</button>
-    <button class="tab-button" data-tab="logs">Logg</button>
-    <button class="tab-button" data-tab="tools">Verktøy / NIF</button>
+    <button class="tab-button active" data-tab="members" aria-pressed="true">Medlemmer</button>
+    <button class="tab-button" data-tab="plans" aria-label="Medlemskap og priser" aria-pressed="false">Planer</button>
+    <button class="tab-button" data-tab="sms" aria-pressed="false">SMS</button>
+    <button class="tab-button" data-tab="logs" aria-pressed="false">Logg</button>
+    <button class="tab-button" data-tab="tools" aria-label="Verktøy og NIF" aria-pressed="false">Verktøy</button>
   </div>
 
   <main>
@@ -734,21 +762,18 @@
               <button id="btnReloadMembers" class="btn-secondary">⟳ Oppdater liste</button>
             </div>
           </div>
-          <div class="table-wrapper mt-2">
+          <div id="membersListWrapper" class="table-wrapper mt-2">
              <div class="scroll">
                <table>
                  <thead>
                  <tr>
                    <th>Navn</th>
-                   <th>Plan</th>
-                   <th>Lalm IL-medlem</th>
                    <th>Status</th>
-                   <th>Medlemskapsdatoer</th>
                  </tr>
                  </thead>
                  <tbody id="membersTableBody">
                  <tr>
-                   <td colspan="5" class="text-muted">Laster medlemmer...</td>
+                   <td colspan="2" class="text-muted">Laster medlemmer...</td>
                 </tr>
                 </tbody>
               </table>
@@ -1176,6 +1201,12 @@
          </div>
          <button class="modal-close-btn" id="modalCloseBtn" aria-label="Lukk">&times;</button>
        </div>
+       <div id="memberReadView" class="member-read-view">
+         <button id="modalEditBtn" type="button" class="btn-primary">Rediger medlem</button>
+         <dl id="memberReadDetails" class="member-read-list"></dl>
+       </div>
+       <div id="memberEditView" style="display:none;">
+         <button id="modalBackToDetailsBtn" type="button" class="btn-secondary">Tilbake til oversikt</button>
        <div class="modal-body">
          <div class="small text-muted">Medlems-ID: <span id="modalMemberId"></span> · Status: <span id="modalMemberStatus"></span></div>
          <label for="modalEditName" class="mt-2">Navn</label>
@@ -1219,6 +1250,7 @@
          <button id="modalDeleteBtn" class="btn-secondary" style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;">🗑 Slett</button>
        </div>
        <div id="modalMemberMsg" class="mt-1 small"></div>
+       </div>
      </div>
    </div>
 </div>
@@ -1256,6 +1288,11 @@
   const btnAddMember = document.getElementById('btnAddMember');
   const addMemberMsg = document.getElementById('addMemberMsg');
   const memberModal = document.getElementById('memberModal');
+  const memberReadView = document.getElementById('memberReadView');
+  const memberReadDetails = document.getElementById('memberReadDetails');
+  const memberEditView = document.getElementById('memberEditView');
+  const modalEditBtn = document.getElementById('modalEditBtn');
+  const modalBackToDetailsBtn = document.getElementById('modalBackToDetailsBtn');
   const modalMemberName = document.getElementById('modalMemberName');
   const modalMemberEmail = document.getElementById('modalMemberEmail');
   const modalMemberId = document.getElementById('modalMemberId');
@@ -1600,15 +1637,12 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     statsActiveCount.textContent = filtered.filter(m => m.active).length;
 
     if (!filtered.length) {
-      membersTableBody.innerHTML = '<tr><td colspan="5" class="text-muted">Ingen medlemmer funnet.</td></tr>';
+      membersTableBody.innerHTML = '<tr><td colspan="2" class="text-muted">Ingen medlemmer funnet.</td></tr>';
     } else {
       membersTableBody.innerHTML = '';
       filtered.forEach(m => {
         const tr = document.createElement('tr');
 
-        const ilText = m.clubMember ? 'Ja' : 'Nei';
-        const plan = allPlans.find(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(m.plan));
-        const planText = plan ? adminPlanLabel(plan) : (m.plan || '–');
         const statusLabel = m.active ? 'Aktiv' : 'Inaktiv';
         const statusClass = m.active ? 'status-text-active' : 'status-text-inactive';
 
@@ -1620,15 +1654,11 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         tr.dataset.active = m.active ? '1' : '0';
 
         tr.innerHTML = `
-          <td>${escapeHtml(m.name || '–')}${m.tripletexFollowUp?.status === 'pending' ? '<div class="small tag-danger">Tripletex må kontrolleres</div>' : ''}</td>
-          <td>${escapeHtml(planText)}</td>
-          <td>${ilText}</td>
+          <td><button type="button" class="member-open-button">${escapeHtml(m.name || 'Uten navn')}</button></td>
           <td class="status">
             <span class="status-text ${statusClass}">${statusLabel}</span>
           </td>
         `;
-        const dateCell = tr.insertCell();
-        dateCell.textContent = membershipDateLabel(m);
         membersTableBody.appendChild(tr);
       });
     }
@@ -1666,9 +1696,49 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     }
   }
 
-  function openMemberModal(member) {
+  function showMemberModalMode(editing) {
+    memberReadView.style.display = editing ? 'none' : 'block';
+    memberEditView.style.display = editing ? 'block' : 'none';
+    memberModal.querySelector('.modal-card')?.scrollTo(0, 0);
+  }
+
+  function renderMemberReadView(member) {
+    const plan = allPlans.find(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(member.plan));
+    const lastEdit = Array.isArray(member.adminEditHistory) ? member.adminEditHistory.at(-1) : null;
+    const followUp = member.tripletexFollowUp;
+    const address = [member.address, [member.zip, member.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    const fields = [
+      ['Status', member.active ? 'Aktiv' : 'Inaktiv'],
+      ['Medlemskap', plan ? adminPlanLabel(plan) : member.plan || 'Ikke registrert'],
+      ['Lalm IL', member.clubMember ? 'Ja' : 'Nei'],
+      ['E-post', member.email || 'Ikke registrert'],
+      ['Telefon', member.phone || member.phoneFull || member.mobile || 'Ikke registrert'],
+      ['Adresse', address || 'Ikke registrert'],
+      ['Medlemskapsdatoer', membershipDateLabel(member)],
+      ['Gyldig til', member.validUntil ? formatMembershipDate(member.validUntil) : null],
+      ['Datokilde', member.membershipStartOrderId ? 'Vipps-ordre' : member.membershipDatesManualReview ? 'Manuell kontroll' : null],
+      ['Ordre-ID', member.membershipStartOrderId || null],
+      ['Tripletex', followUp?.status === 'pending' ? 'Må kontrolleres etter planendring' : followUp?.status === 'resolved' ? 'Kontrollert' : null],
+      ['Interne notater', member.notes || null],
+      ['Medlems-ID', member.id || 'Ikke registrert'],
+      ['Siste adminendring', lastEdit ? `${fmtDate(lastEdit.editedAt)} av ${lastEdit.editedBy}` : null],
+    ];
+    memberReadDetails.replaceChildren();
+    for (const [label, value] of fields) {
+      if (!value) continue;
+      const term = document.createElement('dt');
+      term.textContent = label;
+      const detail = document.createElement('dd');
+      detail.textContent = value;
+      memberReadDetails.append(term, detail);
+    }
+  }
+
+  function openMemberModal(member, editing = false) {
     if (!memberModal || !member) return;
     selectedMember = member;
+    renderMemberReadView(member);
+    showMemberModalMode(editing);
 
     modalMemberName.textContent = member.name || 'Uten navn';
     modalMemberEmail.textContent = member.email || 'Ingen e-post';
@@ -1770,7 +1840,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     } catch (e) {
       console.error('Feil ved henting av medlemmer:', e);
       membersTableBody.innerHTML =
-        '<tr><td colspan="5" class="text-muted">Kunne ikke laste medlemmer.</td></tr>';
+        '<tr><td colspan="2" class="text-muted">Kunne ikke laste medlemmer.</td></tr>';
       membersErrorEl.textContent = 'Feil ved henting av medlemmer: ' + e.message;
       membersErrorEl.style.display = 'block';
       setServerStatus(false, 'Feil');
@@ -3193,7 +3263,9 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   filterTripletexFollowUp.addEventListener('change', () => renderMembers());
 
     membersTableBody.addEventListener('click', (e) => {
-    const row = e.target.closest('tr');
+    const button = e.target.closest('.member-open-button');
+    if (!button) return;
+    const row = button.closest('tr');
     if (!row || !row.dataset || !row.dataset.id) return;
     const member = allMembers.find(m => String(m.id) === row.dataset.id);
     if (member) {
@@ -3205,6 +3277,10 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   if (modalCloseBtn) {
     modalCloseBtn.addEventListener('click', closeMemberModal);
   }
+  modalEditBtn.addEventListener('click', () => showMemberModalMode(true));
+  modalBackToDetailsBtn.addEventListener('click', () => {
+    if (selectedMember) openMemberModal(selectedMember);
+  });
   if (memberModal) {
     memberModal.addEventListener('click', (e) => {
       if (e.target === memberModal) {
@@ -3238,7 +3314,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
       await loadMembers();
-      openMemberModal(selectedMember);
+      openMemberModal(selectedMember, true);
     } catch (e) {
       modalMemberMsg.textContent = 'Kunne ikke markere som kontrollert: ' + e.message;
       modalMemberMsg.className = 'mt-1 small tag-danger';
@@ -3420,10 +3496,14 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   tabButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       const target = btn.getAttribute('data-tab');
-      tabButtons.forEach(b => b.classList.remove('active'));
+      tabButtons.forEach(b => {
+        b.classList.remove('active');
+        b.setAttribute('aria-pressed', 'false');
+      });
       tabPanels.forEach(p => p.classList.remove('active'));
 
       btn.classList.add('active');
+      btn.setAttribute('aria-pressed', 'true');
       const panel = document.getElementById('tab-' + target);
       if (panel) panel.classList.add('active');
 
