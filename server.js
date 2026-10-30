@@ -28,6 +28,7 @@ const {
 } = require('./tripletexClient');
 const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
 const { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus } = require('./membershipDates');
+const { confirmedRefund } = require('./refundReview');
 const { createVisitStats } = require('./visitStats');
 
 
@@ -1169,6 +1170,43 @@ if (existing) {
 app.get('/admin/orders', basicAuth, (req, res) => {
   const orders = getOrders();
   res.json(orders);
+});
+
+// Kontroll utføres ved behov; Vipps sender ikke et eget refusjonsvarsel her.
+app.post('/admin/orders/:orderId/check-refund', basicAuth, async (req, res) => {
+  const order = findOrder(req.params.orderId);
+  if (!order) return res.status(404).json({ error: 'Ordren finnes ikke' });
+  if (!['SALE', 'CAPTURED'].includes(order.status) || !order.memberId) {
+    return res.status(400).json({ error: 'Ordren er ikke et aktivert medlemskjøp' });
+  }
+  try {
+    const refund = confirmedRefund(await getVippsPaymentDetails(order.orderId), order);
+    const now = new Date().toISOString();
+    const previous = order.refundReview;
+    const review = refund ? {
+      ...refund,
+      state: previous?.state === 'reviewed' && previous.refundedAmount === refund.refundedAmount ? 'reviewed' : 'pending',
+      detectedAt: previous?.detectedAt || now,
+      checkedAt: now,
+      ...(previous?.state === 'reviewed' && previous.refundedAmount === refund.refundedAmount
+        ? { reviewedAt: previous.reviewedAt, reviewedBy: previous.reviewedBy } : {}),
+    } : null;
+    updateOrderStatus(order.orderId, order.status, { refundReview: review, refundCheckedAt: now });
+    return res.json({ refundReview: review, checkedAt: now });
+  } catch (error) {
+    console.error('Kunne ikke kontrollere refusjon for ordre', order.orderId, error.message);
+    return res.status(502).json({ error: 'Kunne ikke kontrollere refusjon hos Vipps' });
+  }
+});
+
+app.post('/admin/orders/:orderId/refund-reviewed', basicAuth, (req, res) => {
+  const order = findOrder(req.params.orderId);
+  if (!order?.refundReview || order.refundReview.state !== 'pending') {
+    return res.status(400).json({ error: 'Ingen refusjon venter på vurdering' });
+  }
+  const review = { ...order.refundReview, state: 'reviewed', reviewedAt: new Date().toISOString(), reviewedBy: req.adminUser };
+  updateOrderStatus(order.orderId, order.status, { refundReview: review });
+  return res.json({ refundReview: review });
 });
 
 // Legg til/oppdater medlem (nytt admin-UI)

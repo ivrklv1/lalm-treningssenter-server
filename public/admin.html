@@ -944,7 +944,7 @@
             <div>
               <div class="card-title">Vipps-ordrer</div>
               <div class="card-subtitle">
-                Viser siste betalinger via Vipps Checkout.
+                Viser siste betalinger via Vipps Checkout. Refusjon må kontrolleres manuelt mot Vipps.
               </div>
             </div>
             <div>
@@ -965,11 +965,12 @@
                     <th>Beløp</th>
                     <th>E-post</th>
                     <th>Opprettet</th>
+                    <th>Refusjon</th>
                   </tr>
                 </thead>
                 <tbody id="ordersTableBody">
                   <tr>
-                    <td colspan="6" class="text-muted">Laster ordrer…</td>
+                    <td colspan="7" class="text-muted">Laster ordrer…</td>
                   </tr>
                 </tbody>
               </table>
@@ -1730,12 +1731,12 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     ordersCountEl.textContent = allOrders.length;
 
     if (!allOrders.length) {
-      ordersTableBody.innerHTML = '<tr><td colspan="6" class="text-muted">Ingen ordrer registrert ennå.</td></tr>';
+      ordersTableBody.innerHTML = '<tr><td colspan="7" class="text-muted">Ingen ordrer registrert ennå.</td></tr>';
       return;
     }
 
       const sorted = [...allOrders]
-    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    .sort((a, b) => Number(b.refundReview?.state === 'pending') - Number(a.refundReview?.state === 'pending') || new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, 50);
 
     ordersTableBody.innerHTML = '';
@@ -1764,9 +1765,51 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         <td>${o.email || '–'}</td>
         <td>${fmtDate(o.createdAt)}</td>
       `;
+      const refundCell = tr.insertCell();
+      const review = o.refundReview;
+      if (review) {
+        const label = document.createElement('div');
+        label.textContent = `${review.state === 'pending' ? 'Til vurdering' : 'Vurdert'}: ${fmtAmount(review.refundedAmount)} refundert`;
+        refundCell.appendChild(label);
+      }
+      if (['SALE', 'CAPTURED'].includes(status) && o.memberId) {
+        const checkButton = document.createElement('button');
+        checkButton.type = 'button';
+        checkButton.className = 'btn-secondary';
+        checkButton.textContent = 'Sjekk Vipps';
+        checkButton.addEventListener('click', () => checkOrderRefund(o.orderId, checkButton));
+        refundCell.appendChild(checkButton);
+        if (review?.state === 'pending') {
+          const reviewedButton = document.createElement('button');
+          reviewedButton.type = 'button';
+          reviewedButton.className = 'btn-secondary';
+          reviewedButton.textContent = 'Markér vurdert';
+          reviewedButton.addEventListener('click', () => markRefundReviewed(o.orderId, reviewedButton));
+          refundCell.appendChild(reviewedButton);
+        }
+      }
       ordersTableBody.appendChild(tr);
     });
   }
+
+  async function updateRefundReview(orderId, action, button) {
+    ordersErrorEl.style.display = 'none';
+    button.disabled = true;
+    try {
+      const res = await fetch(`/admin/orders/${encodeURIComponent(orderId)}/${action}`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      await loadOrders();
+    } catch (e) {
+      ordersErrorEl.textContent = e.message;
+      ordersErrorEl.style.display = 'block';
+      button.disabled = false;
+    }
+  }
+  function checkOrderRefund(orderId, button) { return updateRefundReview(orderId, 'check-refund', button); }
+  function markRefundReviewed(orderId, button) { return updateRefundReview(orderId, 'refund-reviewed', button); }
 
   async function loadOrders() {
     ordersErrorEl.style.display = 'none';
@@ -1781,7 +1824,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     } catch (e) {
       console.error('Feil ved henting av ordrer:', e);
       ordersTableBody.innerHTML =
-        '<tr><td colspan="6" class="text-muted">Kunne ikke laste ordrer.</td></tr>';
+        '<tr><td colspan="7" class="text-muted">Kunne ikke laste ordrer.</td></tr>';
       ordersErrorEl.textContent = 'Feil ved henting av ordrer: ' + e.message;
       ordersErrorEl.style.display = 'block';
     }
