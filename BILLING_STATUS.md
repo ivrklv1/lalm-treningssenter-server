@@ -12,3 +12,13 @@ Rødt betyr ikke automatisk sperring. Avtalt regel for en senere fase er sperrin
 Tripletex opplyser at `amountOutstanding = 0` kan bety betalt **eller kreditert**. Derfor blir fakturaer med krediteringsflagg grå og må vurderes manuelt. Ved Tripletex-feil vises ingen gammel status som ny; kontrollen må prøves igjen.
 
 Lokale tester bruker oppdiktede fakturaer og blokkert utgående nettverk. Uthenting mot en ekte Tripletex-konto og visuell kontroll i admin er fortsatt nødvendig før produksjonsutrulling.
+
+## Kontrollert utrulling
+
+1. Kontroller at fersk backup av medlemsregisteret finnes.
+2. Legg først inn medlemskaps- og adminendringene i PR #12. Deretter kan denne endringen legges på `main`. Produksjonsserveren på Render deployer automatisk fra `main`.
+3. Åpne admin og trykk «Hent betalingsstatus fra Tripletex». Noter tidspunktet for kontrollen. Ved API-feil vises ingen status som fersk.
+4. Sammenlign minst én faktura i hver aktuell gruppe i Tripletex: fakturert, betalt, forfalt og kreditert. Kontroller fakturanummer, forfallsdato, restbeløp og tilhørende ordre-ID. Del ikke navn eller betalingsdetaljer i en offentlig sak.
+5. Tell grå medlemmer uten entydig ordrekobling, og undersøk disse før en senere automatisk sperrefunksjon bygges.
+
+Denne utrullingen endrer ikke `member.active`, abonnement, SMS, betaling eller dørstyring. Ved avvik stoppes innføringen av automatisk sperring; statusvisningen kan fjernes ved å rulle serveren tilbake til forrige versjon.
