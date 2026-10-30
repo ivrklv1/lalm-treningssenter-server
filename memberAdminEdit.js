@@ -67,6 +67,12 @@ function prepareAdminMemberEdit(member, changes, members, plans, adminUser, now)
     const plan = changes.plan.trim();
     if (plan !== member.plan && !plans.some(item => (item.id || item.key) === plan)) throw new Error('invalid_plan');
     set('plan', plan);
+    if (plan !== member.plan) {
+      next.tripletexFollowUp = {
+        reason: 'plan_change', fromPlan: member.plan || null, toPlan: plan,
+        createdAt: now, createdBy: adminUser, status: 'pending',
+      };
+    }
   }
   if (Object.hasOwn(changes, 'clubMember')) {
     if (typeof changes.clubMember !== 'boolean') throw new Error('invalid_clubMember');
