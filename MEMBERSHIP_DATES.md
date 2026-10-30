@@ -8,4 +8,6 @@ Hvis datooppslaget feiler etter at medlemskapet er aktivert, blir datofeltene st
 
 Endringen fyller ikke inn datoer for eksisterende medlemmer. Historiske datoer krever separat kontroll av medlems-ID, Vipps-ordre, vilkår og backup før import. Appen viser fortsatt eksempeldata på «Mitt medlemskap»; ingen ny offentlig medlemskapsrute inngår her.
 
+En refusjon som kommer etter at et medlemskap allerede er aktivert, behandles fortsatt av den eksisterende medlemsflyten. Automatisk deaktivering ved refusjon inngår ikke i denne endringen og må vurderes separat.
+
 Lokale tester bruker oppdiktede ordrer og oppdiktede Vipps-svar med utgående nettverk blokkert. De dekker bekreftet betaling, falsk «betalt»-melding, reservasjon og et utilgjengelig Vipps-oppslag. Testserveren sperrer betaling og kan derfor ikke prøve et ekte Vipps-kjøp. Utkastet må gjennomgås før produksjonsutrulling; deretter må den første reelle ordren kontrolleres uten å starte en testbetaling.
