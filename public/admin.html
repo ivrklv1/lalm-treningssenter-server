@@ -555,6 +555,8 @@
     }
 
     .door-event-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+    .door-event-header strong { min-width: 0; overflow-wrap: anywhere; }
+    .door-event-description { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
     .door-event-result { font-weight: 600; }
     .door-event-result.success { color: var(--success); }
     .door-event-result.denied { color: var(--danger); }
@@ -2120,13 +2122,21 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         const header = document.createElement('div');
         header.className = 'door-event-header';
         const time = document.createElement('strong');
-        time.textContent = timestamp;
+        time.textContent = `${timestamp} · ${person}`;
         const result = document.createElement('span');
         result.className = `door-event-result ${denied ? 'denied' : 'success'}`;
         result.textContent = denied ? 'Avvist' : 'Åpnet';
-        header.append(time, result);
+        header.appendChild(time);
         const description = document.createElement('div');
-        description.textContent = `${person} · ${door}${reasonText ? ` · ${reasonText}` : ''}`;
+        description.className = 'door-event-description';
+        const doorLabel = document.createElement('span');
+        doorLabel.textContent = door;
+        description.append(doorLabel, result);
+        if (reasonText) {
+          const reasonLabel = document.createElement('span');
+          reasonLabel.textContent = `· ${reasonText}`;
+          description.appendChild(reasonLabel);
+        }
         const details = document.createElement('details');
         details.className = 'door-event-details';
         const summary = document.createElement('summary');
