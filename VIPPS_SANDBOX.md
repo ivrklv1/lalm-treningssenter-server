@@ -1,6 +1,6 @@
 # Isolert Vipps-test for medlemsdatoer
 
-Denne grenen er bare for en **ny, separat** Render-webtjeneste. `server.js` nekter å starte uten testmodus. Den skal ikke kobles til produksjon, den eldre SMS-testtjenesten eller legal-test-tjenesten.
+Denne grenen er bare for den **separate** Render-webtjenesten [lalm-vipps-sandbox](https://dashboard.render.com/web/srv-dbi4mcijnfac73cqg21g). `server.js` nekter å starte uten testmodus. Den skal ikke kobles til produksjon, den eldre SMS-testtjenesten eller legal-test-tjenesten.
 
 ## Før opprettelse
 
@@ -8,7 +8,7 @@ Denne grenen er bare for en **ny, separat** Render-webtjeneste. `server.js` nekt
 - Startkommando: `node server.js`. Byggkommando: `npm ci`.
 - Egen Render-webtjeneste med egen URL, uten delt disk eller miljøgruppe.
 - Ingen eksisterende `members.json` eller `orders.json` kopieres inn.
-- Vurder plan og eventuell kostnad før tjenesten opprettes.
+- Tjenesten er opprettet på gratisplanen, i Frankfurt, uten automatisk utrulling.
 
 ## Miljøvariabler på den nye tjenesten
 
@@ -37,4 +37,4 @@ Ingen `EUROBATE_*`, `TELL_*`, `TRIPLETEX_*`, `BACKUP_*`, `AWS_*` eller `S3_*` va
 
 ## Før en faktisk testbetaling
 
-Kontroller Render-oppsettet og de maskerte nøklene direkte i Render. Få uttrykkelig klarsignal før en Vipps-testbetaling startes. Del aldri nøklene i chatten. Denne grenen er foreløpig lokal og ingen tjeneste er opprettet.
+Kontroller Render-oppsettet og de maskerte nøklene direkte i Render. Få uttrykkelig klarsignal før en Vipps-testbetaling startes. Del aldri nøklene i chatten. Koden ligger på GitHub. Testserveren stopper foreløpig ved oppstart fordi de tre Vipps-testnøklene mangler; det er tilsiktet. Ingen testbetaling er startet.
