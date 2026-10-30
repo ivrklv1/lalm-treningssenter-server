@@ -183,6 +183,10 @@ test(`an unverified paid callback (${mode}) leaves the order pending and does no
     assert.ok(orders[0].paymentDetailsLastCheckedAt, output);
     assert.equal(orders[0].status, mode === 'RESERVE' ? 'RESERVED' : 'PENDING');
     assert.equal(orders[0].memberId, undefined);
+    if (mode === 'RESERVE') {
+      const statusResponse = await fetch(`http://localhost:${port}/vipps/order-status/${orderId}`);
+      assert.equal((await statusResponse.json()).isPaid, false);
+    }
     assert.deepEqual(members, []);
     assert.equal(output.includes('TEST BLOCKED AN OUTBOUND CONNECTION'), false, output);
   } finally {

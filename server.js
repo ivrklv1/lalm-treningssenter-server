@@ -3779,9 +3779,8 @@ app.get('/vipps/order-status/:orderId', (req, res) => {
   const rawStatus = order.status || order.vippsTransactionStatus || 'PENDING';
   const status = String(rawStatus || '').toUpperCase();
 
-  // "Betalt" i vår verden = samme logikk som i callbacken:
-  // vi aktiverer medlem ved RESERVED / SALE / CAPTURED.
-  const isPaid = ['RESERVED', 'SALE', 'CAPTURED'].includes(status);
+  // En reservasjon er ikke belastet og skal ikke vises som betalt.
+  const isPaid = ['SALE', 'CAPTURED'].includes(status);
 
   return res.json({
     ok: true,
