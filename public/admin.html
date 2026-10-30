@@ -565,6 +565,7 @@
     .door-event-details code { display: block; margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
     #ordersTableBody td { overflow-wrap: anywhere; }
     #checkoutLogBody td { overflow-wrap: anywhere; }
+    .checkout-event-details > div { margin-top: 6px; overflow-wrap: anywhere; }
     .order-event-details > div { margin-top: 6px; }
     .order-event-details button { margin: 6px 6px 0 0; }
 
@@ -1079,7 +1080,7 @@
             <button id="toggleCheckoutLog" type="button" class="btn-secondary" aria-expanded="false">Vis innmeldingsforsøk</button>
           </div>
           <div id="checkoutLogPanel" class="mt-1" style="display:none;">
-            <div class="card-subtitle">Forsøk og avvisninger fra innmeldingen. En forespørsel betyr ikke at betaling er gjennomført.</div>
+            <div class="card-subtitle">Forsøk og avvisninger fra innmeldingen. Se ordrelisten for gjeldende betalingsstatus.</div>
             <label for="checkoutLogSearch">Finn innmeldingsforsøk</label>
             <input id="checkoutLogSearch" type="search" placeholder="Søk på navn, plan eller hendelse…" />
             <div id="checkoutLogCount" class="small text-muted mt-1"></div>
@@ -2099,68 +2100,65 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   const checkoutLogBody = document.getElementById('checkoutLogBody');
   const checkoutLogCount = document.getElementById('checkoutLogCount');
   const checkoutLogError = document.getElementById('checkoutLogError');
-  let checkoutLogLines = [];
+  let checkoutLogEvents = [];
+
+  function checkoutEventLabel(type) {
+    return ({ REQUEST: 'Forespørsel mottatt', BLOCKED_EXISTING_MEMBER: 'Avvist: aktivt medlem',
+      OK: 'Vipps-ordre opprettet', ERROR: 'Feil ved oppretting' })[type] || 'Innmeldingshendelse';
+  }
 
   function renderCheckoutLog() {
     const query = checkoutLogSearch.value.trim().toLowerCase();
-    const visible = [...checkoutLogLines].reverse().filter(line => {
-      const memberId = line.match(/\bmemberId=([^\s]+)/)?.[1];
-      const orderId = line.match(/\borderId=([^\s]+)/)?.[1];
-      const member = memberId && allMembers.find(m => String(m.id) === memberId);
-      const order = orderId && allOrders.find(o => String(o.orderId) === orderId);
-      return `${line} ${member?.name || ''} ${order?.name || ''}`.toLowerCase().includes(query);
+    const visible = [...checkoutLogEvents].reverse().filter(event => {
+      const member = event.memberId && allMembers.find(m => String(m.id) === String(event.memberId));
+      const order = event.orderId && allOrders.find(o => String(o.orderId) === String(event.orderId));
+      return [event.timestamp, event.type, checkoutEventLabel(event.type), event.name, event.email, event.plan, event.orderId,
+        member?.name, order?.name, order?.email].join(' ').toLowerCase().includes(query);
     });
-    checkoutLogCount.textContent = `${visible.length} av ${checkoutLogLines.length} innmeldingshendelser vises.`;
+    checkoutLogCount.textContent = `${visible.length} av ${checkoutLogEvents.length} innmeldingshendelser vises.`;
     checkoutLogBody.innerHTML = '';
     if (!visible.length) {
-      checkoutLogBody.innerHTML = `<tr><td class="text-muted">${checkoutLogLines.length ? 'Ingen hendelser passer søket.' : 'Ingen innmeldingsforsøk funnet.'}</td></tr>`;
+      checkoutLogBody.innerHTML = `<tr><td class="text-muted">${checkoutLogEvents.length ? 'Ingen hendelser passer søket.' : 'Ingen innmeldingsforsøk funnet.'}</td></tr>`;
       return;
     }
-    visible.forEach(line => {
-      const event = line.match(/\bVIPPS_CHECKOUT_(REQUEST|BLOCKED_EXISTING_MEMBER|OK|ERROR)\b/)?.[1];
-      const eventLabel = ({ REQUEST: 'Forespørsel mottatt', BLOCKED_EXISTING_MEMBER: 'Avvist: aktivt medlem', OK: 'Vipps-ordre opprettet, ikke betalt', ERROR: 'Feil ved oppretting' })[event] || 'Innmeldingshendelse';
-      const timestamp = line.match(/^\[([^\]]+)\]/)?.[1];
-      const orderId = line.match(/\borderId=([^\s]+)/)?.[1];
-      const memberId = line.match(/\bmemberId=([^\s]+)/)?.[1];
-      const member = memberId && allMembers.find(m => String(m.id) === memberId);
-      const order = orderId && allOrders.find(o => String(o.orderId) === orderId);
-      let request = {};
-      if (event === 'REQUEST') {
-        try {
-          const parsed = JSON.parse(line.split(' body=')[1] || '{}');
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) request = parsed;
-        } catch (_) { /* Eldre logglinje uten gyldig JSON. */ }
-      }
-      const person = member?.name || (order && orderMemberName(order)) || request.name ||
-        [request.firstName, request.lastName].filter(Boolean).join(' ') ||
-        request.email || line.match(/\bemail=([^\s]+)/)?.[1] || 'Ukjent person';
-      const plan = request.membershipKey || request.membershipId || order?.membershipKey;
+    visible.forEach(event => {
+      const eventLabel = checkoutEventLabel(event.type);
+      const member = event.memberId && allMembers.find(m => String(m.id) === String(event.memberId));
+      const order = event.orderId && allOrders.find(o => String(o.orderId) === String(event.orderId));
+      const person = member?.name || (order && orderMemberName(order)) || event.name || event.email || 'Ukjent person';
+      const plan = event.plan || order?.membershipKey;
+      const planRecord = plan && allPlans.find(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(plan));
+      const planLabel = planRecord ? adminPlanLabel(planRecord) : plan;
       const tr = document.createElement('tr');
       const cell = tr.insertCell();
       const header = document.createElement('div');
       header.className = 'door-event-header';
       const timeAndName = document.createElement('strong');
-      timeAndName.textContent = `${fmtDate(timestamp)} · ${person}`;
+      timeAndName.textContent = `${fmtDate(event.timestamp)} · ${person}`;
       header.appendChild(timeAndName);
       const description = document.createElement('div');
       description.className = 'door-event-description';
       const result = document.createElement('span');
-      result.className = `door-event-result ${event === 'BLOCKED_EXISTING_MEMBER' || event === 'ERROR' ? 'denied' : ''}`;
+      result.className = `door-event-result ${event.type === 'BLOCKED_EXISTING_MEMBER' || event.type === 'ERROR' ? 'denied' : ''}`;
       result.textContent = eventLabel;
       description.appendChild(result);
       if (plan) {
         const planText = document.createElement('span');
-        const planRecord = allPlans.find(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(plan));
-        planText.textContent = `· ${planRecord ? adminPlanLabel(planRecord) : plan}`;
+        planText.textContent = `· ${planLabel}`;
         description.appendChild(planText);
       }
       const details = document.createElement('details');
-      details.className = 'door-event-details';
+      details.className = 'door-event-details checkout-event-details';
       const summary = document.createElement('summary');
       summary.textContent = 'Vis detaljer';
-      const raw = document.createElement('code');
-      raw.textContent = line;
-      details.append(summary, raw);
+      details.appendChild(summary);
+      for (const [label, value] of [['Tidspunkt', fmtDate(event.timestamp)], ['Hendelse', eventLabel],
+        ['Medlemskap', planLabel], ['Ordre-ID', event.orderId], ['E-post', event.email]]) {
+        if (!value) continue;
+        const row = document.createElement('div');
+        row.textContent = `${label}: ${value}`;
+        details.appendChild(row);
+      }
       cell.append(header, description, details);
       checkoutLogBody.appendChild(tr);
     });
@@ -2173,7 +2171,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       const res = await fetch('/api/admin/logs?kind=checkout');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
-      checkoutLogLines = Array.isArray(data.lines) ? data.lines : [];
+      checkoutLogEvents = Array.isArray(data.events) ? data.events : [];
       renderCheckoutLog();
     } catch (e) {
       checkoutLogBody.innerHTML = '<tr><td class="text-muted">Kunne ikke laste innmeldingsforsøk.</td></tr>';
