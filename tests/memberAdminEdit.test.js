@@ -22,6 +22,19 @@ test('validates profile edits, duplicates and protected fields', () => {
   assert.throws(() => edit({ bindingEndDate: '2027-10-30' }), /invalid_fields/);
 });
 
+test('a short-term plan with a capitalized key stays selected without a false plan change', () => {
+  const shortTerm = { ...member, plan: 'korttid_7dager' };
+  const shortPlans = [{ id: 'Korttid_7dager' }, { id: 'Korttid_3dager' }];
+  const same = prepareAdminMemberEdit(shortTerm, { plan: 'Korttid_7dager' }, [shortTerm], shortPlans, 'test-admin', now);
+  assert.deepEqual(same.changedFields, []);
+  assert.equal(same.member.plan, 'korttid_7dager');
+  assert.equal(same.member.tripletexFollowUp, undefined);
+
+  const changed = prepareAdminMemberEdit(shortTerm, { plan: 'Korttid_3dager' }, [shortTerm], shortPlans, 'test-admin', now);
+  assert.equal(changed.member.plan, 'korttid_3dager');
+  assert.equal(changed.member.tripletexFollowUp.status, 'pending');
+});
+
 test('manual dates require reason, compute end and preserve active status', () => {
   const changes = { membershipStartDate: '2026-01-31', bindingMonthsAtStart: 12, reason: 'Vipps-ordre og avtale kontrollert' };
   const result = edit(changes);

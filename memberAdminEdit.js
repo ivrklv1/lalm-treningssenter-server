@@ -64,10 +64,13 @@ function prepareAdminMemberEdit(member, changes, members, plans, adminUser, now)
   }
   if (Object.hasOwn(changes, 'plan')) {
     if (typeof changes.plan !== 'string' || !changes.plan.trim()) throw new Error('invalid_plan');
-    const plan = changes.plan.trim();
-    if (plan !== member.plan && !plans.some(item => (item.id || item.key) === plan)) throw new Error('invalid_plan');
-    set('plan', plan);
-    if (plan !== member.plan) {
+    const plan = changes.plan.trim().toLowerCase();
+    const currentPlan = String(member.plan || '').trim().toLowerCase();
+    if (plan !== currentPlan && !plans.some(item => String(item.id || item.key || '').trim().toLowerCase() === plan)) {
+      throw new Error('invalid_plan');
+    }
+    if (plan !== currentPlan) {
+      set('plan', plan);
       next.tripletexFollowUp = {
         reason: 'plan_change', fromPlan: member.plan || null, toPlan: plan,
         createdAt: now, createdBy: adminUser, status: 'pending',

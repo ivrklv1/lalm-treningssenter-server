@@ -280,6 +280,7 @@
     .status-pill {
       display: inline-flex;
       align-items: center;
+      justify-self: start;
       border-radius: 999px;
       padding: 2px 8px;
       font-size: 0.7rem;
@@ -294,6 +295,11 @@
 
     .status-pill span:first-child {
       display: none;
+    }
+
+    .status-pill span:not(:first-child) {
+      width: auto;
+      height: auto;
     }
 
     .status-active {
@@ -546,6 +552,88 @@
 
     .modal-close-btn:hover {
       color: #111827;
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 8px; }
+      .page, main, .panel-grid, .card { min-width: 0; max-width: 100%; }
+      header { flex-direction: column; align-items: flex-start; padding: 16px; gap: 10px; border-radius: 18px; }
+      header h1 { font-size: 1.2rem; }
+      header p { font-size: 0.8rem; }
+      .badge { white-space: normal; }
+      .tabs-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-radius: 16px; overflow: visible; margin-top: 12px; }
+      .tab-button { min-width: 0; min-height: 44px; padding: 8px; white-space: normal; font-size: 0.82rem; text-align: center; justify-content: center; }
+      .tab-button:last-child { grid-column: 1 / -1; }
+      .card { padding: 14px; }
+      .card-title-row { flex-wrap: wrap; align-items: flex-start; }
+      .card-title-row > * { min-width: 0; }
+      .pill-row { max-width: 100%; flex-wrap: wrap; border-radius: 12px; }
+      .pill-row button { min-height: 40px; }
+      .btn-row > button, #smsPreviewBtn, #sendSmsBtn { min-height: 44px; }
+      input, select, textarea { min-width: 0; font-size: 16px; }
+      label, .small, .card-subtitle { font-size: 0.85rem; line-height: 1.4; }
+      .sms-mode-options { display: grid; grid-template-columns: 1fr; gap: 2px; }
+      .sms-mode-options label { min-height: 44px; }
+      #smsMembersWrapper > div:last-child { max-height: none !important; overflow: visible !important; }
+      #smsMembersWrapper table, #smsMembersWrapper tbody { display: block; width: 100%; }
+      #smsPreviewBtn + span, #sendSmsBtn + span { overflow-wrap: anywhere; }
+      #tab-sms .card > div[style*="align-items:center"] { flex-wrap: wrap; }
+
+      .table-wrapper { max-height: none !important; overflow: visible; display: block; }
+      .table-wrapper .scroll { overflow: visible; }
+      .table-wrapper table, .table-wrapper tbody { display: block; width: 100%; }
+      .table-wrapper thead, #smsMembersWrapper thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+      .table-wrapper tr, #smsMembersWrapper tbody tr { display: flex; flex-direction: column; width: 100%; margin: 0 0 10px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+      .table-wrapper td, #smsMembersWrapper tbody td { display: grid; grid-template-columns: minmax(86px, 36%) minmax(0, 1fr); gap: 8px; width: 100%; padding: 9px 4px !important; border-bottom: 1px solid var(--border); text-align: left !important; white-space: normal; overflow-wrap: anywhere; font-size: 0.85rem; align-items: center; }
+      .table-wrapper td:last-child, #smsMembersWrapper tbody td:last-child { border-bottom: 0; }
+      .table-wrapper td::before, #smsMembersWrapper tbody td::before { color: var(--muted); font-weight: 600; font-size: 0.75rem; }
+      .table-wrapper td[colspan], #smsMembersWrapper tbody td[colspan] { display: block; }
+      .table-wrapper td[colspan]::before, #smsMembersWrapper tbody td[colspan]::before { content: none; }
+      .table-wrapper td > input, .table-wrapper td > select { width: 100% !important; }
+      .table-wrapper td > input[type="checkbox"], #smsMembersWrapper td input[type="checkbox"] { width: 22px !important; height: 22px; }
+      .table-wrapper td > button { min-height: 40px; }
+      .table-wrapper td > * { min-width: 0; max-width: 100%; }
+      #plansTableBody tr { cursor: default; }
+      #plansTableBody td:nth-child(2) { order: -1; font-weight: 600; }
+      #doorLogBody td { display: block; overflow-wrap: anywhere; }
+      #doorLogBody td::before { content: none; }
+      #logtab-door .table-wrapper { max-height: 65vh !important; overflow-y: auto; }
+
+      #membersTableBody td:nth-child(1)::before { content: "Navn"; }
+      #membersTableBody td:nth-child(2)::before { content: "Plan"; }
+      #membersTableBody td:nth-child(3)::before { content: "Lalm IL"; }
+      #membersTableBody td:nth-child(4)::before { content: "Status"; }
+      #membersTableBody td:nth-child(5)::before { content: "Datoer"; }
+      #plansTableBody td:nth-child(1)::before { content: "Nøkkel"; }
+      #plansTableBody td:nth-child(2)::before { content: "Navn"; }
+      #plansTableBody td:nth-child(3)::before { content: "Type"; }
+      #plansTableBody td:nth-child(4)::before { content: "Pris (kr)"; }
+      #plansTableBody td:nth-child(5)::before { content: "Innmelding (kr)"; }
+      #plansTableBody td:nth-child(6)::before { content: "Binding (mnd)"; }
+      #plansTableBody td:nth-child(7)::before { content: "Korttidsdager"; }
+      #plansTableBody td:nth-child(8)::before { content: "Web"; }
+      #plansTableBody td:nth-child(9)::before { content: "App"; }
+      #plansTableBody td:nth-child(10)::before { content: "Aktiv"; }
+      #plansTableBody td:nth-child(11)::before { content: "Sortering"; }
+      #plansTableBody td:nth-child(12)::before { content: "Tripletex ID"; }
+      #plansTableBody td:nth-child(13)::before { content: "Tekst"; }
+      #ordersTableBody td:nth-child(1)::before { content: "Ordre-ID"; }
+      #ordersTableBody td:nth-child(2)::before { content: "Status"; }
+      #ordersTableBody td:nth-child(3)::before { content: "Plan"; }
+      #ordersTableBody td:nth-child(4)::before { content: "Beløp"; }
+      #ordersTableBody td:nth-child(5)::before { content: "E-post"; }
+      #ordersTableBody td:nth-child(6)::before { content: "Opprettet"; }
+      #ordersTableBody td:nth-child(7)::before { content: "Refusjon"; }
+      #smsMembersBody td:nth-child(1)::before { content: "Velg"; }
+      #smsMembersBody td:nth-child(2)::before { content: "Navn"; }
+      #smsMembersBody td:nth-child(3)::before { content: "Telefon"; }
+      #smsMembersBody td:nth-child(4)::before { content: "Status"; }
+
+      .modal-backdrop { align-items: stretch; justify-content: stretch; }
+      .modal-card { width: 100%; max-width: none; max-height: 100dvh; border-radius: 0; padding: 16px 16px max(16px, env(safe-area-inset-bottom)); box-shadow: none; }
+      .modal-header { position: sticky; top: -16px; z-index: 2; background: #fff; padding: 12px 0; }
+      .modal-close-btn { min-width: 44px; min-height: 44px; justify-content: center; }
+      .modal-card > .btn-row { position: sticky; bottom: -16px; z-index: 2; background: #fff; padding: 10px 0 max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); }
     }
   </style>
 </head>
@@ -1292,9 +1380,15 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   }
 
   function planLabelOf(p) {
-    const name = String(p?.name || '').trim();
+    const name = String(p?.name || p?.title || p?.label || '').trim();
     const key = String(p?.id || p?.key || '').trim();
     return name ? name : key;
+  }
+
+  function adminPlanLabel(p, plans = allPlans) {
+    const label = planLabelOf(p);
+    return plans.filter(item => normalizedPlanKey(planLabelOf(item)) === normalizedPlanKey(label)).length > 1
+      ? `${label} (${planKeyOf(p)})` : label;
   }
 
   function buildPlanOptions(selectEl, plans, { includeAll = false, includePlaceholder = true, placeholder = 'Velg plan…' } = {}) {
@@ -1323,7 +1417,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     for (const p of list) {
       const opt = document.createElement('option');
       opt.value = planKeyOf(p);
-      opt.textContent = planLabelOf(p);
+      opt.textContent = adminPlanLabel(p, list);
       selectEl.appendChild(opt);
     }
   }
@@ -1488,6 +1582,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         const tr = document.createElement('tr');
 
         const ilText = m.clubMember ? 'Ja' : 'Nei';
+        const plan = allPlans.find(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(m.plan));
+        const planText = plan ? adminPlanLabel(plan) : (m.plan || '–');
         const statusLabel = m.active ? 'Aktiv' : 'Inaktiv';
         const statusClass = m.active ? 'status-text-active' : 'status-text-inactive';
 
@@ -1500,7 +1596,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
         tr.innerHTML = `
           <td>${escapeHtml(m.name || '–')}${m.tripletexFollowUp?.status === 'pending' ? '<div class="small tag-danger">Tripletex må kontrolleres</div>' : ''}</td>
-          <td>${escapeHtml(m.plan || '–')}</td>
+          <td>${escapeHtml(planText)}</td>
           <td>${ilText}</td>
           <td class="status">
             <span class="status-text ${statusClass}">${statusLabel}</span>
@@ -1532,11 +1628,11 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     for (const p of list) {
       const opt = document.createElement('option');
       opt.value = planKeyOf(p);
-      opt.textContent = planLabelOf(p);
-      if (opt.value === (currentPlan || '')) opt.selected = true;
+      opt.textContent = adminPlanLabel(p, list);
+      if (normalizedPlanKey(opt.value) === normalizedPlanKey(currentPlan)) opt.selected = true;
       modalMemberPlanSelect.appendChild(opt);
     }
-    if (currentPlan && !list.some(p => planKeyOf(p) === currentPlan)) {
+    if (currentPlan && !list.some(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(currentPlan))) {
       const current = document.createElement('option');
       current.value = currentPlan;
       current.textContent = `${currentPlan} (gjeldende)`;
@@ -1868,6 +1964,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     ordersTableBody.innerHTML = '';
     sorted.forEach(o => {
       const tr = document.createElement('tr');
+      const orderPlan = allPlans.find(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(o.membershipKey));
+      const orderPlanText = orderPlan ? adminPlanLabel(orderPlan) : (o.membershipKey || '–');
 
       const status = (o.status || '').toUpperCase();
       let statusClass = 'status-inactive';
@@ -1886,7 +1984,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
             <span>${escapeHtml(statusLabel)}</span>
           </div>
         </td>
-        <td>${escapeHtml(o.membershipKey || '–')}</td>
+        <td>${escapeHtml(orderPlanText)}</td>
         <td>${fmtAmount(o.amount)}</td>
         <td>${escapeHtml(o.email || '–')}</td>
         <td>${fmtDate(o.createdAt)}</td>
@@ -2639,7 +2737,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     list.forEach((p) => {
       const key = String(p.id || p.key || '').trim();
       if (!key) return;
-      const label = String(p.name || p.title || p.label || key);
+      const label = adminPlanLabel(p, list);
 
       const wrap = document.createElement('label');
       wrap.style.display = 'inline-flex';
@@ -2998,7 +3096,10 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       };
       if (modalEditEmail.value || selectedMember.email) changes.email = modalEditEmail.value;
       if (modalEditPhone.value || selectedMember.phone || selectedMember.phoneFull || selectedMember.mobile) changes.phone = modalEditPhone.value;
-      if (modalMemberPlanSelect.value || selectedMember.plan) changes.plan = modalMemberPlanSelect.value;
+      if (modalMemberPlanSelect.value || selectedMember.plan) {
+        changes.plan = normalizedPlanKey(modalMemberPlanSelect.value) === normalizedPlanKey(selectedMember.plan)
+          ? selectedMember.plan : modalMemberPlanSelect.value;
+      }
       if (datesChanged) {
         changes.membershipStartDate = start;
         changes.bindingMonthsAtStart = months;
@@ -3007,7 +3108,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       }
       const sensitiveChanged = String(changes.email || '').trim().toLowerCase() !== String(selectedMember.email || '').toLowerCase() ||
         String(changes.phone || '').replace(/\s/g, '') !== String(selectedMember.phone || selectedMember.phoneFull || selectedMember.mobile || '').replace(/\s/g, '') ||
-        String(changes.plan || '') !== String(selectedMember.plan || '');
+        normalizedPlanKey(changes.plan) !== normalizedPlanKey(selectedMember.plan);
       if (sensitiveChanged && !confirm('Endring av kontaktinfo eller plan kan påvirke innlogging og medlemsoversikten. Tripletex oppdateres ikke automatisk. Lagre?')) return;
       modalSaveDetailsBtn.disabled = true;
       modalMemberMsg.textContent = 'Lagrer opplysninger...';
