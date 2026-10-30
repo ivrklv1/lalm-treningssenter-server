@@ -564,6 +564,7 @@
     .door-event-details summary { cursor: pointer; }
     .door-event-details code { display: block; margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
     #ordersTableBody td { overflow-wrap: anywhere; }
+    #checkoutLogBody td { overflow-wrap: anywhere; }
     .order-event-details > div { margin-top: 6px; }
     .order-event-details button { margin: 6px 6px 0 0; }
 
@@ -612,6 +613,8 @@
       #doorLogBody td::before { content: none; }
       #ordersTableBody td { display: block; }
       #ordersTableBody td::before { content: none; }
+      #checkoutLogBody td { display: block; }
+      #checkoutLogBody td::before { content: none; }
       #logtab-door .table-wrapper { max-height: 65vh !important; overflow-y: auto; }
 
       #membersTableBody td:nth-child(1)::before { content: "Navn"; }
@@ -1071,6 +1074,25 @@
             </div>
           </div>
           <div id="ordersError" class="mt-1 small tag-danger" style="display:none;"></div>
+
+          <div class="mt-1">
+            <button id="toggleCheckoutLog" type="button" class="btn-secondary" aria-expanded="false">Vis innmeldingsforsøk</button>
+          </div>
+          <div id="checkoutLogPanel" class="mt-1" style="display:none;">
+            <div class="card-subtitle">Forsøk og avvisninger fra innmeldingen. En forespørsel betyr ikke at betaling er gjennomført.</div>
+            <label for="checkoutLogSearch">Finn innmeldingsforsøk</label>
+            <input id="checkoutLogSearch" type="search" placeholder="Søk på navn, plan eller hendelse…" />
+            <div id="checkoutLogCount" class="small text-muted mt-1"></div>
+            <div class="table-wrapper" style="max-height: 360px;">
+              <div class="scroll">
+                <table>
+                  <thead><tr><th>Innmeldingsforsøk</th></tr></thead>
+                  <tbody id="checkoutLogBody"><tr><td class="text-muted">Trykk «Vis innmeldingsforsøk» for å hente hendelser.</td></tr></tbody>
+                </table>
+              </div>
+            </div>
+            <div id="checkoutLogError" class="mt-1 small tag-danger" style="display:none;"></div>
+          </div>
         </div>
 
         <!-- UNDERFANE: DØR -->
@@ -2070,6 +2092,104 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       ordersErrorEl.style.display = 'block';
     }
   }
+
+  const toggleCheckoutLog = document.getElementById('toggleCheckoutLog');
+  const checkoutLogPanel = document.getElementById('checkoutLogPanel');
+  const checkoutLogSearch = document.getElementById('checkoutLogSearch');
+  const checkoutLogBody = document.getElementById('checkoutLogBody');
+  const checkoutLogCount = document.getElementById('checkoutLogCount');
+  const checkoutLogError = document.getElementById('checkoutLogError');
+  let checkoutLogLines = [];
+
+  function renderCheckoutLog() {
+    const query = checkoutLogSearch.value.trim().toLowerCase();
+    const visible = [...checkoutLogLines].reverse().filter(line => {
+      const memberId = line.match(/\bmemberId=([^\s]+)/)?.[1];
+      const orderId = line.match(/\borderId=([^\s]+)/)?.[1];
+      const member = memberId && allMembers.find(m => String(m.id) === memberId);
+      const order = orderId && allOrders.find(o => String(o.orderId) === orderId);
+      return `${line} ${member?.name || ''} ${order?.name || ''}`.toLowerCase().includes(query);
+    });
+    checkoutLogCount.textContent = `${visible.length} av ${checkoutLogLines.length} innmeldingshendelser vises.`;
+    checkoutLogBody.innerHTML = '';
+    if (!visible.length) {
+      checkoutLogBody.innerHTML = `<tr><td class="text-muted">${checkoutLogLines.length ? 'Ingen hendelser passer søket.' : 'Ingen innmeldingsforsøk funnet.'}</td></tr>`;
+      return;
+    }
+    visible.forEach(line => {
+      const event = line.match(/\bVIPPS_CHECKOUT_(REQUEST|BLOCKED_EXISTING_MEMBER|OK|ERROR)\b/)?.[1];
+      const eventLabel = ({ REQUEST: 'Forespørsel mottatt', BLOCKED_EXISTING_MEMBER: 'Avvist: aktivt medlem', OK: 'Vipps-ordre opprettet, ikke betalt', ERROR: 'Feil ved oppretting' })[event] || 'Innmeldingshendelse';
+      const timestamp = line.match(/^\[([^\]]+)\]/)?.[1];
+      const orderId = line.match(/\borderId=([^\s]+)/)?.[1];
+      const memberId = line.match(/\bmemberId=([^\s]+)/)?.[1];
+      const member = memberId && allMembers.find(m => String(m.id) === memberId);
+      const order = orderId && allOrders.find(o => String(o.orderId) === orderId);
+      let request = {};
+      if (event === 'REQUEST') {
+        try {
+          const parsed = JSON.parse(line.split(' body=')[1] || '{}');
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) request = parsed;
+        } catch (_) { /* Eldre logglinje uten gyldig JSON. */ }
+      }
+      const person = member?.name || (order && orderMemberName(order)) || request.name ||
+        [request.firstName, request.lastName].filter(Boolean).join(' ') ||
+        request.email || line.match(/\bemail=([^\s]+)/)?.[1] || 'Ukjent person';
+      const plan = request.membershipKey || request.membershipId || order?.membershipKey;
+      const tr = document.createElement('tr');
+      const cell = tr.insertCell();
+      const header = document.createElement('div');
+      header.className = 'door-event-header';
+      const timeAndName = document.createElement('strong');
+      timeAndName.textContent = `${fmtDate(timestamp)} · ${person}`;
+      header.appendChild(timeAndName);
+      const description = document.createElement('div');
+      description.className = 'door-event-description';
+      const result = document.createElement('span');
+      result.className = `door-event-result ${event === 'BLOCKED_EXISTING_MEMBER' || event === 'ERROR' ? 'denied' : ''}`;
+      result.textContent = eventLabel;
+      description.appendChild(result);
+      if (plan) {
+        const planText = document.createElement('span');
+        const planRecord = allPlans.find(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(plan));
+        planText.textContent = `· ${planRecord ? adminPlanLabel(planRecord) : plan}`;
+        description.appendChild(planText);
+      }
+      const details = document.createElement('details');
+      details.className = 'door-event-details';
+      const summary = document.createElement('summary');
+      summary.textContent = 'Vis detaljer';
+      const raw = document.createElement('code');
+      raw.textContent = line;
+      details.append(summary, raw);
+      cell.append(header, description, details);
+      checkoutLogBody.appendChild(tr);
+    });
+  }
+
+  async function loadCheckoutLog() {
+    checkoutLogError.style.display = 'none';
+    checkoutLogBody.innerHTML = '<tr><td class="text-muted">Laster innmeldingsforsøk…</td></tr>';
+    try {
+      const res = await fetch('/api/admin/logs?kind=checkout');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      checkoutLogLines = Array.isArray(data.lines) ? data.lines : [];
+      renderCheckoutLog();
+    } catch (e) {
+      checkoutLogBody.innerHTML = '<tr><td class="text-muted">Kunne ikke laste innmeldingsforsøk.</td></tr>';
+      checkoutLogError.textContent = 'Feil ved henting av innmeldingsforsøk: ' + e.message;
+      checkoutLogError.style.display = 'block';
+    }
+  }
+
+  toggleCheckoutLog.addEventListener('click', () => {
+    const open = checkoutLogPanel.style.display === 'none';
+    checkoutLogPanel.style.display = open ? 'block' : 'none';
+    toggleCheckoutLog.textContent = open ? 'Skjul innmeldingsforsøk' : 'Vis innmeldingsforsøk';
+    toggleCheckoutLog.setAttribute('aria-expanded', String(open));
+    if (open) loadCheckoutLog();
+  });
+  checkoutLogSearch.addEventListener('input', renderCheckoutLog);
 
   // ------- Logg (underfaner) -------
   const logSubtabsEl = document.getElementById('logSubtabs');

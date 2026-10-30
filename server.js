@@ -1913,6 +1913,8 @@ app.get('/api/admin/logs', basicAuth, (req, res) => {
     const rows = raw.split('\n').filter(Boolean);
     const lines = (req.query.kind === 'door'
       ? rows.filter(line => /\bdoor=\S+.*\baction=(?:OPEN_[A-Z_]+|DENY)\b/.test(line))
+      : req.query.kind === 'checkout'
+      ? rows.filter(line => /\bVIPPS_CHECKOUT_(?:REQUEST|BLOCKED_EXISTING_MEMBER|OK|ERROR)\b/.test(line))
       : rows).slice(-500);
     res.json({ ok: true, lines });
   } catch (e) {

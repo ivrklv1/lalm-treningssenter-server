@@ -21,6 +21,8 @@ test('admin keeps shared-email members separate and previews NIF changes before 
   fs.writeFileSync(path.join(dataDir, 'plans.json'), JSON.stringify([{ id: 'standard' }, { id: 'medlem_m_binding' }, { id: 'Korttid_7dager', shortTermDays: 7 }]));
   fs.writeFileSync(path.join(dataDir, 'access.log'), [
     '[2026-10-30T10:00:00Z] DROPIN_CREATE phone=12345678 token=synthetic-token',
+    '[2026-10-30T10:01:00Z] VIPPS_CHECKOUT_REQUEST body={"name":"Test A","membershipKey":"standard"}',
+    '[2026-10-30T10:02:00Z] VIPPS_CHECKOUT_BLOCKED_EXISTING_MEMBER email=test@example.invalid memberId=member-a',
     '30.10.2026, 12:00:00 name=Test A door=styrkerom gate=1 action=OPEN_MEMBER',
     '30.10.2026, 12:01:00 email=test@example.invalid door=styrkerom action=DENY reason=rate_limit',
   ].join('\n'));
@@ -58,7 +60,10 @@ test('admin keeps shared-email members separate and previews NIF changes before 
     const doorLog = await (await fetch(base + '/api/admin/logs?kind=door', { headers })).json();
     assert.equal(doorLog.lines.length, 2);
     assert.ok(doorLog.lines.every(line => /action=(OPEN_MEMBER|DENY)/.test(line)));
-    assert.equal((await (await fetch(base + '/api/admin/logs', { headers })).json()).lines.length, 3);
+    const checkoutLog = await (await fetch(base + '/api/admin/logs?kind=checkout', { headers })).json();
+    assert.equal(checkoutLog.lines.length, 2);
+    assert.ok(checkoutLog.lines.every(line => line.includes('VIPPS_CHECKOUT_')));
+    assert.equal((await (await fetch(base + '/api/admin/logs', { headers })).json()).lines.length, 5);
 
     const smsPreview = await post('/admin/sms/preview', {
       recipientMode: 'plan', planKeys: ['Korttid_7dager'], onlyActive: true,
