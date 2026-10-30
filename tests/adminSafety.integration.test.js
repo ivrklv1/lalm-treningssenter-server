@@ -19,6 +19,11 @@ test('admin keeps shared-email members separate and previews NIF changes before 
   fs.writeFileSync(path.join(dataDir, 'members.json'), JSON.stringify(members));
   fs.writeFileSync(path.join(dataDir, 'orders.json'), '[]');
   fs.writeFileSync(path.join(dataDir, 'plans.json'), JSON.stringify([{ id: 'standard' }, { id: 'medlem_m_binding' }, { id: 'Korttid_7dager', shortTermDays: 7 }]));
+  fs.writeFileSync(path.join(dataDir, 'access.log'), [
+    '[2026-10-30T10:00:00Z] DROPIN_CREATE phone=12345678 token=synthetic-token',
+    '30.10.2026, 12:00:00 name=Test A door=styrkerom gate=1 action=OPEN_MEMBER',
+    '30.10.2026, 12:01:00 email=test@example.invalid door=styrkerom action=DENY reason=rate_limit',
+  ].join('\n'));
   const listener = net.createServer();
   await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
   const port = listener.address().port;
@@ -49,6 +54,11 @@ test('admin keeps shared-email members separate and previews NIF changes before 
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     assert.match(output, /Server kjører på/);
+
+    const doorLog = await (await fetch(base + '/api/admin/logs?kind=door', { headers })).json();
+    assert.equal(doorLog.lines.length, 2);
+    assert.ok(doorLog.lines.every(line => /action=(OPEN_MEMBER|DENY)/.test(line)));
+    assert.equal((await (await fetch(base + '/api/admin/logs', { headers })).json()).lines.length, 3);
 
     const smsPreview = await post('/admin/sms/preview', {
       recipientMode: 'plan', planKeys: ['Korttid_7dager'], onlyActive: true,

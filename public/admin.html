@@ -554,6 +554,14 @@
       color: #111827;
     }
 
+    .door-event-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+    .door-event-result { font-weight: 600; }
+    .door-event-result.success { color: var(--success); }
+    .door-event-result.denied { color: var(--danger); }
+    .door-event-details { margin-top: 5px; color: var(--muted); }
+    .door-event-details summary { cursor: pointer; }
+    .door-event-details code { display: block; margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
     @media (max-width: 640px) {
       body { padding: 8px; }
       .page, main, .panel-grid, .card { min-width: 0; max-width: 100%; }
@@ -1019,7 +1027,7 @@
        <div class="card-title-row" style="margin-bottom:10px;">
           <div>
             <div class="card-title">Logg</div>
-            <div class="card-subtitle">Vipps-ordrer og dør-hendelser (access.log).</div>
+            <div class="card-subtitle">Vipps-ordrer og dørhendelser.</div>
           </div>
 
           <div class="pill-row" id="logSubtabs">
@@ -1076,14 +1084,14 @@
           <div class="card-title-row" style="margin-bottom:8px;">
             <div>
               <div class="card-title">Dør-logg</div>
-              <div class="card-subtitle">Siste hendelser fra access.log (maks 500 linjer).</div>
+              <div class="card-subtitle">Siste 500 dørhendelser. Åpne detaljer ved behov.</div>
             </div>
             <div class="btn-row" style="margin:0;">
               <button id="btnRefreshDoorLog" class="btn-secondary">Oppdater</button>
             </div>
           </div>
           <label for="doorLogSearch">Finn dørhendelse</label>
-          <input id="doorLogSearch" type="search" placeholder="Søk i de siste 500 logglinjene…" />
+          <input id="doorLogSearch" type="search" placeholder="Søk på navn, dør eller status…" />
           <div id="doorLogCount" class="small text-muted mt-1"></div>
 
           <div class="table-wrapper" style="max-height: 360px;">
@@ -2090,18 +2098,43 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   function renderDoorLog() {
       const query = doorLogSearch.value.trim().toLowerCase();
-      const show = [...doorLogLines].reverse().filter(line => String(line).toLowerCase().includes(query));
-      doorLogCount.textContent = `${show.length} av ${doorLogLines.length} linjer vises.`;
+      const show = [...doorLogLines].reverse().filter(line => {
+        const status = /\baction=DENY\b/.test(line) ? 'avvist' : 'åpnet';
+        return `${line} ${status}`.toLowerCase().includes(query);
+      });
+      doorLogCount.textContent = `${show.length} av ${doorLogLines.length} dørhendelser vises.`;
       if (!show.length) {
-        doorLogBody.innerHTML = `<tr><td class="text-muted">${doorLogLines.length ? 'Ingen linjer passer søket.' : 'Ingen logglinjer funnet.'}</td></tr>`;
+        doorLogBody.innerHTML = `<tr><td class="text-muted">${doorLogLines.length ? 'Ingen hendelser passer søket.' : 'Ingen dørhendelser funnet.'}</td></tr>`;
         return;
       }
       doorLogBody.innerHTML = '';
       show.forEach((line) => {
+        const timestamp = line.match(/^(.*?)\s+(?:name|email)=/)?.[1] || 'Tid ukjent';
+        const person = line.match(/\b(?:name|email)=(.*?)\s+door=/)?.[1] || 'Ukjent person';
+        const door = line.match(/\bdoor=([^\s]+)/)?.[1] || 'Ukjent dør';
+        const denied = /\baction=DENY\b/.test(line);
+        const reason = line.match(/\breason=([^\s]+)/)?.[1];
+        const reasonText = ({ rate_limit: 'For mange forsøk', open_failed: 'Åpning feilet' })[reason] || reason;
         const tr = document.createElement('tr');
-        tr.innerHTML =
-          `<td style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-                     font-size: 0.78rem; white-space: pre-wrap;">${escapeHtml(line)}</td>`;
+        const cell = tr.insertCell();
+        const header = document.createElement('div');
+        header.className = 'door-event-header';
+        const time = document.createElement('strong');
+        time.textContent = timestamp;
+        const result = document.createElement('span');
+        result.className = `door-event-result ${denied ? 'denied' : 'success'}`;
+        result.textContent = denied ? 'Avvist' : 'Åpnet';
+        header.append(time, result);
+        const description = document.createElement('div');
+        description.textContent = `${person} · ${door}${reasonText ? ` · ${reasonText}` : ''}`;
+        const details = document.createElement('details');
+        details.className = 'door-event-details';
+        const summary = document.createElement('summary');
+        summary.textContent = 'Tekniske detaljer';
+        const raw = document.createElement('code');
+        raw.textContent = line;
+        details.append(summary, raw);
+        cell.append(header, description, details);
         doorLogBody.appendChild(tr);
       });
   }
@@ -2111,7 +2144,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     if (doorLogError) doorLogError.style.display = 'none';
     doorLogBody.innerHTML = '<tr><td class="text-muted">Laster dør-logg…</td></tr>';
     try {
-      const res = await fetch('/api/admin/logs');
+      const res = await fetch('/api/admin/logs?kind=door');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       doorLogLines = data && Array.isArray(data.lines) ? data.lines : [];

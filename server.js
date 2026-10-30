@@ -1910,7 +1910,10 @@ app.get('/api/admin/logs', basicAuth, (req, res) => {
       return res.json({ ok: true, lines: [] });
     }
     const raw = fs.readFileSync(ACCESS_LOG, 'utf-8');
-    const lines = raw.split('\n').filter(Boolean).slice(-500);
+    const rows = raw.split('\n').filter(Boolean);
+    const lines = (req.query.kind === 'door'
+      ? rows.filter(line => /\bdoor=\S+.*\baction=(?:OPEN_[A-Z_]+|DENY)\b/.test(line))
+      : rows).slice(-500);
     res.json({ ok: true, lines });
   } catch (e) {
     console.error('Kunne ikke lese access.log:', e.message);
