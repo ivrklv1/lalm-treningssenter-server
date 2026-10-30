@@ -3831,6 +3831,23 @@ app.get('/vipps/order-status/:orderId', (req, res) => {
 
 
 
+app.get('/vipps/sandbox-result/:orderId', (req, res) => {
+  const order = findOrder(req.params.orderId);
+  if (!order) return res.status(404).json({ ok: false, error: 'order_not_found' });
+  const member = order.memberId ? getMembers().find(item => item.id === order.memberId) : null;
+  return res.json({
+    ok: true, status: order.status, paidAt: order.paidAt || null,
+    paidAtVerified: Boolean(order.paidAtVerifiedAt),
+    bindingMonths: order.bindingMonths ?? null,
+    memberFound: Boolean(member),
+    membershipStartDate: member?.membershipStartDate || null,
+    bindingEndDate: member?.bindingEndDate || null,
+    bindingMonthsAtStart: member?.bindingMonthsAtStart ?? null,
+    dateSourceMatchesOrder: member?.membershipStartOrderId === order.orderId,
+  });
+});
+
+
 /**
  * Admin-endpoint: preview SMS-mottakere (sender INGENTING)
  * body kan være:

@@ -49,7 +49,16 @@ test('sandbox exposes only protected Vipps test routes; reservation is unpaid', 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lalm-vipps-sandbox-test-'));
   const port = await freePort();
   const orders = [{ orderId: 'synthetic-reserve', status: 'RESERVED', amount: 100,
-    email: 'test@example.invalid', membershipKey: 'TEST_BINDING_12M' }];
+    email: 'test@example.invalid', membershipKey: 'TEST_BINDING_12M' }, {
+    orderId: 'synthetic-capture', status: 'CAPTURED', amount: 100,
+    email: 'test@example.invalid', memberId: 'synthetic-member', bindingMonths: 12,
+    paidAt: '2026-10-30T10:00:00Z', paidAtVerifiedAt: '2026-10-30T10:01:00Z',
+  }];
+  fs.writeFileSync(path.join(dataDir, 'members.json'), JSON.stringify([{
+    id: 'synthetic-member', email: 'private@example.invalid',
+    membershipStartDate: '2026-10-30', bindingEndDate: '2027-10-30',
+    bindingMonthsAtStart: 12, membershipStartOrderId: 'synthetic-capture',
+  }]));
   fs.writeFileSync(path.join(dataDir, 'orders.json'), JSON.stringify(orders));
   let output = '';
   const child = spawn(process.execPath, [
@@ -86,6 +95,16 @@ test('sandbox exposes only protected Vipps test routes; reservation is unpaid', 
     });
     assert.equal(callback.status, 200);
     assert.equal((await fetch(statusUrl)).status, 403);
+    const resultUrl = `${base}/vipps/sandbox-result/synthetic-capture`;
+    assert.equal((await fetch(resultUrl)).status, 403);
+    const resultResponse = await fetch(resultUrl, { headers: { 'x-sandbox-token': token } });
+    assert.equal(resultResponse.status, 200);
+    assert.deepEqual(await resultResponse.json(), {
+      ok: true, status: 'CAPTURED', paidAt: '2026-10-30T10:00:00Z',
+      paidAtVerified: true, bindingMonths: 12, memberFound: true,
+      membershipStartDate: '2026-10-30', bindingEndDate: '2027-10-30',
+      bindingMonthsAtStart: 12, dateSourceMatchesOrder: true,
+    });
     const authUrl = `${base}/vipps/sandbox-auth-check`;
     assert.equal((await fetch(authUrl)).status, 403);
     const authResponse = await fetch(authUrl, { headers: { 'x-sandbox-token': token } });
