@@ -27,6 +27,9 @@ const {
   stopTripletexSubscriptionForOrder,
 } = require('./tripletexClient');
 const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
+const { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus } = require('./membershipDates');
+const { confirmedRefund } = require('./refundReview');
+const { prepareAdminMemberEdit } = require('./memberAdminEdit');
 const { createVisitStats } = require('./visitStats');
 
 
@@ -294,8 +297,10 @@ function saveMembers(members) {
       JSON.stringify(members, null, 2),
       'utf-8',
     );
+    return true;
   } catch (e) {
     console.error('Kunne ikke skrive members.json til', MEMBERS_FILE, e.message);
+    return false;
   }
 }
 
@@ -1170,6 +1175,43 @@ app.get('/admin/orders', basicAuth, (req, res) => {
   res.json(orders);
 });
 
+// Kontroll utføres ved behov; Vipps sender ikke et eget refusjonsvarsel her.
+app.post('/admin/orders/:orderId/check-refund', basicAuth, async (req, res) => {
+  const order = findOrder(req.params.orderId);
+  if (!order) return res.status(404).json({ error: 'Ordren finnes ikke' });
+  if (!['SALE', 'CAPTURED'].includes(order.status) || !order.memberId) {
+    return res.status(400).json({ error: 'Ordren er ikke et aktivert medlemskjøp' });
+  }
+  try {
+    const refund = confirmedRefund(await getVippsPaymentDetails(order.orderId), order);
+    const now = new Date().toISOString();
+    const previous = order.refundReview;
+    const review = refund ? {
+      ...refund,
+      state: previous?.state === 'reviewed' && previous.refundedAmount === refund.refundedAmount ? 'reviewed' : 'pending',
+      detectedAt: previous?.detectedAt || now,
+      checkedAt: now,
+      ...(previous?.state === 'reviewed' && previous.refundedAmount === refund.refundedAmount
+        ? { reviewedAt: previous.reviewedAt, reviewedBy: previous.reviewedBy } : {}),
+    } : null;
+    updateOrderStatus(order.orderId, order.status, { refundReview: review, refundCheckedAt: now });
+    return res.json({ refundReview: review, checkedAt: now });
+  } catch (error) {
+    console.error('Kunne ikke kontrollere refusjon for ordre', order.orderId, error.message);
+    return res.status(502).json({ error: 'Kunne ikke kontrollere refusjon hos Vipps' });
+  }
+});
+
+app.post('/admin/orders/:orderId/refund-reviewed', basicAuth, (req, res) => {
+  const order = findOrder(req.params.orderId);
+  if (!order?.refundReview || order.refundReview.state !== 'pending') {
+    return res.status(400).json({ error: 'Ingen refusjon venter på vurdering' });
+  }
+  const review = { ...order.refundReview, state: 'reviewed', reviewedAt: new Date().toISOString(), reviewedBy: req.adminUser };
+  updateOrderStatus(order.orderId, order.status, { refundReview: review });
+  return res.json({ refundReview: review });
+});
+
 // Legg til/oppdater medlem (nytt admin-UI)
 app.post('/admin/members', basicAuth, (req, res) => {
   const body = req.body || {};
@@ -1441,6 +1483,23 @@ app.delete('/admin/plans/:id', basicAuth, (req, res) => {
 // -----------------------------------------------------
 // Admin: oppdatere / slette medlem via id (nytt admin-UI)
 // -----------------------------------------------------
+
+app.patch('/admin/members/:id/details', basicAuth, (req, res) => {
+  const members = getMembers();
+  const index = members.findIndex(item => String(item.id) === String(req.params.id));
+  if (index < 0) return res.status(404).json({ error: 'Medlemmet finnes ikke' });
+  try {
+    const { member, changedFields } = prepareAdminMemberEdit(
+      members[index], req.body, members, getPlans() || [], req.adminUser, new Date().toISOString()
+    );
+    if (!changedFields.length) return res.json({ ok: true, member, changedFields });
+    members[index] = member;
+    if (!saveMembers(members)) return res.status(500).json({ error: 'Kunne ikke lagre medlemsendringen' });
+    return res.json({ ok: true, member, changedFields });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+});
 
 // Oppdatér medlem (navn, e-post, telefon, plan, aktiv m.m.)
 app.put('/admin/members/:id', basicAuth, (req, res) => {
@@ -2447,6 +2506,7 @@ if (src === 'web') {
           if (planObj && typeof planObj.amount === 'number') {
       selected = {
         amount: planObj.amount,
+        bindingMonths: planObj.bindingMonths == null ? null : Number(planObj.bindingMonths),
         text: planObj.text || planObj.name || membershipKey,
         prorate: planObj.prorate !== false,
         type: planObj.type || null,
@@ -2459,16 +2519,19 @@ if (src === 'web') {
     if (!selected) {
       const membershipMap = {
         LALM_IL_BINDING: {
+          bindingMonths: 12,
           amount: 34900,
           text: 'Lalm IL-medlem - 12 mnd binding',
           prorate: true,
         },
         STANDARD_BINDING: {
+          bindingMonths: 12,
           amount: 44900,
           text: 'Standard - 12 mnd binding',
           prorate: true,
         },
         HYTTE_BINDING: {
+          bindingMonths: 12,
           amount: 16900,
           text: 'Hyttemedlemskap - 12 mnd binding',
           prorate: true,
@@ -2482,11 +2545,13 @@ if (src === 'web') {
         },
 
         LALM_IL_UBIND: {
+          bindingMonths: 0,
           amount: 44900,
           text: 'Lalm IL-medlem – uten binding',
           prorate: true,
         },
         STANDARD_UBIND: {
+          bindingMonths: 0,
           amount: 54900,
           text: 'Standard – uten binding',
           prorate: true,
@@ -2743,6 +2808,7 @@ if (src === 'web') {
       orderId,
       status: 'PENDING',
       membershipKey,
+      bindingMonths: selected.bindingMonths == null ? null : selected.bindingMonths,
       phone: cleanPhone,
       phoneFull,
       name: name || '',
@@ -2902,6 +2968,79 @@ async function vippsAutoCapture(orderId, amountInOre, transactionText) {
       } data=${JSON.stringify(e.response?.data || {})}\n`
     );
     return false;
+  }
+}
+
+const membershipDateChecksInFlight = new Set();
+
+async function getVippsPaymentDetails(orderId) {
+  const apiBase = process.env.VIPPS_ENV === 'test' ? 'https://apitest.vipps.no' : 'https://api.vipps.no';
+  const accessToken = await getVippsAccessToken();
+  const response = await axios.get(`${apiBase}/ecomm/v2/payments/${encodeURIComponent(orderId)}/details`, {
+    timeout: 5000,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY,
+      'Merchant-Serial-Number': process.env.VIPPS_MSN,
+    },
+  });
+  return response.data;
+}
+
+async function verifyMembershipDatesFromVippsOnce(orderId) {
+  const order = findOrder(orderId);
+  if (!order || !['SALE', 'CAPTURED'].includes(order.status) || !order.memberId ||
+      order.bindingMonths == null || order.paidAtVerifiedAt || order.isShortOrDropin ||
+      computeValidUntilForPurchase(order.membershipKey)) return false;
+
+  updateOrderStatus(orderId, order.status, { dateVerificationLastAttemptAt: new Date().toISOString() });
+  const paidAt = verifiedPaymentTime(await getVippsPaymentDetails(orderId), order);
+  if (!paidAt) return false;
+  const dates = datesForPaidMembership(paidAt, order.bindingMonths);
+  if (!dates) return false;
+
+  const members = getMembers();
+  const member = members.find(item => item.id === order.memberId);
+  if (!member) return false;
+  const previousOrder = member.membershipStartOrderId ? findOrder(member.membershipStartOrderId) : null;
+  if (shouldReplaceMembershipDates(
+    member, orderId, paidAt, dates.membershipStartDate, previousOrder?.paidAt
+  )) {
+    Object.assign(member, dates, {
+      membershipStartOrderId: orderId, updatedAt: new Date().toISOString(),
+    });
+    saveMembers(members);
+  }
+  updateOrderStatus(orderId, order.status, {
+    paidAt, paidAtVerifiedAt: new Date().toISOString(),
+  });
+  return true;
+}
+
+async function verifyMembershipDatesFromVipps(orderId) {
+  if (membershipDateChecksInFlight.has(orderId)) return false;
+  membershipDateChecksInFlight.add(orderId);
+  try {
+    return await verifyMembershipDatesFromVippsOnce(orderId);
+  } finally {
+    membershipDateChecksInFlight.delete(orderId);
+  }
+}
+
+async function retryMissingMembershipDates() {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  const pending = getOrders().filter(order =>
+    ['SALE', 'CAPTURED'].includes(order.status) && order.memberId &&
+    order.bindingMonths != null && !order.paidAtVerifiedAt && !order.isShortOrDropin &&
+    !computeValidUntilForPurchase(order.membershipKey) &&
+    (!order.dateVerificationLastAttemptAt || Date.parse(order.dateVerificationLastAttemptAt) < cutoff)
+  ).sort((a, b) => Date.parse(a.dateVerificationLastAttemptAt || 0) - Date.parse(b.dateVerificationLastAttemptAt || 0));
+  for (const order of pending.slice(0, 20)) {
+    try {
+      await verifyMembershipDatesFromVipps(order.orderId);
+    } catch (error) {
+      console.warn('[MEMBERSHIP_DATES_VERIFY_FAILED]', order.orderId, error?.message || String(error));
+    }
   }
 }
 
@@ -3279,10 +3418,10 @@ function firstDayOfNextMonth(fromDate = new Date()) {
 // =====================================================
 // Vipps callback – idempotent + auto-capture
 // =====================================================
-app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
-  const { orderId } = req.params || {};
+const vippsOrdersInFlight = new Set();
+
+async function processVippsOrderOnce(orderId, body = {}) {
   const ts = new Date().toISOString();
-  const body = req.body || {};
 
   const callbackStatus =
     (body.transactionInfo && body.transactionInfo.status) ||
@@ -3296,21 +3435,16 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     callbackStatus
   );
   appendAccessLog(
-    `[${ts}] VIPPS_CALLBACK orderId=${orderId} statusRaw=${callbackStatus} body=${JSON.stringify(
-      body
-    )}\n`
+    `[${ts}] VIPPS_CALLBACK orderId=${orderId} statusRaw=${callbackStatus}\n`
   );
 
   try {
-    const status = String(callbackStatus || '').toUpperCase();
-
     // 1) Finn ordren i orders.json
     const existingOrder = findOrder(orderId);
     if (!existingOrder) {
       appendAccessLog(
         `[${new Date().toISOString()}] VIPPS_CALLBACK_NO_ORDER orderId=${orderId}\n`
       );
-      if (!res.headersSent) return res.status(200).send('OK');
       return;
     }
 
@@ -3322,10 +3456,15 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       appendAccessLog(
        `[${new Date().toISOString()}] VIPPS_CALLBACK_IDEMPOTENT orderId=${orderId} alreadyStatus=${existingOrder.status}\n`
       );
-      if (!res.headersSent) return res.status(200).send('OK');
       return;
     }
 
+    updateOrderStatus(orderId, existingOrder.status, {
+      paymentDetailsLastCheckedAt: new Date().toISOString(),
+    });
+    const details = await getVippsPaymentDetails(orderId);
+    const status = verifiedVippsStatus(details, existingOrder);
+    if (!status) return;
 
     // 3) Mappe status fra Vipps -> vår interne status
     let newStatus = existingOrder.status;
@@ -3338,10 +3477,9 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       newStatus = 'FAILED';
     }
 
-    const vippsReference =
-      (body.transactionInfo && body.transactionInfo.transactionId) ||
-      (body.transactionSummary && body.transactionSummary.transactionId) ||
-      null;
+    const vippsReference = details.transactionLogHistory
+      .filter(entry => entry.operationSuccess === true)
+      .sort((a, b) => Date.parse(b.timeStamp) - Date.parse(a.timeStamp))[0]?.transactionId || null;
 
     // 3.1 AUTO-CAPTURE: hvis Vipps sier RESERVED/RESERVE → prøv å belaste
     if (['RESERVE', 'RESERVED'].includes(status)) {
@@ -3361,9 +3499,11 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         );
 
         if (captureOk) {
-          newStatus = 'CAPTURED';
+          setTimeout(() => processVippsOrder(orderId).catch(error => {
+            console.warn('[VIPPS_VERIFY_RETRY_FAILED]', orderId, error?.message || String(error));
+          }), 2000).unref();
           appendAccessLog(
-            `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_STATUS_UPDATED orderId=${orderId} newStatus=CAPTURED\n`
+            `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_WAITING_FOR_DETAILS orderId=${orderId}\n`
           );
         } else {
           appendAccessLog(
@@ -3393,7 +3533,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     );
 
     // 4) Ved betalt → aktiver medlem (uten TELL-sync)
-    if (['RESERVED', 'SALE', 'CAPTURED'].includes(newStatus)) {
+    if (['SALE', 'CAPTURED'].includes(newStatus)) {
       const members = getMembers();
       const phoneDigits = String(updatedOrder.phone || '').replace(/\D/g, '');
       let membersChanged = false;
@@ -3584,6 +3724,12 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         } catch (_) {}
       }
 
+      if (memberId && ['SALE', 'CAPTURED'].includes(newStatus)) {
+        setImmediate(() => verifyMembershipDatesFromVipps(orderId).catch(error => {
+          console.warn('[MEMBERSHIP_DATES_VERIFY_FAILED]', orderId, error?.message || String(error));
+        }));
+      }
+
 
       // 4.3) Tripletex-sync + automatisk godkjenning av abonnement (asynkron – ikke blokkér Vipps-callback)
       setImmediate(() => {
@@ -3624,7 +3770,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       }
     }
 
-    if (!res.headersSent) return res.status(200).send('OK');
+    return;
   } catch (err) {
     console.error(
       'Vipps callback error:',
@@ -3633,8 +3779,43 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     appendAccessLog(
       `[${new Date().toISOString()}] VIPPS_CALLBACK_ERROR orderId=${orderId} err=${err.message}\n`
     );
-    if (!res.headersSent) return res.status(200).send('OK');
+    return;
   }
+}
+
+async function processVippsOrder(orderId, body = {}) {
+  if (vippsOrdersInFlight.has(orderId)) return;
+  vippsOrdersInFlight.add(orderId);
+  try {
+    await processVippsOrderOnce(orderId, body);
+  } finally {
+    vippsOrdersInFlight.delete(orderId);
+  }
+}
+
+async function retryPendingVippsOrders() {
+  const now = Date.now();
+  const orders = getOrders().filter(order =>
+    ['PENDING', 'RESERVED'].includes(order.status) &&
+    Date.parse(order.createdAt) > now - 7 * 86400000 &&
+    (!order.paymentDetailsLastCheckedAt ||
+      Date.parse(order.paymentDetailsLastCheckedAt) < now - 5 * 60000)
+  ).sort((a, b) => Date.parse(a.paymentDetailsLastCheckedAt || 0) - Date.parse(b.paymentDetailsLastCheckedAt || 0));
+  for (const order of orders.slice(0, 20)) {
+    try {
+      await processVippsOrder(order.orderId);
+    } catch (error) {
+      console.warn('[VIPPS_PENDING_VERIFY_FAILED]', order.orderId, error?.message || String(error));
+    }
+  }
+}
+
+app.post('/vipps/callback/v2/payments/:orderId', (req, res) => {
+  const orderId = req.params.orderId;
+  res.status(200).send('OK');
+  setImmediate(() => processVippsOrder(orderId, req.body || {}).catch(error => {
+    console.warn('[VIPPS_VERIFY_FAILED]', orderId, error?.message || String(error));
+  }));
 });
 
 
@@ -3656,9 +3837,8 @@ app.get('/vipps/order-status/:orderId', (req, res) => {
   const rawStatus = order.status || order.vippsTransactionStatus || 'PENDING';
   const status = String(rawStatus || '').toUpperCase();
 
-  // "Betalt" i vår verden = samme logikk som i callbacken:
-  // vi aktiverer medlem ved RESERVED / SALE / CAPTURED.
-  const isPaid = ['RESERVED', 'SALE', 'CAPTURED'].includes(status);
+  // En reservasjon er ikke belastet og skal ikke vises som betalt.
+  const isPaid = ['SALE', 'CAPTURED'].includes(status);
 
   return res.json({
     ok: true,
@@ -4211,6 +4391,22 @@ if (TRIPLETEX_RETRY_INTERVAL_MINUTES > 0) {
       console.warn('[TRIPLETEX] retry pass error', e?.message || String(e));
     }
   }, ms);
+}
+
+if (process.env.VIPPS_CLIENT_ID && process.env.VIPPS_CLIENT_SECRET &&
+    process.env.VIPPS_SUBSCRIPTION_KEY && process.env.VIPPS_MSN) {
+  setTimeout(() => retryPendingVippsOrders().catch(error => {
+    console.warn('[VIPPS_PENDING_RETRY_FAILED]', error?.message || String(error));
+  }), 30 * 1000).unref();
+  setInterval(() => retryPendingVippsOrders().catch(error => {
+    console.warn('[VIPPS_PENDING_RETRY_FAILED]', error?.message || String(error));
+  }), 5 * 60 * 1000).unref();
+  setTimeout(() => retryMissingMembershipDates().catch(error => {
+    console.warn('[MEMBERSHIP_DATES_RETRY_FAILED]', error?.message || String(error));
+  }), 60 * 1000).unref();
+  setInterval(() => retryMissingMembershipDates().catch(error => {
+    console.warn('[MEMBERSHIP_DATES_RETRY_FAILED]', error?.message || String(error));
+  }), 60 * 60 * 1000).unref();
 }
 
 
