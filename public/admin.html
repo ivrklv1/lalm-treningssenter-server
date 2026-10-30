@@ -280,6 +280,7 @@
     .status-pill {
       display: inline-flex;
       align-items: center;
+      justify-self: start;
       border-radius: 999px;
       padding: 2px 8px;
       font-size: 0.7rem;
@@ -294,6 +295,11 @@
 
     .status-pill span:first-child {
       display: none;
+    }
+
+    .status-pill span:not(:first-child) {
+      width: auto;
+      height: auto;
     }
 
     .status-active {
@@ -546,6 +552,100 @@
 
     .modal-close-btn:hover {
       color: #111827;
+    }
+
+    .door-event-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+    .door-event-header strong { min-width: 0; overflow-wrap: anywhere; }
+    .door-event-description { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+    .door-event-result { font-weight: 600; }
+    .door-event-result.success { color: var(--success); }
+    .door-event-result.denied { color: var(--danger); }
+    .door-event-details { margin-top: 5px; color: var(--muted); }
+    .door-event-details summary { cursor: pointer; }
+    .door-event-details code { display: block; margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    #ordersTableBody td { overflow-wrap: anywhere; }
+    #checkoutLogBody td { overflow-wrap: anywhere; }
+    .checkout-event-details > div { margin-top: 6px; overflow-wrap: anywhere; }
+    .order-event-details > div { margin-top: 6px; }
+    .order-event-details button { margin: 6px 6px 0 0; }
+
+    @media (max-width: 640px) {
+      body { padding: 8px; }
+      .page, main, .panel-grid, .card { min-width: 0; max-width: 100%; }
+      header { flex-direction: column; align-items: flex-start; padding: 16px; gap: 10px; border-radius: 18px; }
+      header h1 { font-size: 1.2rem; }
+      header p { font-size: 0.8rem; }
+      .badge { white-space: normal; }
+      .tabs-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-radius: 16px; overflow: visible; margin-top: 12px; }
+      .tab-button { min-width: 0; min-height: 44px; padding: 8px; white-space: normal; font-size: 0.82rem; text-align: center; justify-content: center; }
+      .tab-button:last-child { grid-column: 1 / -1; }
+      .card { padding: 14px; }
+      .card-title-row { flex-wrap: wrap; align-items: flex-start; }
+      .card-title-row > * { min-width: 0; }
+      .pill-row { max-width: 100%; flex-wrap: wrap; border-radius: 12px; }
+      .pill-row button { min-height: 40px; }
+      .btn-row > button, #smsPreviewBtn, #sendSmsBtn { min-height: 44px; }
+      input, select, textarea { min-width: 0; font-size: 16px; }
+      label, .small, .card-subtitle { font-size: 0.85rem; line-height: 1.4; }
+      .sms-mode-options { display: grid; grid-template-columns: 1fr; gap: 2px; }
+      .sms-mode-options label { min-height: 44px; }
+      #smsMembersWrapper > div:last-child { max-height: none !important; overflow: visible !important; }
+      #smsMembersWrapper table, #smsMembersWrapper tbody { display: block; width: 100%; }
+      #smsPreviewBtn + span, #sendSmsBtn + span { overflow-wrap: anywhere; }
+      #tab-sms .card > div[style*="align-items:center"] { flex-wrap: wrap; }
+
+      .table-wrapper { max-height: none !important; overflow: visible; display: block; }
+      .table-wrapper .scroll { overflow: visible; }
+      .table-wrapper table, .table-wrapper tbody { display: block; width: 100%; }
+      .table-wrapper thead, #smsMembersWrapper thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+      .table-wrapper tr, #smsMembersWrapper tbody tr { display: flex; flex-direction: column; width: 100%; margin: 0 0 10px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+      .table-wrapper td, #smsMembersWrapper tbody td { display: grid; grid-template-columns: minmax(86px, 36%) minmax(0, 1fr); gap: 8px; width: 100%; padding: 9px 4px !important; border-bottom: 1px solid var(--border); text-align: left !important; white-space: normal; overflow-wrap: anywhere; font-size: 0.85rem; align-items: center; }
+      .table-wrapper td:last-child, #smsMembersWrapper tbody td:last-child { border-bottom: 0; }
+      .table-wrapper td::before, #smsMembersWrapper tbody td::before { color: var(--muted); font-weight: 600; font-size: 0.75rem; }
+      .table-wrapper td[colspan], #smsMembersWrapper tbody td[colspan] { display: block; }
+      .table-wrapper td[colspan]::before, #smsMembersWrapper tbody td[colspan]::before { content: none; }
+      .table-wrapper td > input, .table-wrapper td > select { width: 100% !important; }
+      .table-wrapper td > input[type="checkbox"], #smsMembersWrapper td input[type="checkbox"] { width: 22px !important; height: 22px; }
+      .table-wrapper td > button { min-height: 40px; }
+      .table-wrapper td > * { min-width: 0; max-width: 100%; }
+      #plansTableBody tr { cursor: default; }
+      #plansTableBody td:nth-child(2) { order: -1; font-weight: 600; }
+      #doorLogBody td { display: block; overflow-wrap: anywhere; }
+      #doorLogBody td::before { content: none; }
+      #ordersTableBody td { display: block; }
+      #ordersTableBody td::before { content: none; }
+      #checkoutLogBody td { display: block; }
+      #checkoutLogBody td::before { content: none; }
+      #logtab-door .table-wrapper { max-height: 65vh !important; overflow-y: auto; }
+
+      #membersTableBody td:nth-child(1)::before { content: "Navn"; }
+      #membersTableBody td:nth-child(2)::before { content: "Plan"; }
+      #membersTableBody td:nth-child(3)::before { content: "Lalm IL"; }
+      #membersTableBody td:nth-child(4)::before { content: "Status"; }
+      #membersTableBody td:nth-child(5)::before { content: "Datoer"; }
+      #plansTableBody td:nth-child(1)::before { content: "Nøkkel"; }
+      #plansTableBody td:nth-child(2)::before { content: "Navn"; }
+      #plansTableBody td:nth-child(3)::before { content: "Type"; }
+      #plansTableBody td:nth-child(4)::before { content: "Pris (kr)"; }
+      #plansTableBody td:nth-child(5)::before { content: "Innmelding (kr)"; }
+      #plansTableBody td:nth-child(6)::before { content: "Binding (mnd)"; }
+      #plansTableBody td:nth-child(7)::before { content: "Korttidsdager"; }
+      #plansTableBody td:nth-child(8)::before { content: "Web"; }
+      #plansTableBody td:nth-child(9)::before { content: "App"; }
+      #plansTableBody td:nth-child(10)::before { content: "Aktiv"; }
+      #plansTableBody td:nth-child(11)::before { content: "Sortering"; }
+      #plansTableBody td:nth-child(12)::before { content: "Tripletex ID"; }
+      #plansTableBody td:nth-child(13)::before { content: "Tekst"; }
+      #smsMembersBody td:nth-child(1)::before { content: "Velg"; }
+      #smsMembersBody td:nth-child(2)::before { content: "Navn"; }
+      #smsMembersBody td:nth-child(3)::before { content: "Telefon"; }
+      #smsMembersBody td:nth-child(4)::before { content: "Status"; }
+
+      .modal-backdrop { align-items: stretch; justify-content: stretch; }
+      .modal-card { width: 100%; max-width: none; max-height: 100dvh; border-radius: 0; padding: 16px 16px max(16px, env(safe-area-inset-bottom)); box-shadow: none; }
+      .modal-header { position: sticky; top: -16px; z-index: 2; background: #fff; padding: 12px 0; }
+      .modal-close-btn { min-width: 44px; min-height: 44px; justify-content: center; }
+      .modal-card > .btn-row { position: sticky; bottom: -16px; z-index: 2; background: #fff; padding: 10px 0 max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); }
     }
   </style>
 </head>
@@ -931,7 +1031,7 @@
        <div class="card-title-row" style="margin-bottom:10px;">
           <div>
             <div class="card-title">Logg</div>
-            <div class="card-subtitle">Vipps-ordrer og dør-hendelser (access.log).</div>
+            <div class="card-subtitle">Vipps-ordrer og dørhendelser.</div>
           </div>
 
           <div class="pill-row" id="logSubtabs">
@@ -955,7 +1055,7 @@
               </span>
             </div>
           </div>
-          <label for="orderSearch">Finn ordre (ordre-ID, e-post eller plan)</label>
+          <label for="orderSearch">Finn ordre (navn, ordre-ID, e-post eller plan)</label>
           <input id="orderSearch" type="search" placeholder="Søk i ordreloggen…" />
 
           <div class="table-wrapper" style="max-height: 360px;">
@@ -963,24 +1063,37 @@
               <table>
                 <thead>
                   <tr>
-                    <th>OrderId</th>
-                    <th>Status</th>
-                    <th>Plan</th>
-                    <th>Beløp</th>
-                    <th>E-post</th>
-                    <th>Opprettet</th>
-                    <th>Refusjon</th>
+                    <th>Ordre</th>
                   </tr>
                 </thead>
                 <tbody id="ordersTableBody">
                   <tr>
-                    <td colspan="7" class="text-muted">Laster ordrer…</td>
+                    <td class="text-muted">Laster ordrer…</td>
                   </tr>
                 </tbody>
               </table>
             </div>
           </div>
           <div id="ordersError" class="mt-1 small tag-danger" style="display:none;"></div>
+
+          <div class="mt-1">
+            <button id="toggleCheckoutLog" type="button" class="btn-secondary" aria-expanded="false">Vis innmeldingsforsøk</button>
+          </div>
+          <div id="checkoutLogPanel" class="mt-1" style="display:none;">
+            <div class="card-subtitle">Forsøk og avvisninger fra innmeldingen. Se ordrelisten for gjeldende betalingsstatus.</div>
+            <label for="checkoutLogSearch">Finn innmeldingsforsøk</label>
+            <input id="checkoutLogSearch" type="search" placeholder="Søk på navn, plan eller hendelse…" />
+            <div id="checkoutLogCount" class="small text-muted mt-1"></div>
+            <div class="table-wrapper" style="max-height: 360px;">
+              <div class="scroll">
+                <table>
+                  <thead><tr><th>Innmeldingsforsøk</th></tr></thead>
+                  <tbody id="checkoutLogBody"><tr><td class="text-muted">Trykk «Vis innmeldingsforsøk» for å hente hendelser.</td></tr></tbody>
+                </table>
+              </div>
+            </div>
+            <div id="checkoutLogError" class="mt-1 small tag-danger" style="display:none;"></div>
+          </div>
         </div>
 
         <!-- UNDERFANE: DØR -->
@@ -988,14 +1101,14 @@
           <div class="card-title-row" style="margin-bottom:8px;">
             <div>
               <div class="card-title">Dør-logg</div>
-              <div class="card-subtitle">Siste hendelser fra access.log (maks 500 linjer).</div>
+              <div class="card-subtitle">Siste 500 dørhendelser. Åpne detaljer ved behov.</div>
             </div>
             <div class="btn-row" style="margin:0;">
               <button id="btnRefreshDoorLog" class="btn-secondary">Oppdater</button>
             </div>
           </div>
           <label for="doorLogSearch">Finn dørhendelse</label>
-          <input id="doorLogSearch" type="search" placeholder="Søk i de siste 500 logglinjene…" />
+          <input id="doorLogSearch" type="search" placeholder="Søk på navn, dør eller status…" />
           <div id="doorLogCount" class="small text-muted mt-1"></div>
 
           <div class="table-wrapper" style="max-height: 360px;">
@@ -1287,10 +1400,20 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     return String(p?.id || p?.key || '').trim();
   }
 
+  function normalizedPlanKey(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
   function planLabelOf(p) {
-    const name = String(p?.name || '').trim();
+    const name = String(p?.name || p?.title || p?.label || '').trim();
     const key = String(p?.id || p?.key || '').trim();
     return name ? name : key;
+  }
+
+  function adminPlanLabel(p, plans = allPlans) {
+    const label = planLabelOf(p);
+    return plans.filter(item => normalizedPlanKey(planLabelOf(item)) === normalizedPlanKey(label)).length > 1
+      ? `${label} (${planKeyOf(p)})` : label;
   }
 
   function buildPlanOptions(selectEl, plans, { includeAll = false, includePlaceholder = true, placeholder = 'Velg plan…' } = {}) {
@@ -1319,7 +1442,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     for (const p of list) {
       const opt = document.createElement('option');
       opt.value = planKeyOf(p);
-      opt.textContent = planLabelOf(p);
+      opt.textContent = adminPlanLabel(p, list);
       selectEl.appendChild(opt);
     }
   }
@@ -1451,7 +1574,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   function renderMembers() {
     const q = (searchInput.value || '').toLowerCase();
-    const planFilter = filterPlan.value || '';
+    const planFilter = normalizedPlanKey(filterPlan.value);
     const dateFilter = filterMembershipDates.value || '';
     const followUpFilter = filterTripletexFollowUp.value || '';
 
@@ -1459,7 +1582,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     tripletexFollowUpCount.textContent = allMembers.filter(m => m.tripletexFollowUp?.status === 'pending').length;
 
     const filtered = allMembers.filter(m => {
-      if (planFilter && (m.plan || '') !== planFilter) return false;
+      if (planFilter && normalizedPlanKey(m.plan) !== planFilter) return false;
       const dateState = membershipDateState(m);
       if (dateFilter === 'missing' && !(m.active && dateState === 'missing')) return false;
       if (dateFilter === 'review' && dateState !== 'review') return false;
@@ -1484,6 +1607,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         const tr = document.createElement('tr');
 
         const ilText = m.clubMember ? 'Ja' : 'Nei';
+        const plan = allPlans.find(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(m.plan));
+        const planText = plan ? adminPlanLabel(plan) : (m.plan || '–');
         const statusLabel = m.active ? 'Aktiv' : 'Inaktiv';
         const statusClass = m.active ? 'status-text-active' : 'status-text-inactive';
 
@@ -1496,7 +1621,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
         tr.innerHTML = `
           <td>${escapeHtml(m.name || '–')}${m.tripletexFollowUp?.status === 'pending' ? '<div class="small tag-danger">Tripletex må kontrolleres</div>' : ''}</td>
-          <td>${escapeHtml(m.plan || '–')}</td>
+          <td>${escapeHtml(planText)}</td>
           <td>${ilText}</td>
           <td class="status">
             <span class="status-text ${statusClass}">${statusLabel}</span>
@@ -1528,11 +1653,11 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     for (const p of list) {
       const opt = document.createElement('option');
       opt.value = planKeyOf(p);
-      opt.textContent = planLabelOf(p);
-      if (opt.value === (currentPlan || '')) opt.selected = true;
+      opt.textContent = adminPlanLabel(p, list);
+      if (normalizedPlanKey(opt.value) === normalizedPlanKey(currentPlan)) opt.selected = true;
       modalMemberPlanSelect.appendChild(opt);
     }
-    if (currentPlan && !list.some(p => planKeyOf(p) === currentPlan)) {
+    if (currentPlan && !list.some(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(currentPlan))) {
       const current = document.createElement('option');
       current.value = currentPlan;
       current.textContent = `${currentPlan} (gjeldende)`;
@@ -1845,15 +1970,20 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   // ------- Vipps-ordrer -------
 
+  function orderMemberName(order) {
+    const member = order.memberId && allMembers.find(m => String(m.id) === String(order.memberId));
+    return member?.name || order.name || order.email || 'Ukjent medlem';
+  }
+
   function renderOrders() {
     const query = orderSearch.value.trim().toLowerCase();
     const matchingOrders = query ? allOrders.filter(order =>
-      [order.orderId, order.email, order.membershipKey, order.status]
+      [order.orderId, order.email, order.membershipKey, order.status, order.name, orderMemberName(order)]
         .some(value => String(value || '').toLowerCase().includes(query))) : allOrders;
     ordersCountEl.textContent = `${matchingOrders.length} av ${allOrders.length}`;
 
     if (!matchingOrders.length) {
-      ordersTableBody.innerHTML = `<tr><td colspan="7" class="text-muted">${allOrders.length ? 'Ingen ordrer passer søket.' : 'Ingen ordrer registrert ennå.'}</td></tr>`;
+      ordersTableBody.innerHTML = `<tr><td class="text-muted">${allOrders.length ? 'Ingen ordrer passer søket.' : 'Ingen ordrer registrert ennå.'}</td></tr>`;
       return;
     }
 
@@ -1864,35 +1994,46 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     ordersTableBody.innerHTML = '';
     sorted.forEach(o => {
       const tr = document.createElement('tr');
+      const orderPlan = allPlans.find(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(o.membershipKey));
+      const orderPlanText = orderPlan ? adminPlanLabel(orderPlan) : (o.membershipKey || '–');
 
       const status = (o.status || '').toUpperCase();
-      let statusClass = 'status-inactive';
-      let statusLabel = status || '-';
-      if (['RESERVED', 'SALE', 'CAPTURED'].includes(status)) {
-        statusClass = 'status-active';
-      } else if (['CANCELLED', 'FAILED'].includes(status)) {
-        statusClass = 'status-cancelled';
+      const statusLabel = ({ SALE: 'Betalt', CAPTURED: 'Betalt', RESERVED: 'Reservert', PENDING: 'Venter på betaling', CANCELLED: 'Avbrutt', FAILED: 'Feilet' })[status] || status || 'Ukjent status';
+      const cell = tr.insertCell();
+      const header = document.createElement('div');
+      header.className = 'door-event-header';
+      const timeAndName = document.createElement('strong');
+      timeAndName.textContent = `${fmtDate(o.createdAt)} · ${orderMemberName(o)}`;
+      header.appendChild(timeAndName);
+      const description = document.createElement('div');
+      description.className = 'door-event-description';
+      const planAndAmount = document.createElement('span');
+      planAndAmount.textContent = `${orderPlanText} · ${fmtAmount(o.amount)}`;
+      const result = document.createElement('span');
+      result.className = `door-event-result ${['SALE', 'CAPTURED'].includes(status) ? 'success' : ['CANCELLED', 'FAILED'].includes(status) ? 'denied' : ''}`;
+      result.textContent = `· ${statusLabel}`;
+      description.append(planAndAmount, result);
+      const details = document.createElement('details');
+      details.className = 'door-event-details order-event-details';
+      const summary = document.createElement('summary');
+      summary.textContent = 'Ordredetaljer';
+      details.appendChild(summary);
+      for (const [label, value] of [['Ordre-ID', o.orderId], ['E-post', o.email], ['Vipps-status', status]]) {
+        const line = document.createElement('div');
+        line.textContent = `${label}: ${value || '–'}`;
+        details.appendChild(line);
       }
-
-      tr.innerHTML = `
-        <td>${escapeHtml(o.orderId || '–')}</td>
-        <td class="status">
-          <div class="status-pill ${statusClass}">
-            <span></span>
-            <span>${escapeHtml(statusLabel)}</span>
-          </div>
-        </td>
-        <td>${escapeHtml(o.membershipKey || '–')}</td>
-        <td>${fmtAmount(o.amount)}</td>
-        <td>${escapeHtml(o.email || '–')}</td>
-        <td>${fmtDate(o.createdAt)}</td>
-      `;
-      const refundCell = tr.insertCell();
       const review = o.refundReview;
       if (review) {
         const label = document.createElement('div');
         label.textContent = `${review.state === 'pending' ? 'Til vurdering' : 'Vurdert'}: ${fmtAmount(review.refundedAmount)} refundert`;
-        refundCell.appendChild(label);
+        details.appendChild(label);
+        if (review.state === 'pending') {
+          const flag = document.createElement('span');
+          flag.className = 'door-event-result denied';
+          flag.textContent = '· Refusjon til vurdering';
+          description.appendChild(flag);
+        }
       }
       if (['SALE', 'CAPTURED'].includes(status) && o.memberId) {
         const checkButton = document.createElement('button');
@@ -1900,16 +2041,17 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         checkButton.className = 'btn-secondary';
         checkButton.textContent = 'Sjekk Vipps';
         checkButton.addEventListener('click', () => checkOrderRefund(o.orderId, checkButton));
-        refundCell.appendChild(checkButton);
+        details.appendChild(checkButton);
         if (review?.state === 'pending') {
           const reviewedButton = document.createElement('button');
           reviewedButton.type = 'button';
           reviewedButton.className = 'btn-secondary';
           reviewedButton.textContent = 'Markér vurdert';
           reviewedButton.addEventListener('click', () => markRefundReviewed(o.orderId, reviewedButton));
-          refundCell.appendChild(reviewedButton);
+          details.appendChild(reviewedButton);
         }
       }
+      cell.append(header, description, details);
       ordersTableBody.appendChild(tr);
     });
   }
@@ -1946,11 +2088,106 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     } catch (e) {
       console.error('Feil ved henting av ordrer:', e);
       ordersTableBody.innerHTML =
-        '<tr><td colspan="7" class="text-muted">Kunne ikke laste ordrer.</td></tr>';
+        '<tr><td class="text-muted">Kunne ikke laste ordrer.</td></tr>';
       ordersErrorEl.textContent = 'Feil ved henting av ordrer: ' + e.message;
       ordersErrorEl.style.display = 'block';
     }
   }
+
+  const toggleCheckoutLog = document.getElementById('toggleCheckoutLog');
+  const checkoutLogPanel = document.getElementById('checkoutLogPanel');
+  const checkoutLogSearch = document.getElementById('checkoutLogSearch');
+  const checkoutLogBody = document.getElementById('checkoutLogBody');
+  const checkoutLogCount = document.getElementById('checkoutLogCount');
+  const checkoutLogError = document.getElementById('checkoutLogError');
+  let checkoutLogEvents = [];
+
+  function checkoutEventLabel(type) {
+    return ({ REQUEST: 'Forespørsel mottatt', BLOCKED_EXISTING_MEMBER: 'Avvist: aktivt medlem',
+      OK: 'Vipps-ordre opprettet', ERROR: 'Feil ved oppretting' })[type] || 'Innmeldingshendelse';
+  }
+
+  function renderCheckoutLog() {
+    const query = checkoutLogSearch.value.trim().toLowerCase();
+    const visible = [...checkoutLogEvents].reverse().filter(event => {
+      const member = event.memberId && allMembers.find(m => String(m.id) === String(event.memberId));
+      const order = event.orderId && allOrders.find(o => String(o.orderId) === String(event.orderId));
+      return [event.timestamp, event.type, checkoutEventLabel(event.type), event.name, event.email, event.plan, event.orderId,
+        member?.name, order?.name, order?.email].join(' ').toLowerCase().includes(query);
+    });
+    checkoutLogCount.textContent = `${visible.length} av ${checkoutLogEvents.length} innmeldingshendelser vises.`;
+    checkoutLogBody.innerHTML = '';
+    if (!visible.length) {
+      checkoutLogBody.innerHTML = `<tr><td class="text-muted">${checkoutLogEvents.length ? 'Ingen hendelser passer søket.' : 'Ingen innmeldingsforsøk funnet.'}</td></tr>`;
+      return;
+    }
+    visible.forEach(event => {
+      const eventLabel = checkoutEventLabel(event.type);
+      const member = event.memberId && allMembers.find(m => String(m.id) === String(event.memberId));
+      const order = event.orderId && allOrders.find(o => String(o.orderId) === String(event.orderId));
+      const person = member?.name || (order && orderMemberName(order)) || event.name || event.email || 'Ukjent person';
+      const plan = event.plan || order?.membershipKey;
+      const planRecord = plan && allPlans.find(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(plan));
+      const planLabel = planRecord ? adminPlanLabel(planRecord) : plan;
+      const tr = document.createElement('tr');
+      const cell = tr.insertCell();
+      const header = document.createElement('div');
+      header.className = 'door-event-header';
+      const timeAndName = document.createElement('strong');
+      timeAndName.textContent = `${fmtDate(event.timestamp)} · ${person}`;
+      header.appendChild(timeAndName);
+      const description = document.createElement('div');
+      description.className = 'door-event-description';
+      const result = document.createElement('span');
+      result.className = `door-event-result ${event.type === 'BLOCKED_EXISTING_MEMBER' || event.type === 'ERROR' ? 'denied' : ''}`;
+      result.textContent = eventLabel;
+      description.appendChild(result);
+      if (plan) {
+        const planText = document.createElement('span');
+        planText.textContent = `· ${planLabel}`;
+        description.appendChild(planText);
+      }
+      const details = document.createElement('details');
+      details.className = 'door-event-details checkout-event-details';
+      const summary = document.createElement('summary');
+      summary.textContent = 'Vis detaljer';
+      details.appendChild(summary);
+      for (const [label, value] of [['Tidspunkt', fmtDate(event.timestamp)], ['Hendelse', eventLabel],
+        ['Medlemskap', planLabel], ['Ordre-ID', event.orderId], ['E-post', event.email]]) {
+        if (!value) continue;
+        const row = document.createElement('div');
+        row.textContent = `${label}: ${value}`;
+        details.appendChild(row);
+      }
+      cell.append(header, description, details);
+      checkoutLogBody.appendChild(tr);
+    });
+  }
+
+  async function loadCheckoutLog() {
+    checkoutLogError.style.display = 'none';
+    checkoutLogBody.innerHTML = '<tr><td class="text-muted">Laster innmeldingsforsøk…</td></tr>';
+    try {
+      const res = await fetch('/api/admin/logs?kind=checkout');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      checkoutLogEvents = Array.isArray(data.events) ? data.events : [];
+      renderCheckoutLog();
+    } catch (e) {
+      checkoutLogBody.innerHTML = '<tr><td class="text-muted">Kunne ikke laste innmeldingsforsøk.</td></tr>';
+      checkoutLogError.textContent = 'Feil ved henting av innmeldingsforsøk: ' + e.message;
+      checkoutLogError.style.display = 'block';
+    }
+  }
+
+  toggleCheckoutLog.addEventListener('click', () => {
+    const open = checkoutLogPanel.style.display === 'none';
+    checkoutLogPanel.style.display = open ? 'block' : 'none';
+    toggleCheckoutLog.textContent = open ? 'Skjul innmeldingsforsøk' : 'Vis innmeldingsforsøk';
+    toggleCheckoutLog.setAttribute('aria-expanded', String(open));
+    if (open) loadCheckoutLog();
+  });
+  checkoutLogSearch.addEventListener('input', renderCheckoutLog);
 
   // ------- Logg (underfaner) -------
   const logSubtabsEl = document.getElementById('logSubtabs');
@@ -1988,18 +2225,51 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   function renderDoorLog() {
       const query = doorLogSearch.value.trim().toLowerCase();
-      const show = [...doorLogLines].reverse().filter(line => String(line).toLowerCase().includes(query));
-      doorLogCount.textContent = `${show.length} av ${doorLogLines.length} linjer vises.`;
+      const show = [...doorLogLines].reverse().filter(line => {
+        const status = /\baction=DENY\b/.test(line) ? 'avvist' : 'åpnet';
+        return `${line} ${status}`.toLowerCase().includes(query);
+      });
+      doorLogCount.textContent = `${show.length} av ${doorLogLines.length} dørhendelser vises.`;
       if (!show.length) {
-        doorLogBody.innerHTML = `<tr><td class="text-muted">${doorLogLines.length ? 'Ingen linjer passer søket.' : 'Ingen logglinjer funnet.'}</td></tr>`;
+        doorLogBody.innerHTML = `<tr><td class="text-muted">${doorLogLines.length ? 'Ingen hendelser passer søket.' : 'Ingen dørhendelser funnet.'}</td></tr>`;
         return;
       }
       doorLogBody.innerHTML = '';
       show.forEach((line) => {
+        const timestamp = line.match(/^(.*?)\s+(?:name|email)=/)?.[1] || 'Tid ukjent';
+        const person = line.match(/\b(?:name|email)=(.*?)\s+door=/)?.[1] || 'Ukjent person';
+        const door = line.match(/\bdoor=([^\s]+)/)?.[1] || 'Ukjent dør';
+        const denied = /\baction=DENY\b/.test(line);
+        const reason = line.match(/\breason=([^\s]+)/)?.[1];
+        const reasonText = ({ rate_limit: 'For mange forsøk', open_failed: 'Åpning feilet' })[reason] || reason;
         const tr = document.createElement('tr');
-        tr.innerHTML =
-          `<td style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-                     font-size: 0.78rem; white-space: pre-wrap;">${escapeHtml(line)}</td>`;
+        const cell = tr.insertCell();
+        const header = document.createElement('div');
+        header.className = 'door-event-header';
+        const time = document.createElement('strong');
+        time.textContent = `${timestamp} · ${person}`;
+        const result = document.createElement('span');
+        result.className = `door-event-result ${denied ? 'denied' : 'success'}`;
+        result.textContent = denied ? 'Avvist' : 'Åpnet';
+        header.appendChild(time);
+        const description = document.createElement('div');
+        description.className = 'door-event-description';
+        const doorLabel = document.createElement('span');
+        doorLabel.textContent = door;
+        description.append(doorLabel, result);
+        if (reasonText) {
+          const reasonLabel = document.createElement('span');
+          reasonLabel.textContent = `· ${reasonText}`;
+          description.appendChild(reasonLabel);
+        }
+        const details = document.createElement('details');
+        details.className = 'door-event-details';
+        const summary = document.createElement('summary');
+        summary.textContent = 'Tekniske detaljer';
+        const raw = document.createElement('code');
+        raw.textContent = line;
+        details.append(summary, raw);
+        cell.append(header, description, details);
         doorLogBody.appendChild(tr);
       });
   }
@@ -2009,7 +2279,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     if (doorLogError) doorLogError.style.display = 'none';
     doorLogBody.innerHTML = '<tr><td class="text-muted">Laster dør-logg…</td></tr>';
     try {
-      const res = await fetch('/api/admin/logs');
+      const res = await fetch('/api/admin/logs?kind=door');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       doorLogLines = data && Array.isArray(data.lines) ? data.lines : [];
@@ -2635,7 +2905,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     list.forEach((p) => {
       const key = String(p.id || p.key || '').trim();
       if (!key) return;
-      const label = String(p.name || p.title || p.label || key);
+      const label = adminPlanLabel(p, list);
 
       const wrap = document.createElement('label');
       wrap.style.display = 'inline-flex';
@@ -2994,7 +3264,10 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       };
       if (modalEditEmail.value || selectedMember.email) changes.email = modalEditEmail.value;
       if (modalEditPhone.value || selectedMember.phone || selectedMember.phoneFull || selectedMember.mobile) changes.phone = modalEditPhone.value;
-      if (modalMemberPlanSelect.value || selectedMember.plan) changes.plan = modalMemberPlanSelect.value;
+      if (modalMemberPlanSelect.value || selectedMember.plan) {
+        changes.plan = normalizedPlanKey(modalMemberPlanSelect.value) === normalizedPlanKey(selectedMember.plan)
+          ? selectedMember.plan : modalMemberPlanSelect.value;
+      }
       if (datesChanged) {
         changes.membershipStartDate = start;
         changes.bindingMonthsAtStart = months;
@@ -3003,7 +3276,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       }
       const sensitiveChanged = String(changes.email || '').trim().toLowerCase() !== String(selectedMember.email || '').toLowerCase() ||
         String(changes.phone || '').replace(/\s/g, '') !== String(selectedMember.phone || selectedMember.phoneFull || selectedMember.mobile || '').replace(/\s/g, '') ||
-        String(changes.plan || '') !== String(selectedMember.plan || '');
+        normalizedPlanKey(changes.plan) !== normalizedPlanKey(selectedMember.plan);
       if (sensitiveChanged && !confirm('Endring av kontaktinfo eller plan kan påvirke innlogging og medlemsoversikten. Tripletex oppdateres ikke automatisk. Lagre?')) return;
       modalSaveDetailsBtn.disabled = true;
       modalMemberMsg.textContent = 'Lagrer opplysninger...';

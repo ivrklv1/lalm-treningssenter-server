@@ -1907,10 +1907,39 @@ app.post('/api/admin/nif-import', basicAuth, (req, res) => {
 app.get('/api/admin/logs', basicAuth, (req, res) => {
   try {
     if (!fs.existsSync(ACCESS_LOG)) {
-      return res.json({ ok: true, lines: [] });
+      return res.json(req.query.kind === 'checkout' ? { ok: true, events: [] } : { ok: true, lines: [] });
     }
     const raw = fs.readFileSync(ACCESS_LOG, 'utf-8');
-    const lines = raw.split('\n').filter(Boolean).slice(-500);
+    const rows = raw.split('\n').filter(Boolean);
+    if (req.query.kind === 'checkout') {
+      const events = rows
+        .filter(line => /\bVIPPS_CHECKOUT_(?:REQUEST|BLOCKED_EXISTING_MEMBER|OK|ERROR)\b/.test(line))
+        .slice(-500)
+        .map(line => {
+          const type = line.match(/\bVIPPS_CHECKOUT_(REQUEST|BLOCKED_EXISTING_MEMBER|OK|ERROR)\b/)?.[1];
+          let request = {};
+          if (type === 'REQUEST') {
+            try {
+              const parsed = JSON.parse(line.split(' body=')[1] || '{}');
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) request = parsed;
+            } catch (_) { /* Eldre logglinje uten gyldig JSON. */ }
+          }
+          const field = value => typeof value === 'string' ? value.trim().slice(0, 160) : '';
+          return {
+            timestamp: line.match(/^\[([^\]]+)\]/)?.[1] || null,
+            type,
+            name: field(request.name) || [field(request.firstName), field(request.lastName)].filter(Boolean).join(' '),
+            email: field(request.email) || line.match(/\bemail=([^\s]+)/)?.[1] || '',
+            plan: field(request.membershipKey) || field(request.membershipId),
+            orderId: line.match(/\borderId=([^\s]+)/)?.[1] || '',
+            memberId: line.match(/\bmemberId=([^\s]+)/)?.[1] || '',
+          };
+        });
+      return res.json({ ok: true, events });
+    }
+    const lines = (req.query.kind === 'door'
+      ? rows.filter(line => /\bdoor=\S+.*\baction=(?:OPEN_[A-Z_]+|DENY)\b/.test(line))
+      : rows).slice(-500);
     res.json({ ok: true, lines });
   } catch (e) {
     console.error('Kunne ikke lese access.log:', e.message);
@@ -3868,12 +3897,12 @@ app.post('/admin/sms/preview', basicAuth, (req, res) => {
     if ((recipientMode === 'plan') || (Array.isArray(planKeysRaw) && planKeysRaw.length > 0)) {
       const wanted = new Set(
         (Array.isArray(planKeysRaw) ? planKeysRaw : [])
-          .map(k => String(k || '').trim())
+          .map(k => String(k || '').trim().toLowerCase())
           .filter(Boolean)
       );
 
       let targets = members.filter((m) => {
-        const key = String(m.planKey || m.plan || m.membershipKey || '').trim();
+        const key = String(m.planKey || m.plan || m.membershipKey || '').trim().toLowerCase();
         if (!key) return false;
         return wanted.has(key);
       });
@@ -4017,14 +4046,14 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
     if ((recipientMode === 'plan') || (Array.isArray(planKeysRaw) && planKeysRaw.length > 0)) {
       const wanted = new Set(
         (Array.isArray(planKeysRaw) ? planKeysRaw : [])
-          .map(k => String(k || '').trim())
+          .map(k => String(k || '').trim().toLowerCase())
           .filter(Boolean)
       );
 
       const members = getMembers();
 
       let targets = members.filter((m) => {
-        const key = String(m.planKey || m.plan || m.membershipKey || '').trim();
+        const key = String(m.planKey || m.plan || m.membershipKey || '').trim().toLowerCase();
         if (!key) return false;
         return wanted.has(key);
       });
