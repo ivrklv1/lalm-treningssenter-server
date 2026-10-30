@@ -8,8 +8,8 @@ Hvis datooppslaget feiler etter at medlemskapet er aktivert, blir datofeltene st
 
 Endringen fyller ikke inn datoer for eksisterende medlemmer. Historiske datoer krever separat kontroll av medlems-ID, Vipps-ordre, vilkår og backup før import. Appen viser fortsatt eksempeldata på «Mitt medlemskap»; ingen ny offentlig medlemskapsrute inngår her.
 
-En refusjon som kommer etter at et medlemskap allerede er aktivert, behandles fortsatt av den eksisterende medlemsflyten. Automatisk deaktivering ved refusjon inngår ikke i denne endringen og må vurderes separat.
+Hvis en betaling refunderes etter aktivering, forblir medlemskapet aktivt til en administrator har vurdert saken. Den som gjennomfører refusjonen må kontrollere den aktuelle Vipps-ordren og medlemmet manuelt. Delvis refusjon betyr ikke automatisk at adgangen skal stenges. Denne endringen oppretter ikke automatisk varsel om refusjon; Vipps eCom-dokumentasjonen lister ikke refusjon blant callback-statusene, så den kan ikke brukes som eneste varselkilde.
 
 Lokale tester bruker oppdiktede ordrer og oppdiktede Vipps-svar med utgående nettverk blokkert. De dekker bekreftet betaling, falsk «betalt»-melding, reservasjon og et utilgjengelig Vipps-oppslag. I en separat Vipps Merchant Test-tjeneste ble en 1 kr-testordre reservert, fanget og bekreftet. Testmedlemmet fikk betalingsdag 30.10.2026 som medlemsstart og 30.10.2027 som bindeslutt for 12 måneders binding. Testtjenesten hadde egne nøkler og ingen tilgang til SMS, dørstyring, Tripletex eller produksjonens medlemsdata.
 
-Før produksjonsutrulling må refusjon etter aktivering få en uttrykkelig håndteringsregel. Deretter må den første reelle ordren kontrolleres lesende. Eksisterende medlemmers datoer fylles inn separat etter gjennomgang av historiske ordrer og avtalevilkår.
+Ved en eventuell produksjonsutrulling må den første reelle ordren kontrolleres lesende. Eksisterende medlemmers datoer fylles inn separat etter gjennomgang av historiske ordrer og avtalevilkår. En automatisk refusjonsoversikt i admin er en egen oppgave hvis dere senere ønsker det.
