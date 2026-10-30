@@ -477,6 +477,12 @@
     .mt-3 { margin-top: 12px; }
     .mt-4 { margin-top: 16px; }
 
+    .billing-pill { display: inline-block; border-radius: 999px; padding: 3px 9px; font-weight: 600; }
+    .billing-paid { background: #dcfce7; color: #166534; }
+    .billing-invoiced { background: #fef3c7; color: #92400e; }
+    .billing-overdue { background: #fee2e2; color: #991b1b; }
+    .billing-unknown { background: #e5e7eb; color: #374151; }
+
     .scroll {
       overflow: auto;
     }
@@ -612,11 +618,23 @@
                   <option value="recorded">Registrert startdato</option>
                 </select>
               </div>
+              <div>
+                <label for="filterBillingStatus">Filter: betaling</label>
+                <select id="filterBillingStatus" disabled>
+                  <option value="">Alle</option>
+                  <option value="overdue">Forfalt</option>
+                  <option value="invoiced">Fakturert</option>
+                  <option value="paid">Betalt</option>
+                  <option value="unknown">Må kontrolleres</option>
+                </select>
+              </div>
             </div>
             <div class="small text-muted mt-1">Aktive ordinære medlemmer uten startdato: <strong id="missingMembershipDatesCount">0</strong>. Datoer fylles ikke inn her.</div>
             <div class="btn-row" style="justify-content:flex-start;">
               <button id="btnReloadMembers" class="btn-secondary">⟳ Oppdater liste</button>
+              <button id="btnLoadBillingStatus" class="btn-secondary">Hent betalingsstatus fra Tripletex</button>
             </div>
+            <div id="billingStatusInfo" class="small text-muted">Betalingsstatus er ikke hentet. Grønn: betalt · Gul: fakturert · Rød: forfalt · Grå: må kontrolleres.</div>
           </div>
           <div id="memberActions" class="mt-2" style="display:none;">
             <div class="small text-muted">
@@ -649,11 +667,12 @@
                    <th>Lalm IL-medlem</th>
                    <th>Status</th>
                    <th>Medlemskapsdatoer</th>
+                   <th>Betaling</th>
                  </tr>
                  </thead>
                  <tbody id="membersTableBody">
                  <tr>
-                   <td colspan="5" class="text-muted">Laster medlemmer...</td>
+                   <td colspan="6" class="text-muted">Laster medlemmer...</td>
                 </tr>
                 </tbody>
               </table>
@@ -1133,6 +1152,9 @@
   const searchInput = document.getElementById('searchInput');
   const filterPlan = document.getElementById('filterPlan');
   const filterMembershipDates = document.getElementById('filterMembershipDates');
+  const filterBillingStatus = document.getElementById('filterBillingStatus');
+  const btnLoadBillingStatus = document.getElementById('btnLoadBillingStatus');
+  const billingStatusInfo = document.getElementById('billingStatusInfo');
   const missingMembershipDatesCount = document.getElementById('missingMembershipDatesCount');
   const btnReloadMembers = document.getElementById('btnReloadMembers');
   const newName = document.getElementById('newName');
@@ -1442,10 +1464,35 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       : `Start: ${formatMembershipDate(member.membershipStartDate)} · Uten binding`;
   }
 
+  let billingStatuses = null;
+
+  function billingCode(member) {
+    return billingStatuses?.get(String(member.id))?.code || 'unknown';
+  }
+
+  function renderBillingCell(cell, member) {
+    const status = billingStatuses?.get(String(member.id));
+    const code = status?.code || 'unknown';
+    const labels = { paid: 'Betalt', invoiced: 'Fakturert', overdue: 'Forfalt', unknown: 'Må kontrolleres' };
+    const badge = document.createElement('span');
+    badge.className = `billing-pill billing-${code}`;
+    badge.textContent = billingStatuses ? labels[code] : 'Ikke hentet';
+    cell.appendChild(badge);
+    if (status?.invoiceNumber) {
+      const detail = document.createElement('div');
+      detail.className = 'small text-muted';
+      const rest = typeof status.outstanding === 'number'
+        ? ` · Rest: ${status.outstanding.toLocaleString('nb-NO', { style: 'currency', currency: 'NOK' })}` : '';
+      detail.textContent = `Faktura ${status.invoiceNumber}${status.dueDate ? ` · Forfall: ${formatMembershipDate(status.dueDate)}` : ''}${rest}${status.beyondGrace ? ' · Over 14 dager' : ''}`;
+      cell.appendChild(detail);
+    }
+  }
+
   function renderMembers() {
     const q = (searchInput.value || '').toLowerCase();
     const planFilter = filterPlan.value || '';
     const dateFilter = filterMembershipDates.value || '';
+    const billingFilter = filterBillingStatus.value || '';
 
     missingMembershipDatesCount.textContent = allMembers.filter(m => m.active && membershipDateState(m) === 'missing').length;
 
@@ -1455,6 +1502,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
       if (dateFilter === 'missing' && !(m.active && dateState === 'missing')) return false;
       if (dateFilter === 'review' && dateState !== 'review') return false;
       if (dateFilter === 'recorded' && dateState !== 'recorded') return false;
+      if (billingFilter && billingCode(m) !== billingFilter) return false;
       if (!q) return true;
       const name = (m.name || '').toLowerCase();
       const email = (m.email || '').toLowerCase();
@@ -1467,7 +1515,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     statsActiveCount.textContent = filtered.filter(m => m.active).length;
 
     if (!filtered.length) {
-      membersTableBody.innerHTML = '<tr><td colspan="5" class="text-muted">Ingen medlemmer funnet.</td></tr>';
+      membersTableBody.innerHTML = '<tr><td colspan="6" class="text-muted">Ingen medlemmer funnet.</td></tr>';
     } else {
       membersTableBody.innerHTML = '';
       filtered.forEach(m => {
@@ -1494,6 +1542,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
         `;
         const dateCell = tr.insertCell();
         dateCell.textContent = membershipDateLabel(m);
+        renderBillingCell(tr.insertCell(), m);
         membersTableBody.appendChild(tr);
       });
     }
@@ -1633,10 +1682,32 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     } catch (e) {
       console.error('Feil ved henting av medlemmer:', e);
       membersTableBody.innerHTML =
-        '<tr><td colspan="5" class="text-muted">Kunne ikke laste medlemmer.</td></tr>';
+        '<tr><td colspan="6" class="text-muted">Kunne ikke laste medlemmer.</td></tr>';
       membersErrorEl.textContent = 'Feil ved henting av medlemmer: ' + e.message;
       membersErrorEl.style.display = 'block';
       setServerStatus(false, 'Feil');
+    }
+  }
+
+  async function loadBillingStatus() {
+    btnLoadBillingStatus.disabled = true;
+    billingStatusInfo.textContent = 'Henter fakturaer fra Tripletex…';
+    try {
+      const response = await fetch('/admin/billing-status');
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data.statuses)) throw new Error(data.error || `HTTP ${response.status}`);
+      billingStatuses = new Map(data.statuses.map(status => [String(status.memberId), status]));
+      filterBillingStatus.disabled = false;
+      billingStatusInfo.textContent = `Kontrollert ${fmtDate(data.checkedAt)} · Fakturaer fra ${formatMembershipDate(data.fromDate)}. Grønn: betalt · Gul: fakturert · Rød: forfalt · Grå: må kontrolleres. Rødt betyr ikke automatisk sperring.`;
+      renderMembers();
+    } catch (error) {
+      billingStatuses = null;
+      filterBillingStatus.value = '';
+      filterBillingStatus.disabled = true;
+      billingStatusInfo.textContent = `Betalingsstatus kunne ikke hentes: ${error.message}`;
+      renderMembers();
+    } finally {
+      btnLoadBillingStatus.disabled = false;
     }
   }
 
@@ -2865,6 +2936,8 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
   searchInput.addEventListener('input', () => renderMembers());
   filterPlan.addEventListener('change', () => renderMembers());
   filterMembershipDates.addEventListener('change', () => renderMembers());
+  filterBillingStatus.addEventListener('change', () => renderMembers());
+  btnLoadBillingStatus.addEventListener('click', loadBillingStatus);
 
     membersTableBody.addEventListener('click', (e) => {
     const row = e.target.closest('tr');

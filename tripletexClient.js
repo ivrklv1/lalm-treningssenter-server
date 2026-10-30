@@ -135,6 +135,7 @@ async function tripletexRequest(path, options = {}) {
 
   const res = await fetch(url, {
     method: options.method || 'GET',
+    signal: options.signal,
     headers: {
       Authorization: `Basic ${auth}`,
       'Content-Type': 'application/json',
@@ -163,6 +164,25 @@ async function tripletexRequest(path, options = {}) {
   }
 
   return json;
+}
+
+async function listMembershipInvoices(fromDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDate)) throw new Error('invalid_invoice_from_date');
+  const result = [];
+  const pageSize = 500;
+  let offset = 0;
+  for (let page = 0; page < 40; page += 1) {
+    const query = new URLSearchParams({
+      invoiceDateFrom: fromDate, from: String(offset), count: String(pageSize),
+      fields: 'id,invoiceNumber,invoiceDate,invoiceDueDate,amount,amountOutstanding,isCreditNote,isCredited,isCharged,orders(id)',
+    });
+    const response = await tripletexRequest(`/invoice?${query}`, { signal: AbortSignal.timeout(15000) });
+    if (!Array.isArray(response.values)) throw new Error('invalid_invoice_response');
+    if (response.values.length === 0) return result;
+    result.push(...response.values);
+    offset += response.values.length;
+  }
+  throw new Error('invoice_result_too_large');
 }
 
 // Hjelper for å hente første value fra svar {value: [.]} eller {values: [.]}
@@ -398,6 +418,7 @@ async function syncMembershipToTripletex({ member, plan, invoiceDate }) {
 }
 
 module.exports = {
+  listMembershipInvoices,
   syncMembershipToTripletex,
   findOrCreateCustomer,
   createMembershipOrder,
