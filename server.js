@@ -21,6 +21,10 @@ const { execFile } = require('child_process');
 const util = require('util');
 const execFileAsync = util.promisify(execFile);
 require('dotenv').config();
+const { SANDBOX_PLAN, validateVippsSandbox, vippsSandboxGate } = require('./vippsSandbox');
+const VIPPS_SANDBOX_ONLY = process.env.VIPPS_SANDBOX_ONLY === '1';
+if (!VIPPS_SANDBOX_ONLY) throw new Error('Denne grenen krever VIPPS_SANDBOX_ONLY=1');
+validateVippsSandbox(process.env);
 const {
   syncMembershipToTripletex,
   approveSubscriptionInvoice,
@@ -32,6 +36,7 @@ const { createVisitStats } = require('./visitStats');
 
 
 const app = express();
+if (VIPPS_SANDBOX_ONLY) app.use(vippsSandboxGate(process.env));
 const PORT = Number(process.env.PORT || 3000);
 
 // ----------------------------
@@ -897,6 +902,7 @@ async function sendSmsLoginCode(phone, code) {
  * Velkommen-SMS ved innmelding
  */
 async function sendWelcomeMembershipSms(order, member) {
+  if (VIPPS_SANDBOX_ONLY) return;
   try {
     const rawPhone =
       member?.phoneFull ||
@@ -2372,6 +2378,14 @@ app.get('/vipps/return', (req, res) => {
 // Vipps Checkout / eCom payment – NY modell m/orders.json
 // =====================================================
 app.post('/vipps/checkout', async (req, res) => {
+  if (VIPPS_SANDBOX_ONLY) {
+    const body = req.body || {};
+    if (body.membershipKey !== SANDBOX_PLAN ||
+        !String(body.email || '').toLowerCase().endsWith('@example.invalid') ||
+        !String(body.name || '').toLowerCase().startsWith('test')) {
+      return res.status(400).json({ ok: false, error: 'sandbox_test_data_required' });
+    }
+  }
   const ts = new Date().toISOString();
   console.log('MOTTOK /vipps/checkout', req.body);
   appendAccessLog(
@@ -2427,7 +2441,9 @@ const orderId = 'ORDER-' + Date.now();
 const src = source || 'app';
 
 let returnUrl;
-if (src === 'web') {
+if (VIPPS_SANDBOX_ONLY) {
+  returnUrl = `${process.env.SERVER_URL}/vipps/sandbox-return?orderId=${orderId}`;
+} else if (src === 'web') {
   // vipps-takk.html må ligge på samme domene som index.html
   returnUrl = `https://lalmtreningssenter.no/vipps-takk.html?orderId=${orderId}`;
 } else {
@@ -2436,9 +2452,12 @@ if (src === 'web') {
 
     // 3) Finn plan (fra plans.json eller fallback-tabell)
     const plans = getPlans();
-    let selected = null;
+    let selected = VIPPS_SANDBOX_ONLY ? {
+      amount: 100, bindingMonths: 12, text: 'Vipps test - 12 mnd binding',
+      prorate: false, signupFee: 0,
+    } : null;
 
-    if (plans && Array.isArray(plans)) {
+    if (!VIPPS_SANDBOX_ONLY && plans && Array.isArray(plans)) {
       const planObj = plans.find(
         (p) =>
           p &&
@@ -3064,6 +3083,7 @@ async function withRetry(fn, opts = {}) {
 // Tripletex side effects – sync + approve (asynkron, idempotent)
 // =====================================================
 async function processTripletexForOrder(orderId, newStatus, opts = {}) {
+  if (VIPPS_SANDBOX_ONLY) return { ok: true, skipped: true, reason: 'vipps_sandbox' };
   const tag = opts.tag || `orderId=${orderId}`;
   try {
     const orderAfter = findOrder(orderId);
@@ -3752,6 +3772,10 @@ async function retryPendingVippsOrders() {
   }
 }
 
+app.get('/vipps/sandbox-return', (_req, res) => {
+  res.type('text/plain').send('Vipps test: kontroller betalingsstatus i testloggen.');
+});
+
 app.post('/vipps/callback/v2/payments/:orderId', (req, res) => {
   const orderId = req.params.orderId;
   res.status(200).send('OK');
@@ -3779,9 +3803,8 @@ app.get('/vipps/order-status/:orderId', (req, res) => {
   const rawStatus = order.status || order.vippsTransactionStatus || 'PENDING';
   const status = String(rawStatus || '').toUpperCase();
 
-  // "Betalt" i vår verden = samme logikk som i callbacken:
-  // vi aktiverer medlem ved RESERVED / SALE / CAPTURED.
-  const isPaid = ['RESERVED', 'SALE', 'CAPTURED'].includes(status);
+  // En reservasjon er ikke belastet og skal ikke vises som betalt.
+  const isPaid = ['SALE', 'CAPTURED'].includes(status);
 
   return res.json({
     ok: true,
