@@ -29,11 +29,12 @@ Ingen `EUROBATE_*`, `TELL_*`, `TRIPLETEX_*`, `BACKUP_*`, `AWS_*` eller `S3_*` va
 
 ## Oppførsel
 
-- Kun `POST /vipps/checkout`, `POST /vipps/callback/v2/payments/:orderId`, `GET /vipps/order-status/:orderId` og test-retursiden er tilgjengelige.
+- Kun `POST /vipps/checkout`, `POST /vipps/callback/v2/payments/:orderId`, `GET /vipps/order-status/:orderId`, `GET /vipps/sandbox-auth-check` og test-retursiden er tilgjengelige.
 - Checkout og status krever `x-sandbox-token`. Callback er offentlig fordi Vipps må nå den, men status kontrolleres mot Vipps test-API før medlem aktiveres.
 - Checkout godtar bare `TEST_BINDING_12M`, navn som starter med `Test`, e-post på `@example.invalid`, og beløp 1 kr i testmiljøet. Testplanen har 12 måneders binding.
 - SMS, dørstyring, Tripletex, admin og backup er utilgjengelige. Velkomst-SMS og Tripletex-synk er også sperret inne i betalingsflyten.
 - En reservasjon vises som ubetalt. Først bekreftet belastning aktiverer testmedlemmet og lagrer betalingsdag og bindeslutt.
+- Den beskyttede `sandbox-auth-check` ber bare Vipps test-API om et tilgangstoken og svarer uten å vise tokenet. Den oppretter ingen ordre.
 
 ## Før en faktisk testbetaling
 

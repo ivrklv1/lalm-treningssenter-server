@@ -2856,6 +2856,17 @@ async function getVippsAccessToken() {
   return accessToken;
 }
 
+app.get('/vipps/sandbox-auth-check', async (_req, res) => {
+  try {
+    await getVippsAccessToken();
+    return res.json({ ok: true, vippsEnv: 'test', merchantSerialNumber: process.env.VIPPS_MSN });
+  } catch (error) {
+    return res.status(502).json({
+      ok: false, error: 'vipps_test_auth_failed', vippsStatus: error.response?.status || null,
+    });
+  }
+});
+
 /**
  * Auto-capture av en Vipps-betaling.
  * - orderId: ORDER-...

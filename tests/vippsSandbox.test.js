@@ -51,7 +51,8 @@ test('sandbox exposes only protected Vipps test routes; reservation is unpaid', 
   fs.writeFileSync(path.join(dataDir, 'orders.json'), JSON.stringify(orders));
   let output = '';
   const child = spawn(process.execPath, [
-    '--require', path.join(__dirname, 'blockExternal.cjs'), path.join(root, 'server.js'),
+    '--require', path.join(__dirname, 'blockExternal.cjs'),
+    '--require', path.join(__dirname, 'mockVippsDetails.cjs'), path.join(root, 'server.js'),
   ], {
     cwd: root,
     env: {
@@ -79,6 +80,11 @@ test('sandbox exposes only protected Vipps test routes; reservation is unpaid', 
     }
     const statusUrl = `${base}/vipps/order-status/synthetic-reserve`;
     assert.equal((await fetch(statusUrl)).status, 403);
+    const authUrl = `${base}/vipps/sandbox-auth-check`;
+    assert.equal((await fetch(authUrl)).status, 403);
+    const authResponse = await fetch(authUrl, { headers: { 'x-sandbox-token': token } });
+    assert.equal(authResponse.status, 200);
+    assert.deepEqual(await authResponse.json(), { ok: true, vippsEnv: 'test', merchantSerialNumber: '411837' });
     const status = await fetch(statusUrl, { headers: { 'x-sandbox-token': token } });
     assert.equal(status.status, 200);
     assert.equal((await status.json()).isPaid, false);

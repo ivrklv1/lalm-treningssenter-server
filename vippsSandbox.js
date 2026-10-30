@@ -52,7 +52,8 @@ function vippsSandboxGate(env) {
   return (req, res, next) => {
     if (req.method === 'GET' && req.path === '/vipps/sandbox-return') return next();
     if (req.method === 'POST' && /^\/vipps\/callback\/v2\/payments\/[^/]+$/.test(req.path)) return next();
-    if ((req.method === 'POST' && req.path === '/vipps/checkout') ||
+    if ((req.method === 'GET' && req.path === '/vipps/sandbox-auth-check') ||
+        (req.method === 'POST' && req.path === '/vipps/checkout') ||
         (req.method === 'GET' && /^\/vipps\/order-status\/[^/]+$/.test(req.path))) {
       if (sandboxTokenMatches(req.get('x-sandbox-token'), env.VIPPS_SANDBOX_ACCESS_TOKEN)) return next();
       return res.status(403).json({ ok: false, error: 'sandbox_token_required' });
