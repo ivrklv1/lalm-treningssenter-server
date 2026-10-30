@@ -14,10 +14,11 @@ test('admin keeps shared-email members separate and previews NIF changes before 
     { id: 'member-b', name: 'Test B', email: 'shared@example.invalid', phone: '+4722222222', plan: 'standard', active: true },
     { id: 'member-c', name: 'Test C', email: 'c@example.invalid', phone: '+4733333333', plan: 'medlem_m_binding', active: true, clubMember: true, clubMemberSource: 'nif' },
     { id: 'member-d', name: 'Test D', email: 'd@example.invalid', phone: '+4744444444', plan: 'medlem_m_binding', active: true, clubMember: false },
+    { id: 'member-short', name: 'Korttidstest', email: 'short@example.invalid', phone: '+4755555555', plan: 'korttid_7dager', active: true },
   ];
   fs.writeFileSync(path.join(dataDir, 'members.json'), JSON.stringify(members));
   fs.writeFileSync(path.join(dataDir, 'orders.json'), '[]');
-  fs.writeFileSync(path.join(dataDir, 'plans.json'), JSON.stringify([{ id: 'standard' }, { id: 'medlem_m_binding' }]));
+  fs.writeFileSync(path.join(dataDir, 'plans.json'), JSON.stringify([{ id: 'standard' }, { id: 'medlem_m_binding' }, { id: 'Korttid_7dager', shortTermDays: 7 }]));
   const listener = net.createServer();
   await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
   const port = listener.address().port;
@@ -49,8 +50,16 @@ test('admin keeps shared-email members separate and previews NIF changes before 
     }
     assert.match(output, /Server kjører på/);
 
+    const smsPreview = await post('/admin/sms/preview', {
+      recipientMode: 'plan', planKeys: ['Korttid_7dager'], onlyActive: true,
+    });
+    assert.equal(smsPreview.status, 200);
+    const smsRecipients = await smsPreview.json();
+    assert.equal(smsRecipients.attempted, 1);
+    assert.equal(smsRecipients.sample[0].planKey, 'korttid_7dager');
+
     assert.equal((await post('/api/admin/members/delete', { email: 'shared@example.invalid' })).status, 409);
-    assert.equal(readMembers().length, 4);
+    assert.equal(readMembers().length, 5);
     assert.equal((await post('/api/admin/members/toggle', { memberId: 'member-b' })).status, 200);
     assert.equal(readMembers().find(m => m.id === 'member-a').active, true);
     assert.equal(readMembers().find(m => m.id === 'member-b').active, false);

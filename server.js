@@ -3868,12 +3868,12 @@ app.post('/admin/sms/preview', basicAuth, (req, res) => {
     if ((recipientMode === 'plan') || (Array.isArray(planKeysRaw) && planKeysRaw.length > 0)) {
       const wanted = new Set(
         (Array.isArray(planKeysRaw) ? planKeysRaw : [])
-          .map(k => String(k || '').trim())
+          .map(k => String(k || '').trim().toLowerCase())
           .filter(Boolean)
       );
 
       let targets = members.filter((m) => {
-        const key = String(m.planKey || m.plan || m.membershipKey || '').trim();
+        const key = String(m.planKey || m.plan || m.membershipKey || '').trim().toLowerCase();
         if (!key) return false;
         return wanted.has(key);
       });
@@ -4017,14 +4017,14 @@ app.post('/admin/sms/broadcast', basicAuth, async (req, res) => {
     if ((recipientMode === 'plan') || (Array.isArray(planKeysRaw) && planKeysRaw.length > 0)) {
       const wanted = new Set(
         (Array.isArray(planKeysRaw) ? planKeysRaw : [])
-          .map(k => String(k || '').trim())
+          .map(k => String(k || '').trim().toLowerCase())
           .filter(Boolean)
       );
 
       const members = getMembers();
 
       let targets = members.filter((m) => {
-        const key = String(m.planKey || m.plan || m.membershipKey || '').trim();
+        const key = String(m.planKey || m.plan || m.membershipKey || '').trim().toLowerCase();
         if (!key) return false;
         return wanted.has(key);
       });

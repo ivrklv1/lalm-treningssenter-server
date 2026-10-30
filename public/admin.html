@@ -1287,6 +1287,10 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     return String(p?.id || p?.key || '').trim();
   }
 
+  function normalizedPlanKey(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
   function planLabelOf(p) {
     const name = String(p?.name || '').trim();
     const key = String(p?.id || p?.key || '').trim();
@@ -1451,7 +1455,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   function renderMembers() {
     const q = (searchInput.value || '').toLowerCase();
-    const planFilter = filterPlan.value || '';
+    const planFilter = normalizedPlanKey(filterPlan.value);
     const dateFilter = filterMembershipDates.value || '';
     const followUpFilter = filterTripletexFollowUp.value || '';
 
@@ -1459,7 +1463,7 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
     tripletexFollowUpCount.textContent = allMembers.filter(m => m.tripletexFollowUp?.status === 'pending').length;
 
     const filtered = allMembers.filter(m => {
-      if (planFilter && (m.plan || '') !== planFilter) return false;
+      if (planFilter && normalizedPlanKey(m.plan) !== planFilter) return false;
       const dateState = membershipDateState(m);
       if (dateFilter === 'missing' && !(m.active && dateState === 'missing')) return false;
       if (dateFilter === 'review' && dateState !== 'review') return false;
