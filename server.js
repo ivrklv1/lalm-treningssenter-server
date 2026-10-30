@@ -27,7 +27,7 @@ const {
   stopTripletexSubscriptionForOrder,
 } = require('./tripletexClient');
 const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
-const { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime } = require('./membershipDates');
+const { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus } = require('./membershipDates');
 const { createVisitStats } = require('./visitStats');
 
 
@@ -2915,13 +2915,7 @@ async function vippsAutoCapture(orderId, amountInOre, transactionText) {
 
 const membershipDateChecksInFlight = new Set();
 
-async function verifyMembershipDatesFromVippsOnce(orderId) {
-  const order = findOrder(orderId);
-  if (!order || !['SALE', 'CAPTURED'].includes(order.status) || !order.memberId ||
-      order.bindingMonths == null || order.paidAtVerifiedAt || order.isShortOrDropin ||
-      computeValidUntilForPurchase(order.membershipKey)) return false;
-
-  updateOrderStatus(orderId, order.status, { dateVerificationLastAttemptAt: new Date().toISOString() });
+async function getVippsPaymentDetails(orderId) {
   const apiBase = process.env.VIPPS_ENV === 'test' ? 'https://apitest.vipps.no' : 'https://api.vipps.no';
   const accessToken = await getVippsAccessToken();
   const response = await axios.get(`${apiBase}/ecomm/v2/payments/${encodeURIComponent(orderId)}/details`, {
@@ -2932,7 +2926,17 @@ async function verifyMembershipDatesFromVippsOnce(orderId) {
       'Merchant-Serial-Number': process.env.VIPPS_MSN,
     },
   });
-  const paidAt = verifiedPaymentTime(response.data, order);
+  return response.data;
+}
+
+async function verifyMembershipDatesFromVippsOnce(orderId) {
+  const order = findOrder(orderId);
+  if (!order || !['SALE', 'CAPTURED'].includes(order.status) || !order.memberId ||
+      order.bindingMonths == null || order.paidAtVerifiedAt || order.isShortOrDropin ||
+      computeValidUntilForPurchase(order.membershipKey)) return false;
+
+  updateOrderStatus(orderId, order.status, { dateVerificationLastAttemptAt: new Date().toISOString() });
+  const paidAt = verifiedPaymentTime(await getVippsPaymentDetails(orderId), order);
   if (!paidAt) return false;
   const dates = datesForPaidMembership(paidAt, order.bindingMonths);
   if (!dates) return false;
@@ -3356,10 +3360,10 @@ function firstDayOfNextMonth(fromDate = new Date()) {
 // =====================================================
 // Vipps callback – idempotent + auto-capture
 // =====================================================
-app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
-  const { orderId } = req.params || {};
+const vippsOrdersInFlight = new Set();
+
+async function processVippsOrderOnce(orderId, body = {}) {
   const ts = new Date().toISOString();
-  const body = req.body || {};
 
   const callbackStatus =
     (body.transactionInfo && body.transactionInfo.status) ||
@@ -3373,21 +3377,16 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     callbackStatus
   );
   appendAccessLog(
-    `[${ts}] VIPPS_CALLBACK orderId=${orderId} statusRaw=${callbackStatus} body=${JSON.stringify(
-      body
-    )}\n`
+    `[${ts}] VIPPS_CALLBACK orderId=${orderId} statusRaw=${callbackStatus}\n`
   );
 
   try {
-    const status = String(callbackStatus || '').toUpperCase();
-
     // 1) Finn ordren i orders.json
     const existingOrder = findOrder(orderId);
     if (!existingOrder) {
       appendAccessLog(
         `[${new Date().toISOString()}] VIPPS_CALLBACK_NO_ORDER orderId=${orderId}\n`
       );
-      if (!res.headersSent) return res.status(200).send('OK');
       return;
     }
 
@@ -3399,10 +3398,15 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       appendAccessLog(
        `[${new Date().toISOString()}] VIPPS_CALLBACK_IDEMPOTENT orderId=${orderId} alreadyStatus=${existingOrder.status}\n`
       );
-      if (!res.headersSent) return res.status(200).send('OK');
       return;
     }
 
+    updateOrderStatus(orderId, existingOrder.status, {
+      paymentDetailsLastCheckedAt: new Date().toISOString(),
+    });
+    const details = await getVippsPaymentDetails(orderId);
+    const status = verifiedVippsStatus(details, existingOrder);
+    if (!status) return;
 
     // 3) Mappe status fra Vipps -> vår interne status
     let newStatus = existingOrder.status;
@@ -3415,10 +3419,9 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       newStatus = 'FAILED';
     }
 
-    const vippsReference =
-      (body.transactionInfo && body.transactionInfo.transactionId) ||
-      (body.transactionSummary && body.transactionSummary.transactionId) ||
-      null;
+    const vippsReference = details.transactionLogHistory
+      .filter(entry => entry.operationSuccess === true)
+      .sort((a, b) => Date.parse(b.timeStamp) - Date.parse(a.timeStamp))[0]?.transactionId || null;
 
     // 3.1 AUTO-CAPTURE: hvis Vipps sier RESERVED/RESERVE → prøv å belaste
     if (['RESERVE', 'RESERVED'].includes(status)) {
@@ -3438,9 +3441,11 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
         );
 
         if (captureOk) {
-          newStatus = 'CAPTURED';
+          setTimeout(() => processVippsOrder(orderId).catch(error => {
+            console.warn('[VIPPS_VERIFY_RETRY_FAILED]', orderId, error?.message || String(error));
+          }), 2000).unref();
           appendAccessLog(
-            `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_STATUS_UPDATED orderId=${orderId} newStatus=CAPTURED\n`
+            `[${new Date().toISOString()}] VIPPS_AUTOCAPTURE_WAITING_FOR_DETAILS orderId=${orderId}\n`
           );
         } else {
           appendAccessLog(
@@ -3470,7 +3475,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     );
 
     // 4) Ved betalt → aktiver medlem (uten TELL-sync)
-    if (['RESERVED', 'SALE', 'CAPTURED'].includes(newStatus)) {
+    if (['SALE', 'CAPTURED'].includes(newStatus)) {
       const members = getMembers();
       const phoneDigits = String(updatedOrder.phone || '').replace(/\D/g, '');
       let membersChanged = false;
@@ -3707,7 +3712,7 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
       }
     }
 
-    if (!res.headersSent) return res.status(200).send('OK');
+    return;
   } catch (err) {
     console.error(
       'Vipps callback error:',
@@ -3716,8 +3721,43 @@ app.post('/vipps/callback/v2/payments/:orderId', async (req, res) => {
     appendAccessLog(
       `[${new Date().toISOString()}] VIPPS_CALLBACK_ERROR orderId=${orderId} err=${err.message}\n`
     );
-    if (!res.headersSent) return res.status(200).send('OK');
+    return;
   }
+}
+
+async function processVippsOrder(orderId, body = {}) {
+  if (vippsOrdersInFlight.has(orderId)) return;
+  vippsOrdersInFlight.add(orderId);
+  try {
+    await processVippsOrderOnce(orderId, body);
+  } finally {
+    vippsOrdersInFlight.delete(orderId);
+  }
+}
+
+async function retryPendingVippsOrders() {
+  const now = Date.now();
+  const orders = getOrders().filter(order =>
+    ['PENDING', 'RESERVED'].includes(order.status) &&
+    Date.parse(order.createdAt) > now - 7 * 86400000 &&
+    (!order.paymentDetailsLastCheckedAt ||
+      Date.parse(order.paymentDetailsLastCheckedAt) < now - 5 * 60000)
+  ).sort((a, b) => Date.parse(a.paymentDetailsLastCheckedAt || 0) - Date.parse(b.paymentDetailsLastCheckedAt || 0));
+  for (const order of orders.slice(0, 20)) {
+    try {
+      await processVippsOrder(order.orderId);
+    } catch (error) {
+      console.warn('[VIPPS_PENDING_VERIFY_FAILED]', order.orderId, error?.message || String(error));
+    }
+  }
+}
+
+app.post('/vipps/callback/v2/payments/:orderId', (req, res) => {
+  const orderId = req.params.orderId;
+  res.status(200).send('OK');
+  setImmediate(() => processVippsOrder(orderId, req.body || {}).catch(error => {
+    console.warn('[VIPPS_VERIFY_FAILED]', orderId, error?.message || String(error));
+  }));
 });
 
 
@@ -4298,6 +4338,12 @@ if (TRIPLETEX_RETRY_INTERVAL_MINUTES > 0) {
 
 if (process.env.VIPPS_CLIENT_ID && process.env.VIPPS_CLIENT_SECRET &&
     process.env.VIPPS_SUBSCRIPTION_KEY && process.env.VIPPS_MSN) {
+  setTimeout(() => retryPendingVippsOrders().catch(error => {
+    console.warn('[VIPPS_PENDING_RETRY_FAILED]', error?.message || String(error));
+  }), 30 * 1000).unref();
+  setInterval(() => retryPendingVippsOrders().catch(error => {
+    console.warn('[VIPPS_PENDING_RETRY_FAILED]', error?.message || String(error));
+  }), 5 * 60 * 1000).unref();
   setTimeout(() => retryMissingMembershipDates().catch(error => {
     console.warn('[MEMBERSHIP_DATES_RETRY_FAILED]', error?.message || String(error));
   }), 60 * 1000).unref();

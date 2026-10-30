@@ -62,4 +62,26 @@ function verifiedPaymentTime(details, order) {
   return captures[0].timeStamp;
 }
 
-module.exports = { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime };
+function verifiedVippsStatus(details, order) {
+  if (!details || details.orderId !== order.orderId ||
+      !Array.isArray(details.transactionLogHistory)) return null;
+  const amount = Number(order.amount);
+  if (!Number.isSafeInteger(amount) || amount <= 0) return null;
+  const operations = details.transactionLogHistory.filter(entry =>
+    entry?.operationSuccess === true && Number.isFinite(Date.parse(entry.timeStamp))
+  ).sort((a, b) => Date.parse(b.timeStamp) - Date.parse(a.timeStamp));
+  const latest = operations[0];
+  if (!latest) return null;
+  const operation = String(latest.operation).toUpperCase();
+  if (operation === 'SALE' || operation === 'CAPTURE') {
+    return verifiedPaymentTime(details, order) ? (operation === 'SALE' ? 'SALE' : 'CAPTURED') : null;
+  }
+  if (operation === 'RESERVE') {
+    return Number(latest.amount) >= amount ? 'RESERVED' : null;
+  }
+  if (['CANCEL', 'VOID', 'REFUND'].includes(operation)) return 'CANCELLED';
+  if (operation === 'INITIATE') return 'PENDING';
+  return null;
+}
+
+module.exports = { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus };

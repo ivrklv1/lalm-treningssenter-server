@@ -133,3 +133,62 @@ for (const { initialPlan, storedPhone, bindingMonths } of [
     }
   });
 }
+
+for (const mode of ['INITIATE', 'RESERVE', 'ERROR']) {
+test(`an unverified paid callback (${mode}) leaves the order pending and does not activate a member`, async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lalm-unverified-payment-'));
+  const port = await freePort();
+  const orderId = 'synthetic-unpaid-order';
+  fs.writeFileSync(path.join(dataDir, 'members.json'), '[]');
+  fs.writeFileSync(path.join(dataDir, 'orders.json'), JSON.stringify([{
+    orderId, status: 'PENDING', amount: 100, bindingMonths: 12,
+    membershipKey: 'standard_12mnd_binding', phone: '+4712345678',
+    email: 'synthetic@example.invalid', name: 'Oppdiktet Medlem',
+    isShortOrDropin: false, welcomeSmsSent: true, tripletexSynced: true,
+  }]));
+  let output = '';
+  const child = spawn(process.execPath, [
+    '--require', path.join(__dirname, 'blockExternal.cjs'),
+    '--require', path.join(__dirname, 'mockVippsDetails.cjs'), path.join(root, 'server.js'),
+  ], {
+    cwd: root,
+    env: {
+      PATH: process.env.PATH,
+      NODE_PATH: path.resolve(root, '../legal-test-server/node_modules'),
+      DATA_DIR: dataDir, PORT: String(port), MOCK_VIPPS_OPERATION: mode,
+      MOCK_VIPPS_DETAILS_ERROR: String(mode === 'ERROR'),
+      TRIPLETEX_RETRY_INTERVAL_MINUTES: '0',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  child.stdout.on('data', chunk => { output += chunk; });
+  child.stderr.on('data', chunk => { output += chunk; });
+  try {
+    await waitForServer(port, child, () => output);
+    const response = await fetch(`http://localhost:${port}/vipps/callback/v2/payments/${orderId}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ transactionInfo: {
+        status: 'SALE', transactionId: 'synthetic-only', timeStamp: '2026-10-29T12:00:00Z',
+      } }),
+    });
+    assert.equal(response.status, 200, output);
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const orders = JSON.parse(fs.readFileSync(path.join(dataDir, 'orders.json')));
+      if (orders[0].paymentDetailsLastCheckedAt &&
+          (mode !== 'RESERVE' || orders[0].status === 'RESERVED')) break;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const orders = JSON.parse(fs.readFileSync(path.join(dataDir, 'orders.json')));
+    const members = JSON.parse(fs.readFileSync(path.join(dataDir, 'members.json')));
+    assert.ok(orders[0].paymentDetailsLastCheckedAt, output);
+    assert.equal(orders[0].status, mode === 'RESERVE' ? 'RESERVED' : 'PENDING');
+    assert.equal(orders[0].memberId, undefined);
+    assert.deepEqual(members, []);
+    assert.equal(output.includes('TEST BLOCKED AN OUTBOUND CONNECTION'), false, output);
+  } finally {
+    child.kill('SIGTERM');
+    await new Promise(resolve => child.once('exit', resolve));
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+}

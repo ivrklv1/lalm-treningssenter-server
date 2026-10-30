@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime } = require('../membershipDates');
+const { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus } = require('../membershipDates');
 
 test('starts on the Oslo payment day and leaves subscription state alone', () => {
   assert.deepEqual(datesForPaidMembership('2026-10-29T23:30:00Z', 12), {
@@ -41,8 +41,19 @@ test('accepts only a matching, successful and unrefunded Vipps capture', () => {
     ],
   };
   assert.equal(verifiedPaymentTime(details, order), '2026-10-29T12:00:00Z');
+  assert.equal(verifiedVippsStatus(details, order), 'CAPTURED');
   assert.equal(verifiedPaymentTime({ ...details, orderId: 'another-order' }, order), null);
   assert.equal(verifiedPaymentTime({ ...details, transactionSummary: { capturedAmount: 100, refundedAmount: 100 } }, order), null);
   assert.equal(verifiedPaymentTime({ ...details, transactionLogHistory: [{ operation: 'CAPTURE', operationSuccess: false, amount: 100, timeStamp: '2026-10-29T12:00:00Z' }] }, order), null);
   assert.equal(verifiedPaymentTime({ ...details, transactionSummary: { capturedAmount: 99, refundedAmount: 0 } }, order), null);
+  assert.equal(verifiedVippsStatus({ ...details, transactionSummary: { capturedAmount: 99, refundedAmount: 0 } }, order), null);
+  assert.equal(verifiedVippsStatus({ ...details, transactionLogHistory: [
+    { operation: 'INITIATE', operationSuccess: true, amount: 100, timeStamp: '2026-10-29T11:00:00Z' },
+  ] }, order), 'PENDING');
+  assert.equal(verifiedVippsStatus({ ...details, transactionSummary: { capturedAmount: 0, refundedAmount: 0 }, transactionLogHistory: [
+    { operation: 'RESERVE', operationSuccess: true, amount: 100, timeStamp: '2026-10-29T11:00:00Z' },
+  ] }, order), 'RESERVED');
+  assert.equal(verifiedVippsStatus({ ...details, transactionSummary: { capturedAmount: 0, refundedAmount: 0 }, transactionLogHistory: [
+    { operation: 'RESERVE', operationSuccess: true, amount: 99, timeStamp: '2026-10-29T11:00:00Z' },
+  ] }, order), null);
 });
