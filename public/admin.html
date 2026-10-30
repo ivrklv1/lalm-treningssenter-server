@@ -249,6 +249,40 @@
       font-weight: 500;
     }
 
+    .sub-tabs-row {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 4px;
+      max-width: 100%;
+      padding: 4px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.9);
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .sub-tabs-row::-webkit-scrollbar { display: none; }
+    .sub-tab-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.92rem;
+      font-weight: 500;
+      white-space: nowrap;
+      text-align: center;
+      cursor: pointer;
+    }
+    .sub-tab-button:hover { background: rgba(226, 232, 240, 0.7); }
+    .sub-tab-button.active { background: var(--accent); color: #fff; }
+    .sub-tab-button:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+
     .table-wrapper {
       border-radius: var(--radius-md);
       border: 1px solid var(--border);
@@ -851,13 +885,13 @@
           </div>
         </div>
         <div class="mt-2">
-  <div class="pill-row">
-    <button type="button" class="pill" data-plan-filter="all">Alle</button>
-    <button type="button" class="pill" data-plan-filter="binding">Med binding</button>
-    <button type="button" class="pill" data-plan-filter="no_binding">Uten binding</button>
-    <button type="button" class="pill" data-plan-filter="short_term">Korttid</button>
-    <button type="button" class="pill" data-plan-filter="dropin">Drop-in</button>
-    <button type="button" class="pill" data-plan-filter="campaign">Kampanje</button>
+  <div class="sub-tabs-row" aria-label="Filtrer medlemskap">
+    <button type="button" class="sub-tab-button" data-plan-filter="all">Alle</button>
+    <button type="button" class="sub-tab-button" data-plan-filter="binding">Med binding</button>
+    <button type="button" class="sub-tab-button" data-plan-filter="no_binding">Uten binding</button>
+    <button type="button" class="sub-tab-button" data-plan-filter="short_term">Korttid</button>
+    <button type="button" class="sub-tab-button" data-plan-filter="dropin">Drop-in</button>
+    <button type="button" class="sub-tab-button" data-plan-filter="campaign">Kampanje</button>
   </div>
 </div>
 
@@ -1059,9 +1093,9 @@
             <div class="card-subtitle">Vipps-ordrer og dørhendelser.</div>
           </div>
 
-          <div class="pill-row" id="logSubtabs">
-            <button type="button" class="pill active" data-logtab="vipps">Vipps-ordrer</button>
-            <button type="button" class="pill" data-logtab="door">Dør-logg</button>
+          <div class="sub-tabs-row" id="logSubtabs" aria-label="Velg logg">
+            <button type="button" class="sub-tab-button active" data-logtab="vipps" aria-pressed="true">Vipps-ordrer</button>
+            <button type="button" class="sub-tab-button" data-logtab="door" aria-pressed="false">Dør-logg</button>
           </div>
         </div>
 
@@ -1409,15 +1443,16 @@ const planFilterButtons = document.querySelectorAll('[data-plan-filter]');
 planFilterButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
     currentPlanFilter = btn.getAttribute('data-plan-filter') || 'all';
-    planFilterButtons.forEach((b) => b.classList.remove('active'));
+    planFilterButtons.forEach((b) => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
     btn.classList.add('active');
+    btn.setAttribute('aria-pressed', 'true');
     renderPlans();
   });
 });
 
 // sett "Alle" som aktiv ved start
 const defaultFilterBtn = document.querySelector('[data-plan-filter="all"]');
-if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
+if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterBtn.setAttribute('aria-pressed', 'true'); }
 
 
   let allMembers = [];
@@ -2273,7 +2308,11 @@ if (defaultFilterBtn) defaultFilterBtn.classList.add('active');
 
   function setLogSubtab(which) {
     const btns = logSubtabsEl ? logSubtabsEl.querySelectorAll('button[data-logtab]') : [];
-    btns.forEach(b => b.classList.toggle('active', b.dataset.logtab === which));
+    btns.forEach(b => {
+      const active = b.dataset.logtab === which;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', String(active));
+    });
 
     if (logtabVippsEl) logtabVippsEl.style.display = (which === 'vipps') ? 'block' : 'none';
     if (logtabDoorEl)  logtabDoorEl.style.display  = (which === 'door')  ? 'block' : 'none';
