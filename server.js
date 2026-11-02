@@ -1315,6 +1315,18 @@ function legalMemberId(req) {
   return matches.length === 1 && matches[0].active && isValidUntilOk(matches[0]) ? memberId : null;
 }
 
+app.get('/api/legal/acknowledgements/required', (req, res) => {
+  try {
+    const data = legalDocuments.read();
+    const required = ['terms', 'privacy'].flatMap(kind => {
+      const published = data[kind].published;
+      return published?.requiresAcknowledgement === true
+        ? [{ kind, version: published.version }] : [];
+    });
+    res.json({ ok: true, required });
+  } catch (error) { legalApiError(res, error); }
+});
+
 app.get('/api/legal/acknowledgements/pending', (req, res) => {
   try {
     const memberId = legalMemberId(req);
@@ -2425,11 +2437,11 @@ app.post('/auth/verify-code', async (req, res) => {
     });
 
     if (member) {
-      if (!member.id) return res.status(503).json({ ok: false, error: 'member_id_required' });
       return res.json({
         ok: true,
         isMember: true,
-        sessionToken: legalMemberSession.issue(String(member.id)),
+        sessionToken: member.id ? legalMemberSession.issue(String(member.id)) : null,
+        memberIdMissing: !member.id,
         member: {
           email: member.email,
           name: member.name || '',

@@ -51,11 +51,14 @@ test('admin required version gates only the matching member until acknowledged',
     const appleToken = `Bearer ${(await appleLogin.json()).sessionToken}`;
     assert.equal((await request('/api/legal/acknowledgements/pending', 'GET', null, appleToken)).status, 200);
     assert.equal((await request('/api/legal/acknowledgements/pending', 'GET', null, 'Bearer member:fake')).status, 401);
+    assert.deepEqual((await (await fetch(base + '/api/legal/acknowledgements/required')).json()).required, []);
     assert.deepEqual((await (await request('/api/legal/acknowledgements/pending', 'GET', null, tokenA)).json()).pending, []);
     assert.equal((await request('/admin/legal/terms/draft', 'PUT', {
       expectedRevision: 0, version: 't1', title: 'Vilkår', content: 'Testtekst', requiresAcknowledgement: true,
     }, admin)).status, 200);
     assert.equal((await request('/admin/legal/terms/publish', 'POST', { expectedRevision: 1 }, admin)).status, 200);
+    assert.deepEqual((await (await fetch(base + '/api/legal/acknowledgements/required')).json()).required,
+      [{ kind: 'terms', version: 't1' }]);
     assert.equal((await (await request('/api/legal/acknowledgements/pending', 'GET', null, tokenA)).json()).pending[0].version, 't1');
     assert.equal((await request('/api/legal/acknowledgements', 'POST', { documents: [{ kind: 'terms', version: 't0' }] }, tokenA)).status, 409);
     assert.equal((await request('/api/legal/acknowledgements', 'POST', { documents: [{ kind: 'terms', version: 't1' }] }, tokenA)).status, 200);
