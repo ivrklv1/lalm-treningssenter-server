@@ -10,4 +10,10 @@ Redigering ligger under **Verktøy → Vilkår og personvern**. Hvert dokument h
 
 Dokumenter og historikk lagres i `legal-documents.json` under serverens `DATA_DIR` (`/data` i produksjon) og tas med i den eksisterende sikkerhetskopien av datamappen. Redigering krever eksisterende admininnlogging. En versjon kan ikke publiseres to ganger, og et utkast basert på en eldre revisjon må lastes på nytt før lagring.
 
-**Ny godkjenning ved innlogging er ikke implementert.** Admin har derfor ingen bryter for dette. Endringer som krever varsling eller nytt samtykke må håndteres som en separat funksjon og prosess.
+## Ny bekreftelse i appen
+
+I utkastet kan admin velge **Krev ny bekreftelse i appen for denne versjonen** før utkastet lagres. Valget følger den publiserte dokumentversjonen. Medlemsvilkår vises som «Jeg godtar», mens personvern vises som «Jeg har lest». Dette er ikke et personvernsamtykke. Appen viser den publiserte teksten før bekreftelse og holder resten av appen tilbake til bekreftelsen er lagret. Dørendepunktene endres ikke.
+
+Bekreftelser lagres per medlems-ID og versjon, med tidspunkt og historikk, i `legal-acknowledgements.json` på `DATA_DIR`. Appen bruker en signert medlemsøkt fra SMS-innlogging; den gamle lokalt lagrede telefoninnloggingen krever ny innlogging. Signeringsnøkkelen ligger i `legal-member-session.key` på samme disk, eller angis med `LEGAL_MEMBER_SESSION_SECRET` på minst 32 tegn. Begge diskfilene må tas med i backupen.
+
+**Aktiveringsrekkefølge:** Test backend og app sammen, bygg og distribuer appen til iOS og Android, bekreft at eksisterende brukere kan logge inn på nytt og lese/bekrefte dokumentene, og sett først deretter `LEGAL_ACK_APP_READY=true` på serveren. Uten denne innstillingen avvises publisering av dokumenter som krever ny bekreftelse. Publisering uten avhuking virker som før. Appen håndterer også servere som ennå ikke har bekreftelsesendepunktet, men en gammel appversjon viser ikke dette kravet; utrulling må derfor koordineres før avhukingen brukes.

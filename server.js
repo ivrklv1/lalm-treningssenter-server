@@ -33,6 +33,8 @@ const { prepareAdminMemberEdit } = require('./memberAdminEdit');
 const { analyzeNifImport } = require('./nifImport');
 const { createVisitStats } = require('./visitStats');
 const { createLegalDocuments, LegalDocumentError } = require('./legalDocuments');
+const { createLegalMemberSession } = require('./legalMemberSession');
+const { createLegalAcknowledgements } = require('./legalAcknowledgements');
 
 
 const app = express();
@@ -99,6 +101,8 @@ const ORDERS_FILE  = path.join(DATA_DIR, 'orders.json');
 const PLANS_FILE   = path.join(DATA_DIR, 'plans.json');
 const visitStats = createVisitStats({ dataDir: DATA_DIR });
 const legalDocuments = createLegalDocuments({ dataDir: DATA_DIR });
+const legalMemberSession = createLegalMemberSession({ dataDir: DATA_DIR });
+const legalAcknowledgements = createLegalAcknowledgements({ dataDir: DATA_DIR, legalDocuments });
 
 function recordVisitSafely(visitorKey) {
   try {
@@ -1302,6 +1306,31 @@ app.get('/api/legal/:kind', (req, res) => {
   }
 });
 
+function legalMemberId(req) {
+  const token = /^Bearer (.+)$/.exec(req.get('authorization') || '')?.[1];
+  const memberId = legalMemberSession.verify(token);
+  if (!memberId) return null;
+  if (memberId === 'apple-test') return memberId;
+  const matches = getMembers().filter(member => String(member.id) === memberId);
+  return matches.length === 1 && matches[0].active && isValidUntilOk(matches[0]) ? memberId : null;
+}
+
+app.get('/api/legal/acknowledgements/pending', (req, res) => {
+  try {
+    const memberId = legalMemberId(req);
+    if (!memberId) return res.status(401).json({ ok: false, error: 'login_required' });
+    res.json({ ok: true, pending: legalAcknowledgements.required(memberId) });
+  } catch (error) { legalApiError(res, error); }
+});
+
+app.post('/api/legal/acknowledgements', (req, res) => {
+  try {
+    const memberId = legalMemberId(req);
+    if (!memberId) return res.status(401).json({ ok: false, error: 'login_required' });
+    res.json({ ok: true, ...legalAcknowledgements.acknowledge(memberId, req.body?.documents) });
+  } catch (error) { legalApiError(res, error); }
+});
+
 app.get('/admin/legal', basicAuth, (req, res) => {
   try {
     res.json(legalDocuments.read());
@@ -1320,6 +1349,10 @@ app.put('/admin/legal/:kind/draft', basicAuth, (req, res) => {
 
 app.post('/admin/legal/:kind/publish', basicAuth, (req, res) => {
   try {
+    const draft = legalDocuments.read()[req.params.kind]?.draft;
+    if (draft?.requiresAcknowledgement && process.env.LEGAL_ACK_APP_READY !== 'true') {
+      return res.status(409).json({ ok: false, error: 'acknowledgement_app_not_ready' });
+    }
     res.json(legalDocuments.publish(req.params.kind, req.body?.expectedRevision, req.adminUser));
   } catch (error) {
     legalApiError(res, error);
@@ -2361,6 +2394,7 @@ app.post('/auth/verify-code', async (req, res) => {
       return res.json({
         ok: true,
         isMember: true,
+        sessionToken: legalMemberSession.issue('apple-test'),
         member: {
           email: 'apple-test@lalmtreningssenter.no',
           name: 'Apple Testbruker',
@@ -2391,9 +2425,11 @@ app.post('/auth/verify-code', async (req, res) => {
     });
 
     if (member) {
+      if (!member.id) return res.status(503).json({ ok: false, error: 'member_id_required' });
       return res.json({
         ok: true,
         isMember: true,
+        sessionToken: legalMemberSession.issue(String(member.id)),
         member: {
           email: member.email,
           name: member.name || '',

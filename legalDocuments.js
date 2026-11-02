@@ -69,7 +69,12 @@ function createLegalDocuments({ dataDir, now = () => new Date().toISOString() })
         !content || content.length > 50000) {
       throw new LegalDocumentError('version_title_content_required');
     }
-    document.draft = { version, title, content, updatedAt: now(), updatedBy: actor || 'admin' };
+    if (input?.requiresAcknowledgement !== undefined && typeof input.requiresAcknowledgement !== 'boolean') {
+      throw new LegalDocumentError('acknowledgement_choice_required');
+    }
+    document.draft = { version, title, content,
+      requiresAcknowledgement: input.requiresAcknowledgement === true,
+      updatedAt: now(), updatedBy: actor || 'admin' };
     document.revision += 1;
     write(data);
     return document;
@@ -87,6 +92,7 @@ function createLegalDocuments({ dataDir, now = () => new Date().toISOString() })
       version: document.draft.version,
       title: document.draft.title,
       content: document.draft.content,
+      requiresAcknowledgement: document.draft.requiresAcknowledgement === true,
       updatedAt: now(),
       publishedBy: actor || 'admin',
     };
@@ -102,7 +108,8 @@ function createLegalDocuments({ dataDir, now = () => new Date().toISOString() })
     const document = documentFor(read(), kind).published;
     if (!document) throw new LegalDocumentError('document_not_published', 404);
     const { version, title, content, updatedAt } = document;
-    return { version, title, content, updatedAt };
+    return { version, title, content, updatedAt,
+      requiresAcknowledgement: document.requiresAcknowledgement === true };
   }
 
   return { read, saveDraft, publish, publicDocument };

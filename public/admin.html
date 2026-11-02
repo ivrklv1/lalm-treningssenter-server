@@ -1243,6 +1243,11 @@
           <div><label for="legalTitle">Tittel</label><input id="legalTitle" type="text" maxlength="200" /></div>
         </div>
         <div class="mt-2"><label for="legalContent">Innhold</label><textarea id="legalContent" rows="16" maxlength="50000" placeholder="Skriv eller lim inn dokumentteksten her"></textarea></div>
+        <label class="mt-2" style="display:flex;align-items:center;gap:10px;min-height:48px;">
+          <input id="legalRequiresAcknowledgement" type="checkbox" />
+          <span>Krev ny bekreftelse i appen for denne versjonen</span>
+        </label>
+        <div class="small text-muted">For personvern bekrefter medlemmet at informasjonen er lest. Dette er ikke et samtykke til behandling av personopplysninger. Døradgang påvirkes ikke. Publisering med dette valget krever at den nye appversjonen først er kontrollert og aktivert på serveren.</div>
         <div class="btn-row mt-2">
           <button id="legalPreviewBtn" type="button" class="btn-secondary">Forhåndsvis</button>
           <button id="legalReloadBtn" type="button" class="btn-ghost">Hent på nytt</button>
@@ -3564,6 +3569,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
   const legalVersionEl = document.getElementById('legalVersion');
   const legalTitleEl = document.getElementById('legalTitle');
   const legalContentEl = document.getElementById('legalContent');
+  const legalRequiresAcknowledgementEl = document.getElementById('legalRequiresAcknowledgement');
   const legalStatusEl = document.getElementById('legalPublishedStatus');
   const legalMessageEl = document.getElementById('legalMessage');
   const legalPreviewEl = document.getElementById('legalPreview');
@@ -3608,8 +3614,9 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     legalVersionEl.value = doc.draft ? editable.version : '';
     legalTitleEl.value = editable.title || '';
     legalContentEl.value = editable.content || '';
+    legalRequiresAcknowledgementEl.checked = editable.requiresAcknowledgement === true;
     legalStatusEl.textContent = doc.published
-      ? `Publisert versjon ${doc.published.version} · ${new Date(doc.published.updatedAt).toLocaleString('nb-NO')}`
+      ? `Publisert versjon ${doc.published.version} · ${new Date(doc.published.updatedAt).toLocaleString('nb-NO')} · ${doc.published.requiresAcknowledgement ? 'Ny bekreftelse kreves i appen' : 'Ingen ny bekreftelse kreves'}`
       : 'Ingen publisert tekst. Appen bruker sin lokale reservetekst.';
     legalHistoryEl.replaceChildren();
     for (const entry of [...doc.history].reverse()) {
@@ -3646,8 +3653,8 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     }
   }
 
-  for (const input of [legalVersionEl, legalTitleEl, legalContentEl]) {
-    input.addEventListener('input', () => { legalDirty = true; legalButtons(); });
+  for (const input of [legalVersionEl, legalTitleEl, legalContentEl, legalRequiresAcknowledgementEl]) {
+    input.addEventListener(input === legalRequiresAcknowledgementEl ? 'change' : 'input', () => { legalDirty = true; legalButtons(); });
   }
   legalKindEl.addEventListener('change', () => {
     if (legalDirty && !confirm('Forkaste endringer som ikke er lagret?')) {
@@ -3673,7 +3680,8 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
       const response = await fetch(`/admin/legal/${kind}/draft`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expectedRevision: legalState[kind].revision,
-          version: legalVersionEl.value, title: legalTitleEl.value, content: legalContentEl.value }),
+          version: legalVersionEl.value, title: legalTitleEl.value, content: legalContentEl.value,
+          requiresAcknowledgement: legalRequiresAcknowledgementEl.checked }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
@@ -3691,7 +3699,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     const kind = legalKindEl.value;
     const draft = legalState?.[kind]?.draft;
     if (!draft || legalDirty) return;
-    if (!confirm(`Publisere ${kind === 'terms' ? 'medlemsvilkår' : 'personvernerklæring'} versjon ${draft.version}? Teksten blir tilgjengelig for apper som henter fra denne serveren.`)) return;
+    if (!confirm(`Publisere ${kind === 'terms' ? 'medlemsvilkår' : 'personvernerklæring'} versjon ${draft.version}? Teksten blir tilgjengelig for apper som henter fra denne serveren.${draft.requiresAcknowledgement ? ' Medlemmer må bekrefte versjonen i oppdatert app før videre bruk av appen.' : ''}`)) return;
     legalBusy = true;
     legalButtons();
     try {
@@ -3700,7 +3708,8 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
         body: JSON.stringify({ expectedRevision: legalState[kind].revision }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      if (!response.ok) throw new Error(data.error === 'acknowledgement_app_not_ready'
+        ? 'Appen er ikke aktivert for ny bekreftelse ennå.' : data.error || `HTTP ${response.status}`);
       legalState[kind] = data;
       showLegalDocument();
       legalMessage('Dokumentet er publisert.');

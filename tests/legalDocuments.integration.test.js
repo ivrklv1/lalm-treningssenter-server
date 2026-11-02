@@ -109,6 +109,15 @@ test('legal drafts stay private until publication, preserve history, and reject 
     assert.equal(publicDocuments.privacy.version, 'p1');
     assert.equal(publicDocuments.terms.publishedBy, undefined);
 
+    assert.equal((await change('/admin/legal/terms/draft', 'PUT', {
+      expectedRevision: 5, version: 'v3', title: 'Nye vilkår', content: 'Ny testtekst',
+      requiresAcknowledgement: true,
+    })).status, 200);
+    const premature = await change('/admin/legal/terms/publish', 'POST', { expectedRevision: 6 });
+    assert.equal(premature.status, 409);
+    assert.equal((await premature.json()).error, 'acknowledgement_app_not_ready');
+    assert.equal((await (await fetch(base + '/api/legal/terms')).json()).version, 'v2');
+
     const onDisk = JSON.parse(fs.readFileSync(path.join(dataDir, 'legal-documents.json')));
     assert.equal(onDisk.terms.published.version, 'v2');
     assert.equal(onDisk.terms.history.length, 2);
