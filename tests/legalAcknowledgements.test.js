@@ -22,11 +22,16 @@ test('required versions are tracked per member and separately for terms and priv
     acknowledgements.acknowledge('member-a', [{ kind: 'terms', version: 'v1' }]);
     assert.deepEqual(acknowledgements.required('member-a'), []);
     assert.equal(acknowledgements.required('member-b').length, 1);
+    legal.saveDraft('privacy', { expectedRevision: 2, version: 'p2', title: 'Oppdatert personvern', content: 'Ny tekst', requiresAcknowledgement: true }, 'admin');
+    legal.publish('privacy', 3, 'admin');
+    assert.deepEqual(acknowledgements.required('member-a').map(item => item.kind), ['privacy']);
+    acknowledgements.acknowledge('member-a', [{ kind: 'privacy', version: 'p2' }]);
     legal.saveDraft('terms', { expectedRevision: 2, version: 'v2', title: 'Nye vilkår', content: 'Ny tekst', requiresAcknowledgement: true }, 'admin');
     legal.publish('terms', 3, 'admin');
     assert.deepEqual(acknowledgements.required('member-a').map(item => item.version), ['v2']);
     const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'legal-acknowledgements.json'), 'utf8'));
     assert.equal(saved.members['member-a'].terms.acknowledgedAt, '2026-11-03T00:00:00.000Z');
+    assert.deepEqual(saved.members['member-a'].privacy.history.map(item => item.version), ['p2']);
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 

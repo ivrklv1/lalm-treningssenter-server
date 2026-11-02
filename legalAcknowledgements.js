@@ -14,10 +14,16 @@ function createLegalAcknowledgements({ dataDir, legalDocuments, now = () => new 
   }
   function write(data) {
     const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
+    let fd;
     try {
-      fs.writeFileSync(temporary, JSON.stringify(data, null, 2), { flag: 'wx', mode: 0o600 });
+      fd = fs.openSync(temporary, 'wx', 0o600);
+      fs.writeFileSync(fd, JSON.stringify(data, null, 2));
+      fs.fsyncSync(fd);
+      fs.closeSync(fd);
+      fd = undefined;
       fs.renameSync(temporary, file);
     } catch (error) {
+      if (fd !== undefined) fs.closeSync(fd);
       try { fs.unlinkSync(temporary); } catch (_) {}
       throw error;
     }
