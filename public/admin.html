@@ -283,6 +283,13 @@
     .sub-tab-button.active { background: var(--accent); color: #fff; }
     .sub-tab-button:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
 
+    .legal-preview { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: #fff; overflow-wrap: anywhere; }
+    .legal-preview h2 { color: var(--accent); margin: 0 0 16px; }
+    .legal-preview h3 { color: var(--accent); margin: 20px 0 6px; }
+    .legal-preview p { margin: 0 0 10px; line-height: 1.5; white-space: pre-wrap; }
+    .legal-preview .bullet { padding-left: 12px; }
+    #legalHistory button { display: block; margin: 6px 0; min-height: 40px; }
+
     .table-wrapper {
       border-radius: var(--radius-md);
       border: 1px solid var(--border);
@@ -1221,6 +1228,30 @@
           <div id="nifPreviewSummary" class="mt-1 small" role="status"></div>
           <div id="nifMsg" class="mt-1 small"></div>
         </div>
+      </section>
+
+      <section class="card mt-2" id="legalEditor">
+        <div class="card-title">Vilkår og personvern</div>
+        <div class="card-subtitle">Lagre et utkast, se gjennom teksten og publiser når den er godkjent. Publisering endrer teksten som hentes fra serveren.</div>
+        <div class="mt-2">
+          <label for="legalKind">Dokument</label>
+          <select id="legalKind"><option value="terms">Medlemsvilkår</option><option value="privacy">Personvernerklæring</option></select>
+        </div>
+        <div id="legalPublishedStatus" class="mt-1 small" role="status"></div>
+        <div class="input-grid mt-2">
+          <div><label for="legalVersion">Ny versjon</label><input id="legalVersion" type="text" maxlength="80" placeholder="f.eks. 2026-11" /></div>
+          <div><label for="legalTitle">Tittel</label><input id="legalTitle" type="text" maxlength="200" /></div>
+        </div>
+        <div class="mt-2"><label for="legalContent">Innhold</label><textarea id="legalContent" rows="16" maxlength="50000" placeholder="Skriv eller lim inn dokumentteksten her"></textarea></div>
+        <div class="btn-row mt-2">
+          <button id="legalPreviewBtn" type="button" class="btn-secondary">Forhåndsvis</button>
+          <button id="legalReloadBtn" type="button" class="btn-ghost">Hent på nytt</button>
+          <button id="legalSaveBtn" type="button" class="btn-secondary" disabled>Lagre utkast</button>
+          <button id="legalPublishBtn" type="button" class="btn-primary" disabled>Publiser lagret utkast</button>
+        </div>
+        <div id="legalMessage" class="mt-1 small" role="status"></div>
+        <div id="legalPreview" class="legal-preview mt-2" style="display:none;"></div>
+        <details class="mt-2"><summary>Publiserte versjoner</summary><div id="legalHistory" class="mt-1"></div></details>
       </section>
     </section>
   </main>
@@ -3528,6 +3559,159 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     }
   });
 
+  // ------- VILKÅR OG PERSONVERN -------
+  const legalKindEl = document.getElementById('legalKind');
+  const legalVersionEl = document.getElementById('legalVersion');
+  const legalTitleEl = document.getElementById('legalTitle');
+  const legalContentEl = document.getElementById('legalContent');
+  const legalStatusEl = document.getElementById('legalPublishedStatus');
+  const legalMessageEl = document.getElementById('legalMessage');
+  const legalPreviewEl = document.getElementById('legalPreview');
+  const legalHistoryEl = document.getElementById('legalHistory');
+  const legalSaveBtn = document.getElementById('legalSaveBtn');
+  const legalPublishBtn = document.getElementById('legalPublishBtn');
+  let legalState = null;
+  let legalDirty = false;
+  let legalBusy = false;
+
+  function legalMessage(message, error = false) {
+    legalMessageEl.textContent = message;
+    legalMessageEl.className = 'mt-1 small ' + (error ? 'tag-danger' : 'tag-success');
+  }
+
+  function legalButtons() {
+    const doc = legalState && legalState[legalKindEl.value];
+    legalSaveBtn.disabled = legalBusy || !doc || !legalDirty;
+    legalPublishBtn.disabled = legalBusy || !doc?.draft || legalDirty;
+  }
+
+  function previewLegal(doc) {
+    legalPreviewEl.replaceChildren();
+    const title = document.createElement('h2');
+    title.textContent = doc.title || 'Uten tittel';
+    legalPreviewEl.appendChild(title);
+    for (const block of String(doc.content || '').trim().split(/\n\s*\n/)) {
+      if (!block.trim()) continue;
+      const heading = /^\d+\.\s+/.test(block.trim());
+      const element = document.createElement(heading ? 'h3' : 'p');
+      element.textContent = block.trim();
+      if (block.trim().startsWith('•')) element.className = 'bullet';
+      legalPreviewEl.appendChild(element);
+    }
+    legalPreviewEl.style.display = 'block';
+  }
+
+  function showLegalDocument() {
+    const doc = legalState?.[legalKindEl.value];
+    if (!doc) return;
+    const editable = doc.draft || doc.published || {};
+    legalVersionEl.value = doc.draft ? editable.version : '';
+    legalTitleEl.value = editable.title || '';
+    legalContentEl.value = editable.content || '';
+    legalStatusEl.textContent = doc.published
+      ? `Publisert versjon ${doc.published.version} · ${new Date(doc.published.updatedAt).toLocaleString('nb-NO')}`
+      : 'Ingen publisert tekst. Appen bruker sin lokale reservetekst.';
+    legalHistoryEl.replaceChildren();
+    for (const entry of [...doc.history].reverse()) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn-ghost';
+      button.textContent = `${entry.version} · ${new Date(entry.updatedAt).toLocaleString('nb-NO')} · Vis tekst`;
+      button.addEventListener('click', () => previewLegal(entry));
+      legalHistoryEl.appendChild(button);
+    }
+    if (!doc.history.length) legalHistoryEl.textContent = 'Ingen publiserte versjoner ennå.';
+    legalPreviewEl.style.display = 'none';
+    legalDirty = false;
+    legalButtons();
+  }
+
+  async function loadLegalAdmin() {
+    legalBusy = true;
+    legalButtons();
+    legalMessage('Henter dokumenter…');
+    try {
+      const response = await fetch('/admin/legal');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      legalState = data;
+      showLegalDocument();
+      legalMessage('Dokumenter hentet.');
+    } catch (error) {
+      legalState = null;
+      legalMessage('Kunne ikke hente dokumenter: ' + error.message, true);
+    } finally {
+      legalBusy = false;
+      legalButtons();
+    }
+  }
+
+  for (const input of [legalVersionEl, legalTitleEl, legalContentEl]) {
+    input.addEventListener('input', () => { legalDirty = true; legalButtons(); });
+  }
+  legalKindEl.addEventListener('change', () => {
+    if (legalDirty && !confirm('Forkaste endringer som ikke er lagret?')) {
+      legalKindEl.value = legalKindEl.value === 'terms' ? 'privacy' : 'terms';
+      return;
+    }
+    showLegalDocument();
+    legalMessage('');
+  });
+  document.getElementById('legalReloadBtn').addEventListener('click', () => {
+    if (legalDirty && !confirm('Forkaste endringer som ikke er lagret?')) return;
+    loadLegalAdmin();
+  });
+  document.getElementById('legalPreviewBtn').addEventListener('click', () => {
+    previewLegal({ title: legalTitleEl.value, content: legalContentEl.value });
+    legalMessage('Forhåndsvisning av teksten i feltene. Den er ikke publisert.');
+  });
+  legalSaveBtn.addEventListener('click', async () => {
+    const kind = legalKindEl.value;
+    legalBusy = true;
+    legalButtons();
+    try {
+      const response = await fetch(`/admin/legal/${kind}/draft`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expectedRevision: legalState[kind].revision,
+          version: legalVersionEl.value, title: legalTitleEl.value, content: legalContentEl.value }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      legalState[kind] = data;
+      showLegalDocument();
+      legalMessage('Utkast lagret. Den publiserte teksten er uendret.');
+    } catch (error) {
+      legalMessage('Utkastet ble ikke lagret: ' + error.message + '. Last siden på nytt ved konflikt.', true);
+    } finally {
+      legalBusy = false;
+      legalButtons();
+    }
+  });
+  legalPublishBtn.addEventListener('click', async () => {
+    const kind = legalKindEl.value;
+    const draft = legalState?.[kind]?.draft;
+    if (!draft || legalDirty) return;
+    if (!confirm(`Publisere ${kind === 'terms' ? 'medlemsvilkår' : 'personvernerklæring'} versjon ${draft.version}? Teksten blir tilgjengelig for apper som henter fra denne serveren.`)) return;
+    legalBusy = true;
+    legalButtons();
+    try {
+      const response = await fetch(`/admin/legal/${kind}/publish`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expectedRevision: legalState[kind].revision }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      legalState[kind] = data;
+      showLegalDocument();
+      legalMessage('Dokumentet er publisert.');
+    } catch (error) {
+      legalMessage('Publisering feilet: ' + error.message + '. Last siden på nytt ved konflikt.', true);
+    } finally {
+      legalBusy = false;
+      legalButtons();
+    }
+  });
+
   // ------- FANER -------
   const tabButtons = document.querySelectorAll('.tab-button');
   const tabPanels = document.querySelectorAll('.tab-panel');
@@ -3550,6 +3734,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
       if (target === 'logs' && typeof setLogSubtab === 'function') {
         setLogSubtab('vipps');
       }
+      if (target === 'tools' && !legalState) loadLegalAdmin();
     });
   });
 

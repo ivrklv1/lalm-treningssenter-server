@@ -32,6 +32,7 @@ const { confirmedRefund } = require('./refundReview');
 const { prepareAdminMemberEdit } = require('./memberAdminEdit');
 const { analyzeNifImport } = require('./nifImport');
 const { createVisitStats } = require('./visitStats');
+const { createLegalDocuments, LegalDocumentError } = require('./legalDocuments');
 
 
 const app = express();
@@ -97,6 +98,7 @@ const MEMBERS_FILE = path.join(DATA_DIR, 'members.json');
 const ORDERS_FILE  = path.join(DATA_DIR, 'orders.json');
 const PLANS_FILE   = path.join(DATA_DIR, 'plans.json');
 const visitStats = createVisitStats({ dataDir: DATA_DIR });
+const legalDocuments = createLegalDocuments({ dataDir: DATA_DIR });
 
 function recordVisitSafely(visitorKey) {
   try {
@@ -1274,6 +1276,54 @@ app.get('/api/plans', (req, res) => {
     });
 
   res.json(publicPlans);
+});
+
+function legalApiError(res, error) {
+  if (error instanceof LegalDocumentError) {
+    return res.status(error.status).json({ ok: false, error: error.code });
+  }
+  console.error('[LEGAL_DOCUMENT_STORAGE_ERROR]', error);
+  return res.status(503).json({ ok: false, error: 'legal_storage_unavailable' });
+}
+
+app.get('/api/legal', (req, res) => {
+  try {
+    res.json({ terms: legalDocuments.publicDocument('terms'), privacy: legalDocuments.publicDocument('privacy') });
+  } catch (error) {
+    legalApiError(res, error);
+  }
+});
+
+app.get('/api/legal/:kind', (req, res) => {
+  try {
+    res.json(legalDocuments.publicDocument(req.params.kind));
+  } catch (error) {
+    legalApiError(res, error);
+  }
+});
+
+app.get('/admin/legal', basicAuth, (req, res) => {
+  try {
+    res.json(legalDocuments.read());
+  } catch (error) {
+    legalApiError(res, error);
+  }
+});
+
+app.put('/admin/legal/:kind/draft', basicAuth, (req, res) => {
+  try {
+    res.json(legalDocuments.saveDraft(req.params.kind, req.body, req.adminUser));
+  } catch (error) {
+    legalApiError(res, error);
+  }
+});
+
+app.post('/admin/legal/:kind/publish', basicAuth, (req, res) => {
+  try {
+    res.json(legalDocuments.publish(req.params.kind, req.body?.expectedRevision, req.adminUser));
+  } catch (error) {
+    legalApiError(res, error);
+  }
 });
 
 // Admin: hent alle medlemskap (også inaktive)
