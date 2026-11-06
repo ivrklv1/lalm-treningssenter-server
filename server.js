@@ -58,6 +58,9 @@ if (LEGAL_TEST_ONLY) {
     if (req.method === 'GET' && req.path === '/') {
       return res.json({ ok: true, legalTestOnly: true, sms: false, payments: false, doors: false });
     }
+    if (req.method === 'GET' && req.path === '/api/legal/acknowledgements/required') {
+      return res.json({ required: [] });
+    }
     if (req.method === 'GET' &&
         ['/api/legal', '/api/legal/terms', '/api/legal/privacy', '/api/plans', '/api/visit-pattern'].includes(req.path)) {
       return next();
