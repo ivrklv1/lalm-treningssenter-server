@@ -38,6 +38,45 @@ const { createLegalAcknowledgements } = require('./legalAcknowledgements');
 
 
 const app = express();
+const LEGAL_TEST_SERVICE_ID = 'srv-d83i8amgvqtc73f0sveg';
+const LEGAL_TEST_ONLY = process.env.RENDER_SERVICE_ID === LEGAL_TEST_SERVICE_ID ||
+  process.env.LEGAL_TEST_ONLY === 'true';
+
+if (LEGAL_TEST_ONLY) {
+  const forbiddenKeys = [
+    'EUROBATE_USER', 'EUROBATE_PASSWORD',
+    'TELL_API_KEY', 'TELL_HWID', 'TELL_APP_ID', 'TELL_MASTER_PASSWORD',
+    'VIPPS_CLIENT_ID', 'VIPPS_CLIENT_SECRET', 'VIPPS_SUBSCRIPTION_KEY', 'VIPPS_MSN',
+    'TRIPLETEX_CONSUMER_TOKEN', 'TRIPLETEX_EMPLOYEE_TOKEN',
+    'BACKUP_S3_ACCESS_KEY_ID', 'BACKUP_S3_SECRET_ACCESS_KEY',
+  ];
+  if ((process.env.RENDER_SERVICE_ID && process.env.RENDER_SERVICE_ID !== LEGAL_TEST_SERVICE_ID) ||
+      process.env.DATA_DIR !== '/tmp/lalm-legal-test-data' ||
+      process.env.APPLE_TEST_PHONE !== '+4710000000' ||
+      !/^\d{6}$/.test(process.env.APPLE_TEST_CODE || '') ||
+      forbiddenKeys.some(key => process.env[key])) {
+    throw new Error('Legal-test requires isolated storage, synthetic login and no integration credentials.');
+  }
+
+  app.use(cors());
+  app.use(express.json());
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && req.path === '/') {
+      return res.json({ ok: true, legalTestOnly: true, sms: false, payments: false, doors: false });
+    }
+    if (req.method === 'GET' && [
+      '/admin.html', '/api/legal', '/api/legal/terms', '/api/legal/privacy',
+      '/api/legal/acknowledgements/required', '/api/legal/acknowledgements/pending', '/api/plans',
+    ].includes(req.path)) return next();
+    if (req.method === 'POST' && req.path === '/api/legal/acknowledgements') return next();
+    if (req.method === 'GET' && req.path === '/admin/legal') return next();
+    if (req.method === 'PUT' && /^\/admin\/legal\/(terms|privacy)\/draft$/.test(req.path)) return next();
+    if (req.method === 'POST' && /^\/admin\/legal\/(terms|privacy)\/publish$/.test(req.path)) return next();
+    if (req.method === 'POST' && ['/auth/send-code', '/auth/verify-code'].includes(req.path) &&
+        normalizePhone(req.body?.phone) === process.env.APPLE_TEST_PHONE) return next();
+    return res.status(403).json({ ok: false, error: 'legal_test_only' });
+  });
+}
 const PORT = Number(process.env.PORT || 3000);
 
 // ----------------------------
@@ -1362,7 +1401,7 @@ app.put('/admin/legal/:kind/draft', basicAuth, (req, res) => {
 app.post('/admin/legal/:kind/publish', basicAuth, (req, res) => {
   try {
     const draft = legalDocuments.read()[req.params.kind]?.draft;
-    if (draft?.requiresAcknowledgement && process.env.LEGAL_ACK_APP_READY !== 'true') {
+    if (draft?.requiresAcknowledgement && !LEGAL_TEST_ONLY && process.env.LEGAL_ACK_APP_READY !== 'true') {
       return res.status(409).json({ ok: false, error: 'acknowledgement_app_not_ready' });
     }
     res.json(legalDocuments.publish(req.params.kind, req.body?.expectedRevision, req.adminUser));
