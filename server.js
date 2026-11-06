@@ -1027,6 +1027,17 @@ app.get('/api/door-activity', async (req, res) => {
   }
 });
 
+app.get('/api/visit-activity', (req, res) => {
+  try {
+    const summary = visitStats.summary();
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json({ source: 'visits', ...summary });
+  } catch (error) {
+    console.error('Kunne ikke beregne besøksstatistikk:', error.message);
+    res.status(500).json({ ok: false, error: 'visit_activity_unavailable' });
+  }
+});
+
 // =====================================================
 // OFFENTLIGE MEDLEMS-ENDPOINTS
 // =====================================================

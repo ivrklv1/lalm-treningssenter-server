@@ -106,12 +106,12 @@ function createVisitStats({ dataDir }) {
           const date = addDays(firstMonday, week * 7 + weekday);
           total += data.hours[`${date}T${hour}`] || 0;
         }
-        return Math.round(total / WEEKS * 10) / 10;
+        return total / WEEKS;
       })
     );
     return {
       available: true,
-      label: 'Gjennomsnittlige registrerte døråpninger per time',
+      label: 'Gjennomsnittlige registrerte besøk per time',
       from: firstMonday,
       through: addDays(mondayOf(nowDate), -1),
       weeks: WEEKS,
