@@ -32,6 +32,7 @@ const { confirmedRefund } = require('./refundReview');
 const { prepareAdminMemberEdit } = require('./memberAdminEdit');
 const { analyzeNifImport } = require('./nifImport');
 const { createVisitStats } = require('./visitStats');
+const { doorActivitySummary } = require('./doorActivity');
 
 
 const app = express();
@@ -1014,6 +1015,17 @@ app.use(express.json());
 // Statisk servering (admin.html ligger i /public)
 // ----------------------------
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Only aggregated counts leave the server; access.log itself stays private.
+app.get('/api/door-activity', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json(await doorActivitySummary({ filename: ACCESS_LOG }));
+  } catch (error) {
+    console.error('Kunne ikke beregne døraktivitet:', error.message);
+    res.status(500).json({ ok: false, error: 'door_activity_unavailable' });
+  }
+});
 
 // =====================================================
 // OFFENTLIGE MEDLEMS-ENDPOINTS
