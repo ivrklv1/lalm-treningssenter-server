@@ -29,12 +29,23 @@ const {
 const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
 const { datesForPaidMembership, shouldReplaceMembershipDates } = require('./membershipDates');
 const { createVisitStats } = require('./visitStats');
+const { createLegalMemberSession } = require('./legalMemberSession');
 
 
 const app = express();
 const LEGAL_TEST_SERVICE_ID = 'srv-d83i8amgvqtc73f0sveg';
 const LEGAL_TEST_ONLY = process.env.RENDER_SERVICE_ID === LEGAL_TEST_SERVICE_ID ||
   process.env.LEGAL_TEST_ONLY === 'true';
+
+const LEGAL_TEST_MEMBERSHIP = {
+  planName: 'Standard med binding (eksempel)',
+  active: true,
+  membershipStartDate: '2026-10-29',
+  bindingEndDate: '2027-10-29',
+  bindingMonthsAtStart: 12,
+  membershipSample: true,
+};
+let legalTestSession;
 
 if (LEGAL_TEST_ONLY) {
   const forbiddenKeys = [
@@ -52,6 +63,7 @@ if (LEGAL_TEST_ONLY) {
     throw new Error('Legal-test requires isolated storage, synthetic login and no integration credentials.');
   }
 
+  legalTestSession = createLegalMemberSession({ dataDir: process.env.DATA_DIR });
   app.use(cors());
   app.use(express.json());
   app.use((req, res, next) => {
@@ -60,6 +72,16 @@ if (LEGAL_TEST_ONLY) {
     }
     if (req.method === 'GET' && req.path === '/api/legal/acknowledgements/required') {
       return res.json({ required: [] });
+    }
+    if (req.method === 'GET' &&
+        ['/api/membership/me', '/api/legal/acknowledgements/pending'].includes(req.path)) {
+      res.set('Cache-Control', 'private, no-store');
+      const token = /^Bearer (.+)$/.exec(req.get('authorization') || '')?.[1];
+      if (legalTestSession.verify(token) !== 'legal-test-member') {
+        return res.status(401).json({ error: 'login_required' });
+      }
+      return res.json(req.path === '/api/membership/me'
+        ? { membership: LEGAL_TEST_MEMBERSHIP } : { ok: true, pending: [] });
     }
     if (req.method === 'GET' &&
         ['/api/legal', '/api/legal/terms', '/api/legal/privacy', '/api/plans', '/api/visit-pattern'].includes(req.path)) {
@@ -2442,18 +2464,12 @@ app.post('/auth/verify-code', async (req, res) => {
       return res.json({
         ok: true,
         isMember: true,
+        ...(LEGAL_TEST_ONLY ? { sessionToken: legalTestSession.issue('legal-test-member') } : {}),
         member: {
           email: LEGAL_TEST_ONLY ? 'legal-test@example.invalid' : 'apple-test@lalmtreningssenter.no',
           name: LEGAL_TEST_ONLY ? 'Lalm dokumenttest' : 'Apple Testbruker',
           phone: phoneNormalized,
-          ...(LEGAL_TEST_ONLY ? {
-            planName: 'Standard med binding (eksempel)',
-            active: true,
-            membershipStartDate: '2026-10-29',
-            bindingEndDate: '2027-10-29',
-            bindingMonthsAtStart: 12,
-            membershipSample: true,
-          } : {}),
+          ...(LEGAL_TEST_ONLY ? LEGAL_TEST_MEMBERSHIP : {}),
         },
         testUser: true,
       });
