@@ -34,6 +34,7 @@ const { analyzeNifImport } = require('./nifImport');
 const { createVisitStats } = require('./visitStats');
 const { doorActivitySummary } = require('./doorActivity');
 const { readVisitHistory } = require('./visitHistory');
+const { createLegalMemberSession } = require('./legalMemberSession');
 
 
 const app = express();
@@ -99,6 +100,7 @@ const MEMBERS_FILE = path.join(DATA_DIR, 'members.json');
 const ORDERS_FILE  = path.join(DATA_DIR, 'orders.json');
 const PLANS_FILE   = path.join(DATA_DIR, 'plans.json');
 const visitStats = createVisitStats({ dataDir: DATA_DIR });
+const legalMemberSession = createLegalMemberSession({ dataDir: DATA_DIR });
 
 function recordVisitSafely(visitorKey) {
   try {
@@ -1053,6 +1055,37 @@ app.get('/api/visit-activity', async (req, res) => {
 // =====================================================
 // OFFENTLIGE MEDLEMS-ENDPOINTS
 // =====================================================
+
+function membershipOverview(member) {
+  const planKey = String(member.plan || '').toLowerCase();
+  const plan = (getPlans() || []).find(plan => planKey &&
+    [plan?.id, plan?.key].some(key => typeof key === 'string' && key.toLowerCase() === planKey));
+  return {
+    planName: plan?.name || plan?.text || null,
+    active: Boolean(member.active) && isValidUntilOk(member),
+    membershipStartDate: member.membershipStartDate || null,
+    bindingEndDate: member.bindingEndDate || null,
+    bindingMonthsAtStart: member.bindingMonthsAtStart ?? null,
+    membershipSample: false,
+  };
+}
+
+app.get('/api/membership/me', (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  try {
+    const token = /^Bearer (.+)$/.exec(req.get('authorization') || '')?.[1];
+    const memberId = legalMemberSession.verify(token);
+    if (!memberId) return res.status(401).json({ error: 'login_required' });
+    const matches = getMembers().filter(member => member?.id != null && String(member.id) === memberId);
+    if (matches.length !== 1 || memberId === 'apple-test') {
+      return res.status(404).json({ error: 'membership_unavailable' });
+    }
+    return res.json({ membership: membershipOverview(matches[0]) });
+  } catch (error) {
+    console.error('Kunne ikke hente medlemsoversikt:', error.message);
+    return res.status(503).json({ error: 'membership_unavailable' });
+  }
+});
 
 app.get('/membership', (req, res) => {
   const email = (req.query.email || '').toLowerCase();
@@ -2369,21 +2402,37 @@ app.post('/auth/verify-code', async (req, res) => {
     loginCodes.delete(phoneNormalized);
 
     const members = getMembers();
-    const member = members.find((m) => {
+    const matchingMembers = members.filter((m) => {
       const candidatePhone = m?.phone || m?.phoneFull || m?.mobile || null;
       const mPhone = candidatePhone ? normalizePhone(candidatePhone) : null;
       return mPhone === phoneNormalized && m?.active && isValidUntilOk(m);
     });
+    const member = matchingMembers[0];
 
     if (member) {
+      let membershipAccess = {};
+      const memberId = member.id == null ? '' : String(member.id);
+      if (matchingMembers.length === 1 && memberId && memberId !== 'apple-test' &&
+          members.filter(candidate => candidate?.id != null && String(candidate.id) === memberId).length === 1) {
+        try {
+          membershipAccess = {
+            sessionToken: legalMemberSession.issue(memberId),
+            overview: membershipOverview(member),
+          };
+        } catch (error) {
+          console.error('Kunne ikke opprette medlemsøkt:', error.message);
+        }
+      }
       return res.json({
         ok: true,
         isMember: true,
+        ...(membershipAccess.sessionToken ? { sessionToken: membershipAccess.sessionToken } : {}),
         member: {
           email: member.email,
           name: member.name || '',
           phone: phoneNormalized,
           validUntil: member.validUntil || null,
+          ...membershipAccess.overview,
         },
       });
     }
