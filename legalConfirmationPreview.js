@@ -7,24 +7,34 @@ const fixtures = [
   { kind: 'terms', version: 'TEST-VILKÅR-2', title: 'Medlemsvilkår – TEST',
     content: 'Dette er et oppdiktet dokument for testkontoen. Dokumentet oppretter ingen medlemsavtale.',
     requiresAcknowledgement: false },
-  { kind: 'privacy', version: 'TEST-PERSONVERN-2', title: 'Personvernerklæring – TEST',
-    content: 'Dette er en oppdiktet personvernerklæring for testkontoen. Knappen nederst bekrefter at du har lest denne testteksten.',
-    requiresAcknowledgement: true },
+  { kind: 'privacy', version: 'TEST-PERSONVERN-FØR-OPPDATERING', title: 'Personvernerklæring – TEST',
+    content: 'Dette er testversjonen før oppdateringen. Du kan fortsette å bruke appen mens den nye versjonen klargjøres.',
+    requiresAcknowledgement: false },
 ];
+const updatedPrivacy = {
+  kind: 'privacy', version: 'TEST-PERSONVERN-3', title: 'Personvernerklæring – TEST',
+  content: 'Dette er en oppdiktet personvernerklæring for testkontoen. Knappen nederst bekrefter at du har lest denne testteksten.',
+  requiresAcknowledgement: true,
+};
+const activationDelayMs = 30_000;
 
-function createLegalConfirmationPreview({ dataDir, verifySession }) {
+function createLegalConfirmationPreview({ dataDir, verifySession, now = Date.now }) {
   const directory = path.join(dataDir, 'legal-confirmation-preview');
   const documents = createLegalDocuments({ dataDir: directory });
   const acknowledgements = createLegalAcknowledgements({ dataDir: directory, legalDocuments: documents });
+  let activatePrivacyAt;
+
+  function publishFixture({ kind, ...fixture }) {
+    const current = documents.read()[kind];
+    if (current.history.some(item => item.version === fixture.version)) return;
+    const saved = documents.saveDraft(kind, { ...fixture, expectedRevision: current.revision }, 'preview');
+    documents.publish(kind, saved.revision, 'preview');
+  }
 
   function prepareFixtures() {
     fs.mkdirSync(directory, { recursive: true });
-    for (const { kind, ...fixture } of fixtures) {
-      const current = documents.read()[kind];
-      if (current.history.some(item => item.version === fixture.version)) continue;
-      const saved = documents.saveDraft(kind, { ...fixture, expectedRevision: current.revision }, 'preview');
-      documents.publish(kind, saved.revision, 'preview');
-    }
+    for (const fixture of fixtures) publishFixture(fixture);
+    if (activatePrivacyAt !== undefined && now() >= activatePrivacyAt) publishFixture(updatedPrivacy);
   }
 
   return (req, res, next) => {
@@ -43,7 +53,11 @@ function createLegalConfirmationPreview({ dataDir, verifySession }) {
         const memberId = verifySession(token);
         if (memberId !== 'legal-test-member') return res.status(401).json({ ok: false, error: 'login_required' });
         prepareFixtures();
-        if (pending) return res.json({ ok: true, pending: acknowledgements.required(memberId) });
+        if (pending) {
+          // Let the test account enter the app before a later check sees the new version.
+          activatePrivacyAt ??= now() + activationDelayMs;
+          return res.json({ ok: true, pending: acknowledgements.required(memberId) });
+        }
         return res.json({ ok: true, ...acknowledgements.acknowledge(memberId, req.body?.documents) });
       }
       prepareFixtures();
