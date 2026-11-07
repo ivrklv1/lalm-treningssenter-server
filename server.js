@@ -30,6 +30,7 @@ const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail')
 const { datesForPaidMembership, shouldReplaceMembershipDates } = require('./membershipDates');
 const { createVisitStats } = require('./visitStats');
 const { createLegalMemberSession } = require('./legalMemberSession');
+const { createLegalConfirmationPreview } = require('./legalConfirmationPreview');
 
 
 const app = express();
@@ -66,22 +67,18 @@ if (LEGAL_TEST_ONLY) {
   legalTestSession = createLegalMemberSession({ dataDir: process.env.DATA_DIR });
   app.use(cors());
   app.use(express.json());
+  app.use(createLegalConfirmationPreview({ dataDir: process.env.DATA_DIR, verifySession: legalTestSession.verify }));
   app.use((req, res, next) => {
     if (req.method === 'GET' && req.path === '/') {
       return res.json({ ok: true, legalTestOnly: true, sms: false, payments: false, doors: false });
     }
-    if (req.method === 'GET' && req.path === '/api/legal/acknowledgements/required') {
-      return res.json({ required: [] });
-    }
-    if (req.method === 'GET' &&
-        ['/api/membership/me', '/api/legal/acknowledgements/pending'].includes(req.path)) {
+    if (req.method === 'GET' && req.path === '/api/membership/me') {
       res.set('Cache-Control', 'private, no-store');
       const token = /^Bearer (.+)$/.exec(req.get('authorization') || '')?.[1];
       if (legalTestSession.verify(token) !== 'legal-test-member') {
         return res.status(401).json({ error: 'login_required' });
       }
-      return res.json(req.path === '/api/membership/me'
-        ? { membership: LEGAL_TEST_MEMBERSHIP } : { ok: true, pending: [] });
+      return res.json({ membership: LEGAL_TEST_MEMBERSHIP });
     }
     if (req.method === 'GET' &&
         ['/api/legal', '/api/legal/terms', '/api/legal/privacy', '/api/plans', '/api/visit-pattern'].includes(req.path)) {
