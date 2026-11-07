@@ -89,22 +89,27 @@ function createVisitStats({ dataDir }) {
     return true;
   }
 
-  function summary(now = new Date()) {
+  function summary(now = new Date(), history = null) {
     const data = read();
     const { date: nowDate } = osloParts(new Date(now));
-    const completeWeeks = data.firstEventDate ? completeWeeksSince(data.firstEventDate, nowDate) : 0;
+    const verifiedHistory = history && history.cutover === data.firstEventDate ? history : null;
+    const currentMonday = mondayOf(nowDate);
+    const completeWeeks = verifiedHistory
+      ? Math.max(0, Math.floor((dateAtUtcNoon(currentMonday) - dateAtUtcNoon(verifiedHistory.from)) / (7 * 86400000)))
+      : data.firstEventDate ? completeWeeksSince(data.firstEventDate, nowDate) : 0;
     if (completeWeeks < WEEKS) {
       return { available: false, weeksCollected: completeWeeks, weeksRequired: WEEKS };
     }
 
-    const firstMonday = addDays(mondayOf(nowDate), -7 * WEEKS);
+    const firstMonday = addDays(currentMonday, -7 * WEEKS);
     const days = Array.from({ length: 7 }, (_, weekday) =>
       Array.from({ length: LAST_HOUR - FIRST_HOUR + 1 }, (_, offset) => {
         const hour = String(FIRST_HOUR + offset).padStart(2, '0');
         let total = 0;
         for (let week = 0; week < WEEKS; week++) {
           const date = addDays(firstMonday, week * 7 + weekday);
-          total += data.hours[`${date}T${hour}`] || 0;
+          const hours = verifiedHistory && date < verifiedHistory.cutover ? verifiedHistory.hours : data.hours;
+          total += hours[`${date}T${hour}`] || 0;
         }
         return total / WEEKS;
       })
@@ -113,7 +118,9 @@ function createVisitStats({ dataDir }) {
       available: true,
       label: 'Gjennomsnittlige registrerte besøk per time',
       from: firstMonday,
-      through: addDays(mondayOf(nowDate), -1),
+      through: addDays(currentMonday, -1),
+      ...(verifiedHistory && firstMonday < verifiedHistory.cutover
+        ? { historicalThrough: addDays(verifiedHistory.cutover, -1) } : {}),
       weeks: WEEKS,
       firstHour: FIRST_HOUR,
       days,

@@ -33,6 +33,7 @@ const { prepareAdminMemberEdit } = require('./memberAdminEdit');
 const { analyzeNifImport } = require('./nifImport');
 const { createVisitStats } = require('./visitStats');
 const { doorActivitySummary } = require('./doorActivity');
+const { readVisitHistory } = require('./visitHistory');
 
 
 const app = express();
@@ -1027,9 +1028,20 @@ app.get('/api/door-activity', async (req, res) => {
   }
 });
 
-app.get('/api/visit-activity', (req, res) => {
+let visitHistoryPromise;
+app.get('/api/visit-activity', async (req, res) => {
   try {
-    const summary = visitStats.summary();
+    const now = new Date();
+    let summary = visitStats.summary(now);
+    if (!summary.available) {
+      visitHistoryPromise ??= readVisitHistory(ACCESS_LOG).catch(error => {
+        visitHistoryPromise = undefined;
+        console.error('Kunne ikke lese besøkshistorikk:', error.message);
+        return null;
+      });
+      const history = await visitHistoryPromise;
+      if (history) summary = visitStats.summary(now, history);
+    }
     res.set('Cache-Control', 'public, max-age=300');
     res.json({ source: 'visits', ...summary });
   } catch (error) {
