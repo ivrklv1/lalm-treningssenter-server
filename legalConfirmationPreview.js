@@ -4,10 +4,12 @@ const { createLegalDocuments, LegalDocumentError } = require('./legalDocuments')
 const { createLegalAcknowledgements } = require('./legalAcknowledgements');
 
 const fixtures = [
-  { kind: 'terms', version: 'TEST-VILKÅR-1', title: 'Medlemsvilkår – TEST',
-    content: 'Dette er et oppdiktet dokument for testkontoen. Bekreftelsen gjelder bare denne testen og oppretter ingen medlemsavtale.' },
-  { kind: 'privacy', version: 'TEST-PERSONVERN-1', title: 'Personvernerklæring – TEST',
-    content: 'Dette er en oppdiktet personvernerklæring for testkontoen. Avhukingen bekrefter bare at du har lest denne testteksten.' },
+  { kind: 'terms', version: 'TEST-VILKÅR-2', title: 'Medlemsvilkår – TEST',
+    content: 'Dette er et oppdiktet dokument for testkontoen. Dokumentet oppretter ingen medlemsavtale.',
+    requiresAcknowledgement: false },
+  { kind: 'privacy', version: 'TEST-PERSONVERN-2', title: 'Personvernerklæring – TEST',
+    content: 'Dette er en oppdiktet personvernerklæring for testkontoen. Knappen nederst bekrefter at du har lest denne testteksten.',
+    requiresAcknowledgement: true },
 ];
 
 function createLegalConfirmationPreview({ dataDir, verifySession }) {
@@ -19,9 +21,8 @@ function createLegalConfirmationPreview({ dataDir, verifySession }) {
     fs.mkdirSync(directory, { recursive: true });
     for (const { kind, ...fixture } of fixtures) {
       const current = documents.read()[kind];
-      if (current.published) continue;
-      const saved = documents.saveDraft(kind, { ...fixture, expectedRevision: current.revision,
-        requiresAcknowledgement: true }, 'preview');
+      if (current.history.some(item => item.version === fixture.version)) continue;
+      const saved = documents.saveDraft(kind, { ...fixture, expectedRevision: current.revision }, 'preview');
       documents.publish(kind, saved.revision, 'preview');
     }
   }
