@@ -4,6 +4,37 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { createVisitStats } = require('../visitStats');
+const { readVisitHistory } = require('../visitHistory');
+
+test('combines verified log history with live counts exactly at the cutover', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lalm-visits-'));
+  try {
+    const log = path.join(dataDir, 'access.log');
+    const line = (date, time, name) => `${date}, ${time} name=${name} door=styrkerom action=OPEN_MEMBER\n`;
+    const historical = Array.from({ length: 298 }, (_, index) => line('05.10.2026', '08:00:00', `Test Person${String.fromCharCode(0x4e00 + index)}`));
+    fs.writeFileSync(log, historical.slice(1).join(''));
+    assert.equal(await readVisitHistory(log), null);
+    fs.writeFileSync(log, historical.join('') + line('05.10.2026', '08:20:00', 'Test Person一') +
+      line('30.10.2026', '08:00:00', 'Test Person一'));
+    const history = await readVisitHistory(log);
+    assert.deepEqual(history.hours, { '2026-10-05T08': 298 });
+    fs.writeFileSync(path.join(dataDir, 'visit-hours.json'), JSON.stringify({
+      version: 1, firstEventDate: '2026-10-30', hours: { '2026-10-30T08': 13, '2026-11-01T08': 8 },
+    }));
+    const stats = createVisitStats({ dataDir });
+    const now = '2026-11-07T12:00:00Z';
+    assert.equal(stats.summary(now).available, false);
+    const result = stats.summary(now, history);
+    assert.equal(result.available, true);
+    assert.equal(result.historicalThrough, '2026-10-29');
+    assert.equal(result.days[0][3], 298 / 4);
+    assert.equal(result.days[4][3], 13 / 4);
+    assert.equal(result.days[6][3], 8 / 4);
+    assert.equal(stats.summary('2026-11-30T12:00:00Z').historicalThrough, undefined);
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
 
 test('stores only hourly totals and ignores repeated opens within 30 minutes', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lalm-visits-'));
