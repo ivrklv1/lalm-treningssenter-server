@@ -29,6 +29,7 @@ const {
 const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
 const { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus } = require('./membershipDates');
 const { confirmedRefund } = require('./refundReview');
+const { bindingBackfillRevision, prepareBindingBackfill, saveBindingBackfill } = require('./bindingBackfill');
 const { prepareAdminMemberEdit } = require('./memberAdminEdit');
 const { analyzeNifImport } = require('./nifImport');
 const { createVisitStats } = require('./visitStats');
@@ -1552,6 +1553,36 @@ app.delete('/admin/plans/:id', basicAuth, (req, res) => {
 // -----------------------------------------------------
 // Admin: oppdatere / slette medlem via id (nytt admin-UI)
 // -----------------------------------------------------
+
+app.post('/admin/members/binding-dates/backfill', basicAuth, (req, res) => {
+  if (!requireBackupAuth(req)) return res.status(401).json({ error: 'unauthorized' });
+  const { backupKey, revision, entries } = req.body || {};
+  const backup = readJsonSafe(BACKUP_STATUS_FILE, null);
+  const backupAge = Date.now() - Date.parse(backup?.finishedAt);
+  if (path.resolve(BACKUP_DATA_DIR) !== path.resolve(DATA_DIR) || !backupKey ||
+      backup?.ok !== true || backup.key !== backupKey || !(backup.bytes > 0) ||
+      !(backupAge >= 0 && backupAge <= 15 * 60 * 1000)) {
+    return res.status(409).json({ error: 'backfill_fresh_backup_required' });
+  }
+  const members = getMembers();
+  const orders = getOrders();
+  const plans = getPlans() || [];
+  if (revision !== bindingBackfillRevision(members, orders, plans)) {
+    return res.status(409).json({ error: 'backfill_register_changed' });
+  }
+  let updatedMembers;
+  try {
+    updatedMembers = prepareBindingBackfill(entries, members, orders, plans, req.adminUser, new Date().toISOString());
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+  try {
+    saveBindingBackfill(MEMBERS_FILE, updatedMembers);
+    return res.json({ ok: true, updated: entries.length });
+  } catch (_) {
+    return res.status(500).json({ error: 'backfill_write_failed' });
+  }
+});
 
 app.patch('/admin/members/:id/details', basicAuth, (req, res) => {
   const members = getMembers();
