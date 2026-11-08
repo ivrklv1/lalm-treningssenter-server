@@ -6,7 +6,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const test = require('node:test');
 
-test('a verified member can refresh only their own membership without billing guesses', async () => {
+test('membership refresh and the door preview use the signed member identity', async () => {
   const root = path.resolve(__dirname, '..');
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lalm-membership-overview-'));
   const membersFile = path.join(dataDir, 'members.json');
@@ -21,7 +21,22 @@ test('a verified member can refresh only their own membership without billing gu
   fs.writeFileSync(mock, `
     const axios = require('axios');
     const fs = require('node:fs');
+    const { DateTimeFormat } = Intl;
+    Intl.DateTimeFormat = function (locale, options) {
+      const formatter = new DateTimeFormat(locale, options);
+      if (options?.timeZone === 'Europe/Oslo' && options.hourCycle === 'h23') {
+        formatter.formatToParts = () => [{
+          type: 'hour', value: fs.existsSync(process.env.DATA_DIR + '/closed') ? '23' : '12'
+        }];
+      }
+      return formatter;
+    };
     axios.post = async (url, payload) => {
+      if (url === 'https://tell.test/gc/open') {
+        if (payload.data !== 1) throw Error('Unexpected gate');
+        fs.appendFileSync(process.env.DATA_DIR + '/door-calls', 'open\\n');
+        return { data: { ok: true } };
+      }
       if (url !== 'https://api.eurobate.com/json_api.php') throw Error('Unexpected network call');
       fs.writeFileSync(process.env.DATA_DIR + '/code', payload.messages[0].message.match(/#(\\d{6})/)[1]);
       return { data: { status: 'OK' } };
@@ -35,7 +50,9 @@ test('a verified member can refresh only their own membership without billing gu
     '--require', mock, path.join(root, 'server.js')], {
     cwd: root,
     env: { PATH: process.env.PATH, NODE_PATH: process.env.NODE_PATH || path.join(root, 'node_modules'),
-      DATA_DIR: dataDir, PORT: String(port), TRIPLETEX_RETRY_INTERVAL_MINUTES: '0' },
+      DATA_DIR: dataDir, PORT: String(port), TRIPLETEX_RETRY_INTERVAL_MINUTES: '0',
+      MEMBER_DOOR_PREVIEW_ID: 'a', TELL_BASE_URL: 'https://tell.test',
+      TELL_API_KEY: 'fake', TELL_HWID: 'fake', TELL_APP_ID: 'fake' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
@@ -48,6 +65,11 @@ test('a verified member can refresh only their own membership without billing gu
   });
   const overview = (token, query = '') => fetch(base + '/api/membership/me' + query,
     token ? { headers: { Authorization: 'Bearer ' + token } } : {});
+  const doorPreview = (token, body = { doorId: 'styrkerom' }) => fetch(base + '/api/member-door-preview/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token && { Authorization: 'Bearer ' + token }) },
+    body: JSON.stringify(body),
+  });
   const login = async phone => {
     assert.equal((await post('/auth/send-code', { phone })).status, 200);
     const code = fs.readFileSync(path.join(dataDir, 'code'), 'utf8');
@@ -72,6 +94,23 @@ test('a verified member can refresh only their own membership without billing gu
       planName: 'Standard', active: true, membershipStartDate: '2026-01-01',
       bindingEndDate: '2027-01-01', bindingMonthsAtStart: 12, membershipSample: false,
     });
+    assert.equal((await doorPreview(null, { doorId: 'styrkerom', phone: members[0].phone })).status, 401);
+    assert.equal((await doorPreview(result.sessionToken + 'x')).status, 401);
+    assert.equal((await doorPreview((await login(members[1].phone)).sessionToken)).status, 403);
+    assert.equal((await doorPreview(result.sessionToken, {})).status, 400);
+    assert.equal((await doorPreview(result.sessionToken, { doorId: '__proto__' })).status, 400);
+    fs.writeFileSync(path.join(dataDir, 'closed'), '');
+    const closed = await doorPreview(result.sessionToken);
+    assert.equal(closed.status, 403);
+    assert.equal((await closed.json()).error, 'CLOSED');
+    fs.unlinkSync(path.join(dataDir, 'closed'));
+    const opened = await doorPreview(result.sessionToken, { doorId: 'styrkerom', phone: members[1].phone });
+    assert.deepEqual(await opened.json(), { ok: true, source: 'MEMBER' });
+    assert.match(fs.readFileSync(path.join(dataDir, 'access.log'), 'utf8'), /name=Test A .*action=OPEN_MEMBER/);
+
+    members[0].validUntil = '2000-01-01';
+    fs.writeFileSync(membersFile, JSON.stringify(members));
+    assert.equal((await doorPreview(result.sessionToken)).status, 403);
     members[0].active = false;
     members[0].bindingEndDate = '2027-02-01';
     members.push({ ...members[1], id: 'c' });
@@ -79,9 +118,11 @@ test('a verified member can refresh only their own membership without billing gu
     const refreshed = (await (await overview(result.sessionToken)).json()).membership;
     assert.equal(refreshed.active, false);
     assert.equal(refreshed.bindingEndDate, '2027-02-01');
+    assert.equal((await doorPreview(result.sessionToken)).status, 403);
     const ambiguous = await login(members[1].phone);
     assert.equal(ambiguous.isMember, true);
     assert.equal(ambiguous.sessionToken, undefined);
+    assert.equal(fs.readFileSync(path.join(dataDir, 'door-calls'), 'utf8'), 'open\n');
   } finally {
     child.kill();
     await exited;
