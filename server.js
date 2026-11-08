@@ -2236,17 +2236,17 @@ app.post('/dropin/verify', (req, res) => {
 });
 
 // Åpne dør via token / medlem – bruker activeDropins
-app.post('/door/open', openingHoursGuard, async (req, res) => {
+async function openDoor(req, res) {
   try {
     const { token, email, phone, doorId = 'styrkerom' } = req.body || {};
 
-    if (!doorConfig[doorId]) {
+    if (typeof doorId !== 'string' || !Object.hasOwn(doorConfig, doorId)) {
       return res.status(400).json({ ok: false, error: 'invalid_doorId' });
     }
 
     // Finn medlem basert på telefon eller e-post
-    let member = null;
-    if (phone || email) {
+    let member = res.locals.doorPreviewMember || null;
+    if (!member && (phone || email)) {
       member = findMemberByPhoneOrEmail(phone || null, email || null);
       if (member && (!member.active || !isValidUntilOk(member))) {
         member = null;
@@ -2254,7 +2254,7 @@ app.post('/door/open', openingHoursGuard, async (req, res) => {
     }
 
     const now = new Date();
-    const dropin = activeDropins.find(
+    const dropin = !member && activeDropins.find(
       d => d.token === token && new Date(d.validUntil) >= now
     );
 
@@ -2307,7 +2307,37 @@ app.post('/door/open', openingHoursGuard, async (req, res) => {
     console.error('door/open error:', e?.response?.data || e.message);
     return res.status(500).json({ ok: false, error: 'internal_error' });
   }
-});
+}
+
+app.post('/door/open', openingHoursGuard, openDoor);
+
+app.post('/api/member-door-preview/open', (req, res, next) => {
+  const allowedId = process.env.MEMBER_DOOR_PREVIEW_ID?.trim();
+  if (!allowedId) {
+    return res.status(404).json({ ok: false, error: 'door_preview_disabled', message: 'Dørtesten er ikke aktivert.' });
+  }
+
+  const token = /^Bearer (.+)$/.exec(req.get('authorization') || '')?.[1];
+  const memberId = legalMemberSession.verify(token);
+  if (!memberId) {
+    return res.status(401).json({ ok: false, error: 'login_required', message: 'Logg inn på nytt for å teste døra.' });
+  }
+  if (memberId === 'apple-test' || memberId !== allowedId) {
+    return res.status(403).json({ ok: false, error: 'door_preview_not_allowed', message: 'Dørtesten er ikke aktivert for denne kontoen.' });
+  }
+
+  const matches = getMembers().filter(member => member?.id != null && String(member.id) === memberId);
+  const member = matches[0];
+  if (matches.length !== 1 || !member.active || !isValidUntilOk(member)) {
+    return res.status(403).json({ ok: false, error: 'no_access' });
+  }
+  if (req.body?.doorId !== 'styrkerom') {
+    return res.status(400).json({ ok: false, error: 'invalid_doorId' });
+  }
+
+  res.locals.doorPreviewMember = member;
+  next();
+}, openingHoursGuard, openDoor);
 
 
 

@@ -57,6 +57,10 @@ test('admin keeps shared-email members separate and previews NIF changes before 
     }
     assert.match(output, /Server kjører på/);
 
+    const doorPreview = await post('/api/member-door-preview/open', { doorId: 'styrkerom' });
+    assert.equal(doorPreview.status, 404);
+    assert.equal((await doorPreview.json()).error, 'door_preview_disabled');
+
     const doorLog = await (await fetch(base + '/api/admin/logs?kind=door', { headers })).json();
     assert.equal(doorLog.lines.length, 2);
     assert.ok(doorLog.lines.every(line => /action=(OPEN_MEMBER|DENY)/.test(line)));
