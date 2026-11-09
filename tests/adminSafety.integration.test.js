@@ -37,6 +37,7 @@ test('admin keeps shared-email members separate and previews NIF changes before 
       PATH: process.env.PATH, NODE_PATH: path.resolve(root, '../legal-test-server/node_modules'),
       DATA_DIR: dataDir, PORT: String(port), ADMIN_USER: 'test-admin', ADMIN_PASS: 'synthetic-password',
       TRIPLETEX_RETRY_INTERVAL_MINUTES: '0',
+      LEGACY_DOOR_ACCESS_DISABLED: 'true',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -60,6 +61,13 @@ test('admin keeps shared-email members separate and previews NIF changes before 
     const doorPreview = await post('/api/member-door-preview/open', { doorId: 'styrkerom' });
     assert.equal(doorPreview.status, 404);
     assert.equal((await doorPreview.json()).error, 'door_preview_disabled');
+
+    for (const route of ['/debug/tell-open', '/debug/tell-addappid']) {
+      assert.equal((await fetch(base + route)).status, 404);
+    }
+    for (const route of ['/door/open', '/access', '/dropin/create']) {
+      assert.equal((await post(route, { phone: members[0].phone, email: members[0].email })).status, 410);
+    }
 
     const doorLog = await (await fetch(base + '/api/admin/logs?kind=door', { headers })).json();
     assert.equal(doorLog.lines.length, 2);
