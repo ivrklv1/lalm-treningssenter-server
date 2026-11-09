@@ -779,55 +779,6 @@ app.get('/api/admin/tell-register-app', basicAuth, async (req, res) => {
   }
 });
 
-app.get('/debug/tell-open', async (req, res) => {
-  try {
-    const data = await gcOpen(1);  // åpner utgang 1 med samme logikk som /door/open
-    return res.json({ ok: true, response: data });
-  } catch (err) {
-    console.error('[TELL_DEBUG_ERROR]', err?.response?.data || err.message);
-    return res.status(500).json({
-      ok: false,
-      error: err?.response?.data || err.message,
-    });
-  }
-});
-
-
-
-app.get('/debug/tell-addappid', async (req, res) => {
-  try {
-    const baseUrl = 'https://api.tell.hu/gc/addappid';
-
-    const params = new URLSearchParams({
-      hwid: process.env.TELL_HWID,
-      password: process.env.TELL_MASTER_PASSWORD,
-    });
-
-    const url = `${baseUrl}?${params.toString()}`;
-
-    const r = await fetch(url, {
-      method: 'GET',
-      headers: { 'api-key': TELL.apiKey },
-    });
-
-    const text = await r.text();
-    console.log('[TELL_ADDAPPID] status=', r.status, 'body=', text);
-
-    return res.status(200).send(text);
-  } catch (err) {
-    console.error('[TELL_ADDAPPID_ERROR]', err);
-    return res.status(500).json({
-      ok: false,
-      name: err.name,
-      message: err.message,
-    });
-  }
-});
-
-
-
-
-
 // ----------------------------
 // Eurobate SMS-konfig
 // ----------------------------
@@ -2049,7 +2000,12 @@ app.get('/api/admin/logs', basicAuth, (req, res) => {
 // =====================================================
 // Legacy /access (epost-basert åpning)
 // =====================================================
-app.post('/access', async (req, res) => {
+function legacyDoorAccess(req, res, next) {
+  if (process.env.LEGACY_DOOR_ACCESS_DISABLED !== 'true') return next();
+  return res.status(410).json({ ok: false, status: 'denied', error: 'Oppdater appen for å åpne døra.' });
+}
+
+app.post('/access', legacyDoorAccess, async (req, res) => {
   try {
     const { email, doorId = 'styrkerom' } = req.body || {};
     if (!email) {
@@ -2157,7 +2113,7 @@ function generateToken() {
 }
 
 // Kombinert dropin/create – støtter både ny (phone,name) og gammel (email,mobile,name,price)
-app.post('/dropin/create', async (req, res) => {
+app.post('/dropin/create', legacyDoorAccess, async (req, res) => {
   try {
     const { phone, name, email, mobile, price } = req.body || {};
 
@@ -2238,14 +2194,15 @@ app.post('/dropin/verify', (req, res) => {
 // Åpne dør via token / medlem – bruker activeDropins
 async function openDoor(req, res) {
   try {
-    const { token, email, phone, doorId = 'styrkerom' } = req.body || {};
+    const { token, email, phone, doorId: legacyDoorId = 'styrkerom' } = req.body || {};
+    let member = res.locals.signedDoorMember || null;
+    const doorId = member ? req.body?.doorId : legacyDoorId;
 
     if (typeof doorId !== 'string' || !Object.hasOwn(doorConfig, doorId)) {
       return res.status(400).json({ ok: false, error: 'invalid_doorId' });
     }
 
     // Finn medlem basert på telefon eller e-post
-    let member = res.locals.doorPreviewMember || null;
     if (!member && (phone || email)) {
       member = findMemberByPhoneOrEmail(phone || null, email || null);
       if (member && (!member.active || !isValidUntilOk(member))) {
@@ -2309,33 +2266,40 @@ async function openDoor(req, res) {
   }
 }
 
-app.post('/door/open', openingHoursGuard, openDoor);
-
-app.post('/api/member-door-preview/open', (req, res, next) => {
-  const allowedId = process.env.MEMBER_DOOR_PREVIEW_ID?.trim();
-  if (!allowedId) {
-    return res.status(404).json({ ok: false, error: 'door_preview_disabled', message: 'Dørtesten er ikke aktivert.' });
-  }
-
+function requireSignedDoorMember(req, res, next) {
   const token = /^Bearer (.+)$/.exec(req.get('authorization') || '')?.[1];
   const memberId = legalMemberSession.verify(token);
   if (!memberId) {
-    return res.status(401).json({ ok: false, error: 'login_required', message: 'Logg inn på nytt for å teste døra.' });
-  }
-  if (memberId === 'apple-test' || memberId !== allowedId) {
-    return res.status(403).json({ ok: false, error: 'door_preview_not_allowed', message: 'Dørtesten er ikke aktivert for denne kontoen.' });
+    return res.status(401).json({ ok: false, error: 'login_required', message: 'Logg inn på nytt for å åpne døra.' });
   }
 
   const matches = getMembers().filter(member => member?.id != null && String(member.id) === memberId);
   const member = matches[0];
-  if (matches.length !== 1 || !member.active || !isValidUntilOk(member)) {
-    return res.status(403).json({ ok: false, error: 'no_access' });
+  if (memberId === 'apple-test' || matches.length !== 1 || !member.active || !isValidUntilOk(member)) {
+    return res.status(403).json({
+      ok: false, error: 'no_access', message: 'Du har ingen aktiv adgang. Sjekk medlemskapet eller drop-in.',
+    });
+  }
+
+  res.locals.signedDoorMember = member;
+  next();
+}
+
+app.post('/door/open', legacyDoorAccess, openingHoursGuard, openDoor);
+app.post('/api/door/open', requireSignedDoorMember, openingHoursGuard, openDoor);
+
+app.post('/api/member-door-preview/open', (req, res, next) => {
+  if (!process.env.MEMBER_DOOR_PREVIEW_ID?.trim()) {
+    return res.status(404).json({ ok: false, error: 'door_preview_disabled', message: 'Dørtesten er ikke aktivert.' });
+  }
+  next();
+}, requireSignedDoorMember, (req, res, next) => {
+  if (String(res.locals.signedDoorMember.id) !== process.env.MEMBER_DOOR_PREVIEW_ID.trim()) {
+    return res.status(403).json({ ok: false, error: 'door_preview_not_allowed', message: 'Dørtesten er ikke aktivert for denne kontoen.' });
   }
   if (req.body?.doorId !== 'styrkerom') {
     return res.status(400).json({ ok: false, error: 'invalid_doorId' });
   }
-
-  res.locals.doorPreviewMember = member;
   next();
 }, openingHoursGuard, openDoor);
 
@@ -2473,8 +2437,9 @@ app.post('/auth/verify-code', async (req, res) => {
     if (member) {
       let membershipAccess = {};
       const memberId = member.id == null ? '' : String(member.id);
-      if (matchingMembers.length === 1 && memberId && memberId !== 'apple-test' &&
-          members.filter(candidate => candidate?.id != null && String(candidate.id) === memberId).length === 1) {
+      const memberIdMissing = matchingMembers.length !== 1 || !memberId || memberId === 'apple-test' ||
+        members.filter(candidate => candidate?.id != null && String(candidate.id) === memberId).length !== 1;
+      if (!memberIdMissing) {
         try {
           membershipAccess = {
             sessionToken: legalMemberSession.issue(memberId),
@@ -2487,6 +2452,7 @@ app.post('/auth/verify-code', async (req, res) => {
       return res.json({
         ok: true,
         isMember: true,
+        ...(memberIdMissing ? { memberIdMissing: true } : {}),
         ...(membershipAccess.sessionToken ? { sessionToken: membershipAccess.sessionToken } : {}),
         member: {
           email: member.email,

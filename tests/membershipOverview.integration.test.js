@@ -5,8 +5,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const test = require('node:test');
+const { createLegalMemberSession } = require('../legalMemberSession');
 
-test('membership refresh and the door preview use the signed member identity', async () => {
+test('membership refresh and door access use the signed member identity', async () => {
   const root = path.resolve(__dirname, '..');
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lalm-membership-overview-'));
   const membersFile = path.join(dataDir, 'members.json');
@@ -14,6 +15,8 @@ test('membership refresh and the door preview use the signed member identity', a
     { id: 'a', name: 'Test A', active: true, phone: '+4712345678', plan: 'STANDARD',
       membershipStartDate: '2026-01-01', bindingEndDate: '2027-01-01', bindingMonthsAtStart: 12 },
     { id: 'b', name: 'Test B', active: true, phone: '+4712345679', plan: 'other' },
+    { id: 'd', name: 'Drop-in D', active: true, phone: '+4712345670', plan: 'dropin',
+      validUntil: new Date(Date.now() + 3600_000).toISOString() },
   ];
   fs.writeFileSync(membersFile, JSON.stringify(members));
   fs.writeFileSync(path.join(dataDir, 'plans.json'), JSON.stringify([{ id: 'standard', name: 'Standard', price: 449 }]));
@@ -65,11 +68,13 @@ test('membership refresh and the door preview use the signed member identity', a
   });
   const overview = (token, query = '') => fetch(base + '/api/membership/me' + query,
     token ? { headers: { Authorization: 'Bearer ' + token } } : {});
-  const doorPreview = (token, body = { doorId: 'styrkerom' }) => fetch(base + '/api/member-door-preview/open', {
+  const openDoor = (route, token, body = { doorId: 'styrkerom' }) => fetch(base + route, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(token && { Authorization: 'Bearer ' + token }) },
     body: JSON.stringify(body),
   });
+  const doorPreview = (token, body) => openDoor('/api/member-door-preview/open', token, body);
+  const door = (token, body) => openDoor('/api/door/open', token, body);
   const login = async phone => {
     assert.equal((await post('/auth/send-code', { phone })).status, 200);
     const code = fs.readFileSync(path.join(dataDir, 'code'), 'utf8');
@@ -108,6 +113,28 @@ test('membership refresh and the door preview use the signed member identity', a
     assert.deepEqual(await opened.json(), { ok: true, source: 'MEMBER' });
     assert.match(fs.readFileSync(path.join(dataDir, 'access.log'), 'utf8'), /name=Test A .*action=OPEN_MEMBER/);
 
+    assert.equal((await door(null, { doorId: 'styrkerom', phone: members[0].phone })).status, 401);
+    assert.equal((await door(result.sessionToken + 'x')).status, 401);
+    const oldSession = createLegalMemberSession({ dataDir, now: () => Date.now() - 91 * 86400_000 });
+    assert.equal((await door(oldSession.issue('a'))).status, 401);
+    assert.equal((await door(result.sessionToken, {})).status, 400);
+    assert.equal((await door(result.sessionToken, { doorId: '__proto__' })).status, 400);
+    const signed = await door(result.sessionToken, { doorId: 'styrkerom', phone: members[1].phone });
+    assert.deepEqual(await signed.json(), { ok: true, source: 'MEMBER' });
+    const legacy = await post('/door/open', { doorId: 'styrkerom', phone: members[0].phone });
+    assert.deepEqual(await legacy.json(), { ok: true, source: 'MEMBER' });
+    const legacyPass = await (await post('/dropin/create', { phone: '+4712345671' })).json();
+    const legacyDropIn = await post('/door/open', { doorId: 'styrkerom', token: legacyPass.token });
+    assert.deepEqual(await legacyDropIn.json(), { ok: true, source: 'DROPIN' });
+    assert.equal((await door(legacyPass.token)).status, 401);
+
+    const dropin = await login(members[2].phone);
+    assert.match(dropin.sessionToken, /^legal1\./);
+    assert.equal((await door(dropin.sessionToken)).status, 200);
+    members[2].validUntil = '2000-01-01';
+    fs.writeFileSync(membersFile, JSON.stringify(members));
+    assert.equal((await door(dropin.sessionToken)).status, 403);
+
     members[0].validUntil = '2000-01-01';
     fs.writeFileSync(membersFile, JSON.stringify(members));
     assert.equal((await doorPreview(result.sessionToken)).status, 403);
@@ -119,10 +146,12 @@ test('membership refresh and the door preview use the signed member identity', a
     assert.equal(refreshed.active, false);
     assert.equal(refreshed.bindingEndDate, '2027-02-01');
     assert.equal((await doorPreview(result.sessionToken)).status, 403);
+    assert.equal((await door(result.sessionToken)).status, 403);
     const ambiguous = await login(members[1].phone);
     assert.equal(ambiguous.isMember, true);
     assert.equal(ambiguous.sessionToken, undefined);
-    assert.equal(fs.readFileSync(path.join(dataDir, 'door-calls'), 'utf8'), 'open\n');
+    assert.equal(ambiguous.memberIdMissing, true);
+    assert.equal(fs.readFileSync(path.join(dataDir, 'door-calls'), 'utf8'), 'open\n'.repeat(5));
   } finally {
     child.kill();
     await exited;
