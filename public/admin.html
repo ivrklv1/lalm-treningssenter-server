@@ -282,6 +282,9 @@
     .sub-tab-button:hover { background: rgba(226, 232, 240, 0.7); }
     .sub-tab-button.active { background: var(--accent); color: #fff; }
     .sub-tab-button:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+    @media (max-width: 360px) {
+      #toolsSubtabs .sub-tab-button { padding-inline: 8px; }
+    }
 
     .legal-preview { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: #fff; overflow-wrap: anywhere; }
     .legal-preview h2 { color: var(--accent); margin: 0 0 16px; }
@@ -1199,24 +1202,36 @@
       </section>
     </section>
 
-    <!-- TAB: VERKTØY / NIF -->
+    <!-- TAB: VERKTØY -->
     <section id="tab-tools" class="tab-panel">
       <section class="card">
         <div class="card-title-row">
           <div>
             <div class="card-title">Verktøy</div>
             <div class="card-subtitle">
-              Systemverktøy for TELL-synk og NIF-medlemsimport.
+              Dørstyring, NIF-import, vilkår og personvern.
             </div>
           </div>
         </div>
 
+        <div class="sub-tabs-row mt-1" id="toolsSubtabs" role="group" aria-label="Velg verktøy">
+          <button type="button" class="sub-tab-button active" aria-pressed="true" aria-controls="tools-door">Dør</button>
+          <button type="button" class="sub-tab-button" aria-pressed="false" aria-controls="tools-nif">NIF-import</button>
+          <button type="button" class="sub-tab-button" aria-pressed="false" aria-controls="legalEditor">Dokumenter</button>
+        </div>
+      </section>
+
+      <section class="card mt-2" id="tools-door">
+        <div class="card-title">Dør</div>
         <div class="btn-row mt-1">
           <button id="btnTellSync" class="btn-secondary">🔄 Synk alle aktive til TELL</button>
         </div>
         <div id="toolsMsg" class="mt-1 small"></div>
+      </section>
 
-        <div class="right-column-section">
+      <section class="card mt-2" id="tools-nif" hidden>
+        <div class="card-title">NIF-import</div>
+        <div class="mt-1">
           <label for="nifTextarea">NIF medlemsimport (CSV fra Excel)</label>
           <textarea id="nifTextarea" placeholder="Lim inn medlemslisten her…"></textarea>
           <div class="small text-muted mt-1">Forhåndsvisningen viser hvor mange som får eller mister NIF-markering. Ingenting lagres før du bekrefter importen.</div>
@@ -1230,7 +1245,7 @@
         </div>
       </section>
 
-      <section class="card mt-2" id="legalEditor">
+      <section class="card mt-2" id="legalEditor" hidden>
         <div class="card-title">Vilkår og personvern</div>
         <div class="card-subtitle">Lagre et utkast, se gjennom teksten og publiser når den er godkjent. Publisering endrer teksten som hentes fra serveren.</div>
         <div class="mt-2">
@@ -3731,6 +3746,24 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     }
   });
 
+  // ------- Verktøy (underfaner) -------
+  const toolsSubtabs = document.getElementById('toolsSubtabs');
+  const toolButtons = toolsSubtabs.querySelectorAll('button[aria-controls]');
+  toolsSubtabs.addEventListener('click', event => {
+    const selected = event.target.closest('button[aria-controls]');
+    if (!selected) return;
+
+    toolButtons.forEach(button => {
+      const active = button === selected;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+      document.getElementById(button.getAttribute('aria-controls')).hidden = !active;
+    });
+    if (selected.getAttribute('aria-controls') === 'legalEditor' && !legalState && !legalBusy) {
+      loadLegalAdmin();
+    }
+  });
+
   // ------- FANER -------
   const tabButtons = document.querySelectorAll('.tab-button');
   const tabPanels = document.querySelectorAll('.tab-panel');
@@ -3753,7 +3786,6 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
       if (target === 'logs' && typeof setLogSubtab === 'function') {
         setLogSubtab('vipps');
       }
-      if (target === 'tools' && !legalState) loadLegalAdmin();
     });
   });
 
