@@ -285,6 +285,12 @@
     @media (max-width: 360px) {
       #toolsSubtabs .sub-tab-button { padding-inline: 8px; }
     }
+    #legalDocumentTabs .sub-tab-button {
+      flex: 0 1 auto;
+      min-width: 0;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
 
     .legal-preview { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: #fff; overflow-wrap: anywhere; }
     .legal-preview h2 { color: var(--accent); margin: 0 0 16px; }
@@ -1248,9 +1254,9 @@
       <section class="card mt-2" id="legalEditor" hidden>
         <div class="card-title">Vilkår og personvern</div>
         <div class="card-subtitle">Lagre et utkast, se gjennom teksten og publiser når den er godkjent. Publisering endrer teksten som hentes fra serveren.</div>
-        <div class="mt-2">
-          <label for="legalKind">Dokument</label>
-          <select id="legalKind"><option value="terms">Medlemsvilkår</option><option value="privacy">Personvernerklæring</option></select>
+        <div class="sub-tabs-row mt-2" id="legalDocumentTabs" role="group" aria-label="Velg dokument">
+          <button type="button" class="sub-tab-button active" data-legal-kind="terms" aria-pressed="true">Medlemsvilkår</button>
+          <button type="button" class="sub-tab-button" data-legal-kind="privacy" aria-pressed="false">Personvernerklæring</button>
         </div>
         <div id="legalPublishedStatus" class="mt-1 small" role="status"></div>
         <div class="input-grid mt-2">
@@ -3581,7 +3587,8 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
   });
 
   // ------- VILKÅR OG PERSONVERN -------
-  const legalKindEl = document.getElementById('legalKind');
+  const legalDocumentTabs = document.getElementById('legalDocumentTabs');
+  const legalDocumentButtons = legalDocumentTabs.querySelectorAll('button[data-legal-kind]');
   const legalVersionEl = document.getElementById('legalVersion');
   const legalTitleEl = document.getElementById('legalTitle');
   const legalContentEl = document.getElementById('legalContent');
@@ -3593,6 +3600,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
   const legalHistoryEl = document.getElementById('legalHistory');
   const legalSaveBtn = document.getElementById('legalSaveBtn');
   const legalPublishBtn = document.getElementById('legalPublishBtn');
+  let legalKind = 'terms';
   let legalState = null;
   let legalDirty = false;
   let legalBusy = false;
@@ -3603,12 +3611,12 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
   }
 
   function legalButtons() {
-    const doc = legalState && legalState[legalKindEl.value];
+    const doc = legalState?.[legalKind];
     const ready = legalState?.acknowledgementsReady === true;
     legalSaveBtn.disabled = legalBusy || !doc || !legalDirty;
     legalPublishBtn.disabled = legalBusy || !doc?.draft || legalDirty ||
       (doc.draft.requiresAcknowledgement && !ready);
-    for (const field of [legalKindEl, legalVersionEl, legalTitleEl, legalContentEl, legalRequiresAcknowledgementEl]) {
+    for (const field of [...legalDocumentButtons, legalVersionEl, legalTitleEl, legalContentEl, legalRequiresAcknowledgementEl]) {
       field.disabled = legalBusy;
     }
     legalAcknowledgementStatusEl.textContent = !legalState ? '' : ready
@@ -3633,7 +3641,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
   }
 
   function showLegalDocument() {
-    const doc = legalState?.[legalKindEl.value];
+    const doc = legalState?.[legalKind];
     if (!doc) return;
     const editable = doc.draft || doc.published || {};
     legalVersionEl.value = doc.draft ? editable.version : '';
@@ -3681,11 +3689,17 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
   for (const input of [legalVersionEl, legalTitleEl, legalContentEl, legalRequiresAcknowledgementEl]) {
     input.addEventListener(input === legalRequiresAcknowledgementEl ? 'change' : 'input', () => { legalDirty = true; legalButtons(); });
   }
-  legalKindEl.addEventListener('change', () => {
-    if (legalDirty && !confirm('Forkaste endringer som ikke er lagret?')) {
-      legalKindEl.value = legalKindEl.value === 'terms' ? 'privacy' : 'terms';
-      return;
-    }
+  legalDocumentTabs.addEventListener('click', event => {
+    const selected = event.target.closest('button[data-legal-kind]');
+    if (!selected || selected.disabled || selected.dataset.legalKind === legalKind) return;
+    if (legalDirty && !confirm('Forkaste endringer som ikke er lagret?')) return;
+
+    legalKind = selected.dataset.legalKind;
+    legalDocumentButtons.forEach(button => {
+      const active = button === selected;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
     showLegalDocument();
     legalMessage('');
   });
@@ -3698,7 +3712,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     legalMessage('Forhåndsvisning av teksten i feltene. Den er ikke publisert.');
   });
   legalSaveBtn.addEventListener('click', async () => {
-    const kind = legalKindEl.value;
+    const kind = legalKind;
     legalBusy = true;
     legalButtons();
     try {
@@ -3721,7 +3735,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     }
   });
   legalPublishBtn.addEventListener('click', async () => {
-    const kind = legalKindEl.value;
+    const kind = legalKind;
     const draft = legalState?.[kind]?.draft;
     if (!draft || legalPublishBtn.disabled) return;
     if (!confirm(`Publisere ${kind === 'terms' ? 'medlemsvilkår' : 'personvernerklæring'} versjon ${draft.version}? Teksten blir tilgjengelig for apper som henter fra denne serveren.${draft.requiresAcknowledgement ? ' Medlemmer må bekrefte versjonen i oppdatert app før videre bruk av appen.' : ''}`)) return;
