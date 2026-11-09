@@ -35,7 +35,9 @@ const { analyzeNifImport } = require('./nifImport');
 const { createVisitStats } = require('./visitStats');
 const { doorActivitySummary } = require('./doorActivity');
 const { readVisitHistory } = require('./visitHistory');
+const { createLegalDocuments, LegalDocumentError } = require('./legalDocuments');
 const { createLegalMemberSession } = require('./legalMemberSession');
+const { createLegalAcknowledgements } = require('./legalAcknowledgements');
 
 
 const app = express();
@@ -101,7 +103,10 @@ const MEMBERS_FILE = path.join(DATA_DIR, 'members.json');
 const ORDERS_FILE  = path.join(DATA_DIR, 'orders.json');
 const PLANS_FILE   = path.join(DATA_DIR, 'plans.json');
 const visitStats = createVisitStats({ dataDir: DATA_DIR });
+const legalDocuments = createLegalDocuments({ dataDir: DATA_DIR });
 const legalMemberSession = createLegalMemberSession({ dataDir: DATA_DIR });
+const legalAcknowledgements = createLegalAcknowledgements({ dataDir: DATA_DIR, legalDocuments });
+const legalAcknowledgementsReady = process.env.LEGAL_ACK_APP_READY === 'true';
 
 function recordVisitSafely(visitorKey) {
   try {
@@ -1296,6 +1301,106 @@ app.get('/api/plans', (req, res) => {
   res.json(publicPlans);
 });
 
+function legalApiError(res, error) {
+  if (error instanceof LegalDocumentError) {
+    return res.status(error.status).json({ ok: false, error: error.code });
+  }
+  console.error('[LEGAL_DOCUMENT_STORAGE_ERROR]', error);
+  return res.status(503).json({ ok: false, error: 'legal_storage_unavailable' });
+}
+
+app.use('/api/legal', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
+app.get('/api/legal', (req, res) => {
+  try {
+    res.json({ terms: legalDocuments.publicDocument('terms'), privacy: legalDocuments.publicDocument('privacy') });
+  } catch (error) {
+    legalApiError(res, error);
+  }
+});
+
+app.get('/api/legal/:kind', (req, res) => {
+  try {
+    res.json(legalDocuments.publicDocument(req.params.kind));
+  } catch (error) {
+    legalApiError(res, error);
+  }
+});
+
+function legalMemberId(req) {
+  const token = /^Bearer (.+)$/.exec(req.get('authorization') || '')?.[1];
+  const memberId = legalMemberSession.verify(token);
+  if (!memberId) return null;
+  if (memberId === 'apple-test') return memberId;
+  const matches = getMembers().filter(member => member?.id != null && String(member.id) === memberId);
+  return matches.length === 1 && matches[0].active && isValidUntilOk(matches[0]) ? memberId : null;
+}
+
+app.get('/api/legal/acknowledgements/required', (req, res) => {
+  if (!legalAcknowledgementsReady) return res.json({ ok: true, required: [] });
+  try {
+    const data = legalDocuments.read();
+    const required = ['terms', 'privacy'].flatMap(kind => {
+      const published = data[kind].published;
+      return published?.requiresAcknowledgement === true
+        ? [{ kind, version: published.version }] : [];
+    });
+    res.json({ ok: true, required });
+  } catch (error) { legalApiError(res, error); }
+});
+
+app.get('/api/legal/acknowledgements/pending', (req, res) => {
+  if (!legalAcknowledgementsReady) return res.json({ ok: true, pending: [] });
+  try {
+    const memberId = legalMemberId(req);
+    if (!memberId) return res.status(401).json({ ok: false, error: 'login_required' });
+    res.json({ ok: true, pending: legalAcknowledgements.required(memberId) });
+  } catch (error) { legalApiError(res, error); }
+});
+
+app.post('/api/legal/acknowledgements', (req, res) => {
+  if (!legalAcknowledgementsReady) {
+    return res.status(409).json({ ok: false, error: 'acknowledgement_app_not_ready' });
+  }
+  try {
+    const memberId = legalMemberId(req);
+    if (!memberId) return res.status(401).json({ ok: false, error: 'login_required' });
+    res.json({ ok: true, ...legalAcknowledgements.acknowledge(memberId, req.body?.documents) });
+  } catch (error) { legalApiError(res, error); }
+});
+
+app.get('/admin/legal', basicAuth, (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  try {
+    res.json({ ...legalDocuments.read(), acknowledgementsReady: legalAcknowledgementsReady });
+  } catch (error) {
+    legalApiError(res, error);
+  }
+});
+
+app.put('/admin/legal/:kind/draft', basicAuth, (req, res) => {
+  try {
+    res.json(legalDocuments.saveDraft(req.params.kind, req.body, req.adminUser));
+  } catch (error) {
+    legalApiError(res, error);
+  }
+});
+
+app.post('/admin/legal/:kind/publish', basicAuth, (req, res) => {
+  try {
+    const draft = legalDocuments.read()[req.params.kind]?.draft;
+    if (draft?.requiresAcknowledgement && !legalAcknowledgementsReady) {
+      return res.status(409).json({ ok: false, error: 'acknowledgement_app_not_ready' });
+    }
+    res.json(legalDocuments.publish(req.params.kind, req.body?.expectedRevision, req.adminUser));
+  } catch (error) {
+    legalApiError(res, error);
+  }
+});
+
 // Admin: hent alle medlemskap (også inaktive)
 app.get('/admin/plans', basicAuth, (req, res) => {
   const plans = getPlans() || [];
@@ -2404,6 +2509,7 @@ app.post('/auth/verify-code', async (req, res) => {
       return res.json({
         ok: true,
         isMember: true,
+        sessionToken: legalMemberSession.issue('apple-test'),
         member: {
           email: 'apple-test@lalmtreningssenter.no',
           name: 'Apple Testbruker',
