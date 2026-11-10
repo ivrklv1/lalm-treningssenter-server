@@ -75,6 +75,7 @@ test('admin required version gates only the matching member until acknowledged',
     assert.deepEqual((await response.json()).membership, {
       planName: 'Standard med binding', active: true, membershipStartDate: '2026-01-01',
       bindingEndDate: '2027-01-01', bindingMonthsAtStart: 12, membershipSample: false,
+      canBuyDropIn: false, canBuyMembership: false,
     });
     assert.equal((await (await request(overview, 'GET', null, tokenB)).json()).membership.planName, null);
     members[0].bindingEndDate = '2027-02-01';

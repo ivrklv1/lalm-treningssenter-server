@@ -97,6 +97,7 @@ test('membership refresh and door access use the signed member identity', async 
     assert.equal(response.headers.get('cache-control'), 'private, no-store');
     assert.deepEqual((await response.json()).membership, {
       planName: 'Standard', active: true, membershipStartDate: '2026-01-01',
+      canBuyDropIn: false, canBuyMembership: false,
       bindingEndDate: '2027-01-01', bindingMonthsAtStart: 12, membershipSample: false,
     });
     assert.equal((await doorPreview(null, { doorId: 'styrkerom', phone: members[0].phone })).status, 401);
@@ -131,9 +132,22 @@ test('membership refresh and door access use the signed member identity', async 
     const dropin = await login(members[2].phone);
     assert.match(dropin.sessionToken, /^legal1\./);
     assert.equal((await door(dropin.sessionToken)).status, 200);
+    const checkPurchaseOptions = async (dropIn, membership) => {
+      const { membership: current } = await (await overview(dropin.sessionToken)).json();
+      assert.equal(current.canBuyDropIn, dropIn);
+      assert.equal(current.canBuyMembership, membership);
+    };
+    await checkPurchaseOptions(false, true);
+    members[2].email = 'member@example.test';
+    fs.writeFileSync(membersFile, JSON.stringify(members));
+    await checkPurchaseOptions(false, false);
     members[2].validUntil = '2000-01-01';
     fs.writeFileSync(membersFile, JSON.stringify(members));
     assert.equal((await door(dropin.sessionToken)).status, 403);
+    await checkPurchaseOptions(true, true);
+    members[2].active = false;
+    fs.writeFileSync(membersFile, JSON.stringify(members));
+    await checkPurchaseOptions(false, false);
 
     members[0].validUntil = '2000-01-01';
     fs.writeFileSync(membersFile, JSON.stringify(members));
