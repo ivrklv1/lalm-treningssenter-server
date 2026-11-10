@@ -19,7 +19,10 @@ test('membership refresh and door access use the signed member identity', async 
       validUntil: new Date(Date.now() + 3600_000).toISOString() },
   ];
   fs.writeFileSync(membersFile, JSON.stringify(members));
-  fs.writeFileSync(path.join(dataDir, 'plans.json'), JSON.stringify([{ id: 'standard', name: 'Standard', price: 449 }]));
+  fs.writeFileSync(path.join(dataDir, 'plans.json'), JSON.stringify([
+    { id: 'standard', name: 'Standard', type: 'standard', price: 449 },
+    { id: 'korttid_30d', name: 'Korttid 30 dager', type: 'short_term', shortTermDays: 30 },
+  ]));
   const mock = path.join(dataDir, 'sms-mock.cjs');
   fs.writeFileSync(mock, `
     const axios = require('axios');
@@ -97,6 +100,8 @@ test('membership refresh and door access use the signed member identity', async 
     assert.equal(response.headers.get('cache-control'), 'private, no-store');
     assert.deepEqual((await response.json()).membership, {
       planName: 'Standard', active: true, membershipStartDate: '2026-01-01',
+      accessPeriod: null,
+      canBuyDropIn: false, canBuyMembership: false,
       bindingEndDate: '2027-01-01', bindingMonthsAtStart: 12, membershipSample: false,
     });
     assert.equal((await doorPreview(null, { doorId: 'styrkerom', phone: members[0].phone })).status, 401);
@@ -111,7 +116,15 @@ test('membership refresh and door access use the signed member identity', async 
     fs.unlinkSync(path.join(dataDir, 'closed'));
     const opened = await doorPreview(result.sessionToken, { doorId: 'styrkerom', phone: members[1].phone });
     assert.deepEqual(await opened.json(), { ok: true, source: 'MEMBER' });
-    assert.match(fs.readFileSync(path.join(dataDir, 'access.log'), 'utf8'), /name=Test A .*action=OPEN_MEMBER/);
+    const accessLog = path.join(dataDir, 'access.log');
+    const expectedEntry = /name=Test A .*action=OPEN_MEMBER/;
+    let accessEntries = '';
+    for (let i = 0; i < 20; i++) {
+      accessEntries = fs.existsSync(accessLog) ? fs.readFileSync(accessLog, 'utf8') : '';
+      if (expectedEntry.test(accessEntries)) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.match(accessEntries, expectedEntry);
 
     assert.equal((await door(null, { doorId: 'styrkerom', phone: members[0].phone })).status, 401);
     assert.equal((await door(result.sessionToken + 'x')).status, 401);
@@ -131,9 +144,29 @@ test('membership refresh and door access use the signed member identity', async 
     const dropin = await login(members[2].phone);
     assert.match(dropin.sessionToken, /^legal1\./);
     assert.equal((await door(dropin.sessionToken)).status, 200);
-    members[2].validUntil = '2000-01-01';
+    const checkPurchaseOptions = async (dropIn, membership, kind, expired) => {
+      const { membership: current } = await (await overview(dropin.sessionToken)).json();
+      assert.equal(current.canBuyDropIn, dropIn);
+      assert.equal(current.canBuyMembership, membership);
+      assert.equal(current.accessPeriod.kind, kind);
+      assert.equal(current.accessPeriod.expired, expired);
+      return current.accessPeriod.endsOn;
+    };
+    await checkPurchaseOptions(false, true, 'dropin', false);
+    members[2].email = 'member@example.test';
+    fs.writeFileSync(membersFile, JSON.stringify(members));
+    await checkPurchaseOptions(false, false, 'dropin', false);
+    members[2].validUntil = '2000-01-01T23:59:00Z';
     fs.writeFileSync(membersFile, JSON.stringify(members));
     assert.equal((await door(dropin.sessionToken)).status, 403);
+    assert.equal(await checkPurchaseOptions(true, true, 'dropin', true), '2000-01-02');
+    members[2].plan = 'korttid_30d';
+    members[2].validUntil = '2000-01-01';
+    fs.writeFileSync(membersFile, JSON.stringify(members));
+    assert.equal(await checkPurchaseOptions(true, true, 'short_term', true), '2000-01-01');
+    members[2].active = false;
+    fs.writeFileSync(membersFile, JSON.stringify(members));
+    await checkPurchaseOptions(false, false, 'short_term', false);
 
     members[0].validUntil = '2000-01-01';
     fs.writeFileSync(membersFile, JSON.stringify(members));
@@ -145,6 +178,7 @@ test('membership refresh and door access use the signed member identity', async 
     const refreshed = (await (await overview(result.sessionToken)).json()).membership;
     assert.equal(refreshed.active, false);
     assert.equal(refreshed.bindingEndDate, '2027-02-01');
+    assert.equal(refreshed.accessPeriod, null);
     assert.equal((await doorPreview(result.sessionToken)).status, 403);
     assert.equal((await door(result.sessionToken)).status, 403);
     const ambiguous = await login(members[1].phone);

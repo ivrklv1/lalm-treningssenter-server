@@ -26,8 +26,8 @@ const {
   approveSubscriptionInvoice,
   stopTripletexSubscriptionForOrder,
 } = require('./tripletexClient');
-const { findCheckoutConflict, upgradeTemporaryEmail } = require('./memberEmail');
-const { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus } = require('./membershipDates');
+const { findCheckoutConflict, hasTemporaryMemberEmail, upgradeTemporaryEmail } = require('./memberEmail');
+const { datesForPaidMembership, osloDate, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus } = require('./membershipDates');
 const { confirmedRefund } = require('./refundReview');
 const { bindingBackfillRevision, prepareBindingBackfill, saveBindingBackfill } = require('./bindingBackfill');
 const { prepareAdminMemberEdit } = require('./memberAdminEdit');
@@ -1014,12 +1014,28 @@ app.get('/api/visit-activity', async (req, res) => {
 // =====================================================
 
 function membershipOverview(member) {
-  const planKey = String(member.plan || '').toLowerCase();
+  const planKey = String(member.plan || '').trim().toLowerCase();
   const plan = (getPlans() || []).find(plan => planKey &&
     [plan?.id, plan?.key].some(key => typeof key === 'string' && key.toLowerCase() === planKey));
+  const dropIn = plan?.type === 'dropin' || ['dropin', 'drop-in', 'drop_in'].includes(planKey);
+  const temporaryPlan = dropIn || plan?.type === 'short_term' || Number(plan?.shortTermDays) > 0;
+  const temporaryAccess = Boolean(member.active) && temporaryPlan && Number.isFinite(Date.parse(member.validUntil));
+  const active = Boolean(member.active) && isValidUntilOk(member);
+  const storedExpiry = member.validUntil || member.expiresAt;
+  const expiry = Date.parse(storedExpiry);
+  const endsOn = /^\d{4}-\d{2}-\d{2}$/.test(storedExpiry) && Number.isFinite(expiry) &&
+    new Date(expiry).toISOString().slice(0, 10) === storedExpiry ? storedExpiry : osloDate(storedExpiry);
+  const showAccessPeriod = temporaryPlan || planKey.startsWith('korttid') || (!plan && !!endsOn);
   return {
     planName: plan?.name || plan?.text || null,
-    active: Boolean(member.active) && isValidUntilOk(member),
+    active,
+    accessPeriod: showAccessPeriod ? {
+      kind: dropIn ? 'dropin' : 'short_term',
+      endsOn,
+      expired: !!endsOn && Boolean(member.active) && !active,
+    } : null,
+    canBuyDropIn: temporaryAccess && !active,
+    canBuyMembership: temporaryAccess && (!active || hasTemporaryMemberEmail(member)),
     membershipStartDate: member.membershipStartDate || null,
     bindingEndDate: member.bindingEndDate || null,
     bindingMonthsAtStart: member.bindingMonthsAtStart ?? null,

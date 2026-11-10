@@ -12,13 +12,17 @@ function normalizeMemberPhone(value) {
   return local ? `+47${local}` : null;
 }
 
+function hasTemporaryMemberEmail(member) {
+  const current = String(member.email || '').trim().toLowerCase();
+  return !current || TEMPORARY_EMAIL.test(current);
+}
+
 function canUpgradeTemporaryEmail(member, orderEmail, members, isOrdinaryMembership) {
-  if (!isOrdinaryMembership) return false;
+  if (!isOrdinaryMembership || !hasTemporaryMemberEmail(member)) return false;
 
   const current = String(member.email || '').trim().toLowerCase();
   const requested = String(orderEmail || '').trim().toLowerCase();
-  if ((current && !TEMPORARY_EMAIL.test(current)) ||
-      !VALID_EMAIL.test(requested) || TEMPORARY_EMAIL.test(requested) ||
+  if (!VALID_EMAIL.test(requested) || TEMPORARY_EMAIL.test(requested) ||
       current === requested ||
       members.some(other => other !== member &&
         String(other.email || '').trim().toLowerCase() === requested)) {
@@ -61,4 +65,4 @@ function upgradeTemporaryEmail(member, orderEmail, members, isOrdinaryMembership
   return true;
 }
 
-module.exports = { canUpgradeTemporaryMember, findCheckoutConflict, upgradeTemporaryEmail };
+module.exports = { canUpgradeTemporaryMember, findCheckoutConflict, hasTemporaryMemberEmail, upgradeTemporaryEmail };
