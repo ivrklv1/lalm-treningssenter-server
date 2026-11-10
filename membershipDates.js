@@ -84,4 +84,4 @@ function verifiedVippsStatus(details, order) {
   return null;
 }
 
-module.exports = { datesForPaidMembership, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus };
+module.exports = { datesForPaidMembership, osloDate, shouldReplaceMembershipDates, verifiedPaymentTime, verifiedVippsStatus };
