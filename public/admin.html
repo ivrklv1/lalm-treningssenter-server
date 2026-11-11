@@ -172,6 +172,12 @@
     }
     .member-open-button:hover { text-decoration: underline; }
     #membersTableBody td { white-space: normal; }
+    .member-access-button {
+      display: block;
+      margin-top: 4px;
+      padding: 6px 10px;
+      min-height: 36px;
+    }
     .member-read-view { padding: 6px 0; }
     .member-read-list { display: grid; grid-template-columns: minmax(100px, 36%) minmax(0, 1fr); gap: 10px 12px; margin: 14px 0; }
     .member-read-list dt { color: var(--muted); font-size: 0.85rem; }
@@ -791,6 +797,13 @@
                 </select>
               </div>
               <div>
+                <label for="filterLalmIl">Filter: Lalm IL-rabatt</label>
+                <select id="filterLalmIl">
+                  <option value="">Alle</option>
+                  <option value="unconfirmed">Aktive med rabatt uten bekreftelse</option>
+                </select>
+              </div>
+              <div>
                 <label for="filterMembershipDates">Filter: medlemskapsdatoer</label>
                 <select id="filterMembershipDates">
                   <option value="">Alle</option>
@@ -812,6 +825,7 @@
               <button id="btnReloadMembers" class="btn-secondary">⟳ Oppdater liste</button>
             </div>
           </div>
+          <div id="memberAccessMsg" class="mt-1 small" role="status"></div>
           <div id="membersListWrapper" class="table-wrapper mt-2">
              <div class="scroll">
                <table>
@@ -1341,7 +1355,6 @@
          <div class="small text-muted mt-2">Siste adminendring: <span id="modalLastAdminEdit">Ingen registrert</span></div>
        </div>
        <div class="btn-row mt-3">
-         <button id="modalToggleActiveBtn" class="btn-secondary">Deaktiver / aktiver tilgang</button>
          <button id="modalSaveDetailsBtn" class="btn-primary">Lagre opplysninger</button>
          <button id="modalDeleteBtn" class="btn-secondary" style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;">🗑 Slett</button>
        </div>
@@ -1368,10 +1381,13 @@
   // Medlemmer
   const membersTableBody = document.getElementById('membersTableBody');
   const membersErrorEl = document.getElementById('membersError');
+  const memberAccessMsg = document.getElementById('memberAccessMsg');
+  const pendingMemberAccess = new Set();
   const statsActiveCount = document.getElementById('statsActiveCount');
   const statsTotalCount = document.getElementById('statsTotalCount');
   const searchInput = document.getElementById('searchInput');
   const filterPlan = document.getElementById('filterPlan');
+  const filterLalmIl = document.getElementById('filterLalmIl');
   const filterMembershipDates = document.getElementById('filterMembershipDates');
   const filterTripletexFollowUp = document.getElementById('filterTripletexFollowUp');
   const missingMembershipDatesCount = document.getElementById('missingMembershipDatesCount');
@@ -1411,7 +1427,6 @@
   const modalMemberStatus = document.getElementById('modalMemberStatus');
   const modalBindingEndDate = document.getElementById('modalBindingEndDate');
   const modalMembershipStartOrderId = document.getElementById('modalMembershipStartOrderId');
-  const modalToggleActiveBtn = document.getElementById('modalToggleActiveBtn');
   const modalSaveDetailsBtn = document.getElementById('modalSaveDetailsBtn');
   const modalDeleteBtn = document.getElementById('modalDeleteBtn');
   const modalCloseBtn = document.getElementById('modalCloseBtn');
@@ -1420,7 +1435,6 @@
 
   const memberActionsEl = document.getElementById('memberActions');
   const selectedMemberLabelEl = document.getElementById('selectedMemberLabel');
-  const btnToggleActiveMember = document.getElementById('btnToggleActive');
   const btnDeleteMember = document.getElementById('btnDeleteMember');
   const changePlanSelect = document.getElementById('changePlanSelect');
   const btnChangePlan = document.getElementById('btnChangePlan');
@@ -1709,6 +1723,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
   function renderMembers() {
     const q = (searchInput.value || '').toLowerCase();
     const planFilter = normalizedPlanKey(filterPlan.value);
+    const onlyUnconfirmedDiscount = filterLalmIl.value === 'unconfirmed';
     const dateFilter = filterMembershipDates.value || '';
     const followUpFilter = filterTripletexFollowUp.value || '';
 
@@ -1717,6 +1732,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
 
     const filtered = allMembers.filter(m => {
       if (planFilter && normalizedPlanKey(m.plan) !== planFilter) return false;
+      if (onlyUnconfirmedDiscount && !(m.active && m.hasLalmIlDiscount && m.clubMember !== true)) return false;
       const dateState = membershipDateState(m);
       if (dateFilter === 'missing' && !(m.active && dateState === 'missing')) return false;
       if (dateFilter === 'review' && dateState !== 'review') return false;
@@ -1750,10 +1766,19 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
         tr.dataset.plan = m.plan || '';
         tr.dataset.active = m.active ? '1' : '0';
 
+        const lalmIlLabel = m.clubMember === true ? 'Lalm IL-rabatt · Bekreftet' : 'Lalm IL-rabatt · Ikke bekreftet';
+        const lalmIlClass = m.clubMember === true ? 'text-muted' : 'status-text-inactive';
+        const accessAction = m.active ? 'Deaktiver' : 'Aktiver';
+        const memberName = escapeHtml(m.name || 'Uten navn');
         tr.innerHTML = `
-          <td><button type="button" class="member-open-button">${escapeHtml(m.name || 'Uten navn')}</button></td>
+          <td>
+            <button type="button" class="member-open-button">${memberName}</button>
+            ${m.hasLalmIlDiscount ? `<div class="small ${lalmIlClass}">${lalmIlLabel}</div>` : ''}
+          </td>
           <td class="status">
             <span class="status-text ${statusClass}">${statusLabel}</span>
+            ${tr.dataset.id ? `<button type="button" class="btn-secondary member-access-button"
+              aria-label="${accessAction} tilgang for ${memberName}" ${pendingMemberAccess.has(tr.dataset.id) ? 'disabled' : ''}>${accessAction}</button>` : ''}
           </td>
         `;
         membersTableBody.appendChild(tr);
@@ -1878,9 +1903,6 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     modalResolveTripletexBtn.style.display = followUp?.status === 'pending' ? 'inline-block' : 'none';
 
     modalMemberMsg.textContent = '';
-    modalToggleActiveBtn.textContent = member.active
-      ? 'Deaktiver tilgang'
-      : 'Aktiver tilgang';
 
     memberModal.style.display = 'flex';
   }
@@ -1944,14 +1966,35 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     }
   }
 
-  async function toggleMemberActive(memberId) {
-    const res = await fetch('/api/admin/members/toggle', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ memberId }),
-    });
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    await loadMembers();
+  async function toggleMemberActive(member, button) {
+    const memberId = String(member.id);
+    if (pendingMemberAccess.has(memberId)) return;
+
+    const name = member.name || 'Uten navn';
+    const action = member.active ? 'deaktivere' : 'aktivere';
+    if (!confirm(`Vil du ${action} tilgangen for ${name}? Faktureringen i Tripletex fortsetter uendret.`)) return;
+
+    pendingMemberAccess.add(memberId);
+    button.disabled = true;
+    memberAccessMsg.textContent = '';
+    try {
+      const res = await fetch('/api/admin/members/toggle', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const updated = allMembers.find(m => String(m.id) === memberId);
+      if (updated) updated.active = data.active;
+      memberAccessMsg.textContent = `Tilgangen for ${name} er ${data.active ? 'aktivert' : 'deaktivert'}.`;
+      memberAccessMsg.className = 'mt-1 small tag-success';
+    } catch (e) {
+      memberAccessMsg.textContent = `Kunne ikke oppdatere tilgangen for ${name}: ${e.message}`;
+      memberAccessMsg.className = 'mt-1 small tag-danger';
+    } finally {
+      pendingMemberAccess.delete(memberId);
+      renderMembers();
+    }
   }
 
   function updateMemberActionsUi() {
@@ -1965,11 +2008,6 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     if (selectedMemberLabelEl) {
       selectedMemberLabelEl.textContent =
         (selectedMember.name || 'Uten navn') + ' (' + selectedMember.email + ')';
-    }
-    if (btnToggleActiveMember) {
-      btnToggleActiveMember.textContent = selectedMember.active
-        ? 'Sett som inaktiv (pause)'
-        : 'Aktiver medlem';
     }
     if (changePlanSelect) {
       changePlanSelect.value = selectedMember.plan || '';
@@ -3388,16 +3426,21 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
 
   searchInput.addEventListener('input', () => renderMembers());
   filterPlan.addEventListener('change', () => renderMembers());
+  filterLalmIl.addEventListener('change', () => renderMembers());
   filterMembershipDates.addEventListener('change', () => renderMembers());
   filterTripletexFollowUp.addEventListener('change', () => renderMembers());
 
-    membersTableBody.addEventListener('click', (e) => {
-    const button = e.target.closest('.member-open-button');
+  membersTableBody.addEventListener('click', (e) => {
+    const button = e.target.closest('.member-open-button, .member-access-button');
     if (!button) return;
-    const row = button.closest('tr');
-    if (!row || !row.dataset || !row.dataset.id) return;
-    const member = allMembers.find(m => String(m.id) === row.dataset.id);
-    if (member) {
+    const memberId = button.closest('tr')?.dataset.id;
+    if (!memberId) return;
+    const member = allMembers.find(m => String(m.id) === memberId);
+    if (!member) return;
+
+    if (button.classList.contains('member-access-button')) {
+      toggleMemberActive(member, button);
+    } else {
       openMemberModal(member);
     }
   });
@@ -3414,24 +3457,6 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     memberModal.addEventListener('click', (e) => {
       if (e.target === memberModal) {
         closeMemberModal();
-      }
-    });
-  }
-  if (modalToggleActiveBtn) {
-    modalToggleActiveBtn.addEventListener('click', async () => {
-      if (!selectedMember?.id) return;
-      const action = selectedMember.active ? 'deaktivere' : 'aktivere';
-      if (!confirm(`Vil du ${action} tilgangen for dette medlemmet? Faktureringen i Tripletex fortsetter uendret.`)) return;
-      modalMemberMsg.textContent = 'Oppdaterer status...';
-      modalMemberMsg.className = 'mt-1 small text-muted';
-      try {
-        await toggleMemberActive(selectedMember.id);
-        modalMemberMsg.textContent = 'Status oppdatert.';
-        modalMemberMsg.className = 'mt-1 small tag-success';
-        closeMemberModal();
-      } catch (e) {
-        modalMemberMsg.textContent = 'Feil: ' + e.message;
-        modalMemberMsg.className = 'mt-1 small tag-danger';
       }
     });
   }
@@ -3537,13 +3562,6 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
   btnAddMember.addEventListener('click', addMember);
   btnTellSync.addEventListener('click', runTellSync);
 
-  if (btnToggleActiveMember) {
-    btnToggleActiveMember.addEventListener('click', () => {
-      if (selectedMember?.id) {
-        toggleMemberActive(selectedMember.id);
-      }
-    });
-  }
   if (btnChangePlan) {
     btnChangePlan.addEventListener('click', changeMemberPlan);
   }
