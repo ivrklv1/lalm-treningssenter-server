@@ -1240,13 +1240,17 @@
         <div class="mt-1">
           <label for="nifTextarea">NIF medlemsimport (CSV fra Excel)</label>
           <textarea id="nifTextarea" placeholder="Lim inn medlemslisten her…"></textarea>
-          <div class="small text-muted mt-1">Forhåndsvisningen viser hvor mange som får eller mister NIF-markering. Ingenting lagres før du bekrefter importen.</div>
+          <div class="small text-muted mt-1">Bare betalt kontingent med sikkert treff kan gi NIF-markering. Eksisterende markeringer beholdes.</div>
           <div class="btn-row mt-1">
             <button id="btnNifPreview" class="btn-secondary">Forhåndsvis endringer</button>
             <button id="btnNifImport" class="btn-primary" disabled>📥 Bekreft import</button>
             <button id="btnClearNif" class="btn-ghost">Tøm felt</button>
           </div>
           <div id="nifPreviewSummary" class="mt-1 small" role="status"></div>
+          <details id="nifReview" class="mt-1 small" hidden>
+            <summary id="nifReviewTitle">Manuell gjennomgang</summary>
+            <ul id="nifReviewRows"></ul>
+          </details>
           <div id="nifMsg" class="mt-1 small"></div>
         </div>
       </section>
@@ -2493,6 +2497,16 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     }
   }
 
+  const nifReview = document.getElementById('nifReview');
+  const nifReviewTitle = document.getElementById('nifReviewTitle');
+  const nifReviewRows = document.getElementById('nifReviewRows');
+  const nifReviewReasons = {
+    invalid_row: 'Raden har feil antall kolonner',
+    payment_unconfirmed: 'Kontingent er ikke bekreftet betalt',
+    ambiguous: 'Usikkert treff i medlemsregisteret',
+    no_match: 'Ingen treff i medlemsregisteret',
+    other_plan: 'Medlemmet har en annen treningsplan',
+  };
   let nifPreviewToken = null;
   let nifPreviewCsv = null;
   let nifPreviewResult = null;
@@ -2503,19 +2517,21 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     nifPreviewResult = null;
     btnNifImport.disabled = true;
     nifPreviewSummary.textContent = '';
+    nifReview.hidden = true;
+    nifReview.open = false;
+    nifReviewRows.replaceChildren();
   }
 
   function nifErrorMessage(error) {
     return {
-      invalid_nif_csv: 'Filen har ingen gyldige aktive medlemsrader. Ingen endringer er gjort.',
-      no_nif_matches: 'Ingen aktive rader kunne kobles til en Lalm IL-plan. Ingen endringer er gjort.',
+      invalid_nif_csv: 'Kontroller at lista inneholder medlemsrader med kolonnene Fornavn, Etternavn, E-post, Tlf. mobil og Kontingent.',
       nif_preview_required: 'Medlemsdataene eller filen er endret. Forhåndsvis på nytt.',
     }[error] || error;
   }
 
   async function previewNifImport() {
-    const csv = nifTextarea.value.trim();
-    if (!csv) {
+    const csv = nifTextarea.value;
+    if (!csv.trim()) {
       nifMsg.textContent = 'Lim inn CSV-data fra NIF først.';
       nifMsg.className = 'mt-1 small tag-danger';
       return;
@@ -2532,13 +2548,20 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(nifErrorMessage(data.error || ('HTTP ' + res.status)));
-      if (nifTextarea.value.trim() !== csv) return;
+      if (nifTextarea.value !== csv) return;
       nifPreviewToken = data.previewToken;
       nifPreviewCsv = csv;
       nifPreviewResult = data;
-      nifPreviewSummary.textContent = `Forhåndsvisning: ${data.matched} matchet, ${data.added} får NIF-markering, ${data.removed} mister markering, ${data.unmatched} uten treff, ${data.ambiguous} tvetydige.`;
-      btnNifImport.disabled = false;
-      nifMsg.textContent = 'Kontroller tallene før du bekrefter.';
+      nifPreviewSummary.textContent = `${data.matched} medlemmer med betalt kontingent og sikkert treff. ${data.added} får NIF-markering.`;
+      nifReview.hidden = data.review.length === 0;
+      nifReviewTitle.textContent = `Manuell gjennomgang (${data.review.length})`;
+      for (const item of data.review) {
+        const row = document.createElement('li');
+        row.textContent = `Rad ${item.row} · ${item.name || 'Uten navn'} · ${item.status || 'Uten status'} · ${nifReviewReasons[item.reason]}`;
+        nifReviewRows.appendChild(row);
+      }
+      btnNifImport.disabled = data.added === 0;
+      nifMsg.textContent = data.added ? 'Kontroller tallene før du bekrefter.' : 'Ingen nye markeringer å lagre.';
       nifMsg.className = 'mt-1 small tag-success';
     } catch (e) {
       nifMsg.textContent = 'Forhåndsvisning feilet: ' + e.message;
@@ -2549,14 +2572,14 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
   }
 
   async function runNifImport() {
-    const csv = nifTextarea.value.trim();
+    const csv = nifTextarea.value;
     if (!nifPreviewToken || csv !== nifPreviewCsv) {
       clearNifPreview();
       nifMsg.textContent = 'Forhåndsvis filen før import.';
       nifMsg.className = 'mt-1 small tag-danger';
       return;
     }
-    if (!confirm(`Bekrefte NIF-import? ${nifPreviewResult.added} får markering og ${nifPreviewResult.removed} mister markering. Fakturering og plan endres ikke.`)) return;
+    if (!confirm(`Bekrefte NIF-import? ${nifPreviewResult.added} får NIF-markering.`)) return;
     btnNifImport.disabled = true;
     nifMsg.textContent = 'Importerer NIF-data...';
     nifMsg.className = 'mt-1 small text-muted';
@@ -2567,8 +2590,11 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(nifErrorMessage(data.error || ('HTTP ' + res.status)));
-      clearNifPreview();
-      nifMsg.textContent = `Importert: ${data.added} fikk NIF-markering, ${data.removed} mistet markering.`;
+      nifPreviewToken = null;
+      nifPreviewCsv = null;
+      nifPreviewResult = null;
+      nifPreviewSummary.textContent = '';
+      nifMsg.textContent = `Importert: ${data.added} fikk NIF-markering.`;
       nifMsg.className = 'mt-1 small tag-success';
       await loadMembers();
     } catch (e) {
