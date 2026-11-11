@@ -3017,10 +3017,12 @@ if (src === 'web') {
     }
 
     // 10) Lagre ordren i orders.json
+    const channel = source === 'web' ? 'web' : ['app', 'app-dropin'].includes(source) ? 'app' : null;
     const nowIso = new Date().toISOString();
     upsertOrder({
       orderId,
       status: 'PENDING',
+      channel,
       membershipKey,
       bindingMonths: selected.bindingMonths == null ? null : selected.bindingMonths,
       phone: cleanPhone,
