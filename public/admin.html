@@ -1130,7 +1130,7 @@
               </span>
             </div>
           </div>
-          <label for="orderSearch">Finn ordre (navn, ordre-ID, e-post eller plan)</label>
+          <label for="orderSearch">Finn ordre (navn, ordre-ID, e-post, plan eller kanal)</label>
           <input id="orderSearch" type="search" placeholder="Søk i ordreloggen…" />
 
           <div class="table-wrapper" style="max-height: 360px;">
@@ -2138,10 +2138,16 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     return member?.name || order.name || order.email || 'Ukjent medlem';
   }
 
+  function orderChannelLabel(channel) {
+    if (channel === 'web') return 'Nettside';
+    if (channel === 'app') return 'App';
+    return 'Ukjent kanal';
+  }
+
   function renderOrders() {
     const query = orderSearch.value.trim().toLowerCase();
     const matchingOrders = query ? allOrders.filter(order =>
-      [order.orderId, order.email, order.membershipKey, order.status, order.name, orderMemberName(order)]
+      [order.orderId, order.email, order.membershipKey, order.status, order.name, orderMemberName(order), orderChannelLabel(order.channel)]
         .some(value => String(value || '').toLowerCase().includes(query))) : allOrders;
     ordersCountEl.textContent = `${matchingOrders.length} av ${allOrders.length}`;
 
@@ -2171,7 +2177,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
       const description = document.createElement('div');
       description.className = 'door-event-description';
       const planAndAmount = document.createElement('span');
-      planAndAmount.textContent = `${orderPlanText} · ${fmtAmount(o.amount)}`;
+      planAndAmount.textContent = `${orderPlanText} · ${fmtAmount(o.amount)} · ${orderChannelLabel(o.channel)}`;
       const result = document.createElement('span');
       result.className = `door-event-result ${['SALE', 'CAPTURED'].includes(status) ? 'success' : ['CANCELLED', 'FAILED'].includes(status) ? 'denied' : ''}`;
       result.textContent = `· ${statusLabel}`;
