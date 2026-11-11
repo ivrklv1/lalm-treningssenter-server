@@ -1103,7 +1103,10 @@ app.post('/membership/signup', (req, res) => {
 
 // Hent alle medlemmer (nytt admin-UI)
 app.get('/admin/members', basicAuth, (req, res) => {
-  const members = getMembers();
+  const members = getMembers().map(member => ({
+    ...member,
+    hasLalmIlDiscount: IL_DISCOUNT_PLANS.includes(String(member.plan || '').trim().toLowerCase()),
+  }));
   res.json(members);
 });
 
