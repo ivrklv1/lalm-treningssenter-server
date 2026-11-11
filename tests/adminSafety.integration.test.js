@@ -13,7 +13,7 @@ test('admin keeps shared-email members separate and previews NIF changes before 
     { id: 'member-a', name: 'Test A', email: 'shared@example.invalid', phone: '+4711111111', plan: 'standard', active: true },
     { id: 'member-b', name: 'Test B', email: 'shared@example.invalid', phone: '+4722222222', plan: 'standard', active: true },
     { id: 'member-c', name: 'Test C', email: 'c@example.invalid', phone: '+4733333333', plan: 'medlem_m_binding', active: true, clubMember: true, clubMemberSource: 'nif' },
-    { id: 'member-d', name: 'Test D', email: 'd@example.invalid', phone: '+4744444444', plan: 'medlem_m_binding', active: true, clubMember: false },
+    { id: 'member-d', name: 'Test D', email: 'd@example.invalid', phone: '+4744444444', plan: 'lalm_il_12mnd_binding', active: true, clubMember: false },
     { id: 'member-short', name: 'Korttidstest', email: 'short@example.invalid', phone: '+4755555555', plan: 'korttid_7dager', active: true },
   ];
   fs.writeFileSync(path.join(dataDir, 'members.json'), JSON.stringify(members));
@@ -96,12 +96,31 @@ test('admin keeps shared-email members separate and previews NIF changes before 
     assert.equal((await fetch(base + '/admin/members/member-a', { method: 'DELETE', headers })).status, 200);
     assert.equal(readMembers().filter(m => m.email === 'shared@example.invalid').length, 1);
 
-    const csv = 'Fornavn;Etternavn;E-post;Telefon;Annet;Medlemsstatus\nTest;D;d@example.invalid;44444444;;Aktiv';
+    const csv = [
+      'Fornavn;Etternavn;E-post;Tlf. mobil;Kontingent',
+      'Test;D;d@example.invalid;44444444;Betalt',
+      'Test;C;c@example.invalid;33333333;Forfalt',
+      'Test;B;shared@example.invalid;22222222;Betalt',
+      'Test;D;d@example.invalid;33333333;Betalt',
+      'Ukjent;Medlem;;66666666;Betalt',
+      'Korttidstest;;short@example.invalid;55555555;Betalt',
+      'Annen;Person;;;Purret',
+      'Ny;Person;;;Ingen registrert',
+    ].join('\n');
     const previewResponse = await post('/api/admin/nif-import/preview', { csv });
     assert.equal(previewResponse.status, 200);
     const preview = await previewResponse.json();
     assert.equal(preview.added, 1);
-    assert.equal(preview.removed, 1);
+    assert.equal(preview.matched, 1);
+    assert.deepEqual(preview.review.map(item => [item.row, item.status, item.reason]), [
+      [3, 'Forfalt', 'payment_unconfirmed'],
+      [4, 'Betalt', 'other_plan'],
+      [5, 'Betalt', 'ambiguous'],
+      [6, 'Betalt', 'no_match'],
+      [7, 'Betalt', 'other_plan'],
+      [8, 'Purret', 'payment_unconfirmed'],
+      [9, 'Ingen registrert', 'payment_unconfirmed'],
+    ]);
     assert.equal(readMembers().find(m => m.id === 'member-c').clubMember, true);
     assert.equal((await post('/api/admin/nif-import', { csv })).status, 409);
     assert.equal((await post('/api/admin/nif-import/preview', { csv: 'wrong file' })).status, 400);
@@ -114,7 +133,7 @@ test('admin keeps shared-email members separate and previews NIF changes before 
     assert.equal((await post('/api/admin/nif-import', { csv, previewToken: preview.previewToken })).status, 409);
     const freshPreview = await (await post('/api/admin/nif-import/preview', { csv })).json();
     assert.equal((await post('/api/admin/nif-import', { csv, previewToken: freshPreview.previewToken })).status, 200);
-    assert.equal(readMembers().find(m => m.id === 'member-c').clubMember, false);
+    assert.deepEqual(readMembers().find(m => m.id === 'member-c'), members[2]);
     assert.equal(readMembers().find(m => m.id === 'member-d').clubMember, true);
 
     const planEdit = await fetch(base + '/admin/members/member-b/details', {

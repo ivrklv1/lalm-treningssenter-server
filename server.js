@@ -135,7 +135,11 @@ const openAttempts = {}; // key: email/phone, val: { lastAttempt, count }
 // Konstanter for IL-rabatt
 // ----------------------------
 const IL_DISCOUNT_PLANS = [
-  'medlem_m_binding', // Treningsavgift medlem m/binding (349/mnd)
+  'medlem_m_binding',
+  'lalm_il_12mnd_binding',
+  'lalm_il_uten_binding',
+  'lalm_il_binding',
+  'lalm_il_ubind',
 ];
 
 // ----------------------------
@@ -2068,8 +2072,8 @@ app.post('/api/admin/nif-import', basicAuth, (req, res) => {
     if (!req.body?.previewToken || req.body.previewToken !== previewToken) {
       return res.status(409).json({ ok: false, error: 'nif_preview_required' });
     }
-    if (!saveMembers(members)) return res.status(500).json({ ok: false, error: 'could_not_save' });
-    return res.json({ ok: true, ...summary });
+    if (summary.added && !saveMembers(members)) return res.status(500).json({ ok: false, error: 'could_not_save' });
+    return res.json({ ok: true, added: summary.added });
   } catch (error) {
     return res.status(400).json({ ok: false, error: error.message });
   }

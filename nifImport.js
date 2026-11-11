@@ -1,12 +1,27 @@
 const crypto = require('node:crypto');
 
-function fingerprint(csv, members) {
-  return crypto.createHash('sha256').update(JSON.stringify({ csv, members })).digest('hex');
+const headers = ['fornavn', 'etternavn', 'e-post', 'tlf. mobil', 'kontingent'];
+
+function parseRow(line, separator) {
+  const quoted = /^"((?:[^"]|"")*)"$/;
+  const fields = line.split(new RegExp(`${separator}(?=(?:[^"]*"[^"]*")*[^"]*$)`));
+  return fields.map((value) => {
+    const field = value.trim();
+    const match = quoted.exec(field);
+    if (match) return match[1].replace(/""/g, '"').trim();
+    if (field.includes('"')) throw new Error('invalid_nif_csv');
+    return field;
+  });
 }
 
 function analyzeNifImport(csv, members, { normalizePhone, normalizeName, discountPlans, now }) {
-  if (typeof csv !== 'string' || !csv.trim()) {
-    throw new Error('csv_required');
+  if (typeof csv !== 'string' || !csv.trim()) throw new Error('csv_required');
+
+  const lines = csv.split(/\r?\n/);
+  const separator = lines[0].includes('\t') ? '\t' : ';';
+  const columns = parseRow(lines[0], separator).map((field) => field.toLowerCase());
+  if (columns.length !== headers.length || !headers.every((field, index) => field === columns[index])) {
+    throw new Error('invalid_nif_csv');
   }
 
   const updatedMembers = members.map((member) => ({ ...member }));
@@ -17,79 +32,74 @@ function analyzeNifImport(csv, members, { normalizePhone, normalizeName, discoun
     matches.push(member);
     index.set(key, matches);
   };
+  const emailOf = (member) => String(member.email || '').trim().toLowerCase();
+  const phoneOf = (member) => normalizePhone(member.phone || member.mobile || member.phoneFull || '');
 
   for (const member of updatedMembers) {
-    addIndex(indexes.email, String(member.email || '').trim().toLowerCase(), member);
-    addIndex(indexes.phone, normalizePhone(member.phone || member.mobile || member.phoneFull || ''), member);
+    addIndex(indexes.email, emailOf(member), member);
+    addIndex(indexes.phone, phoneOf(member), member);
     addIndex(indexes.name, normalizeName(member.name || ''), member);
   }
 
   let totalRows = 0;
-  let activeRows = 0;
-  let matched = 0;
-  let unmatched = 0;
-  let ambiguous = 0;
   const matchedMembers = new Set();
+  const review = [];
 
-  for (const line of csv.split(/\r?\n/)) {
+  for (const [index, line] of lines.slice(1).entries()) {
     if (!line.trim()) continue;
-    const fields = line.split(';').map((field) => field.trim());
-    if (fields[0]?.toLowerCase() === 'fornavn' && line.toLowerCase().includes('medlemsstatus')) continue;
-    if (fields.length < 6) continue;
     totalRows++;
-    if (fields[5].toLowerCase() !== 'aktiv') continue;
-    activeRows++;
-
-    const email = fields[2].toLowerCase();
-    const phone = normalizePhone(fields[3]);
-    const name = normalizeName(`${fields[0]} ${fields[1]}`);
-    const emailMatches = email ? indexes.email.get(email) || [] : [];
-    const phoneMatches = phone ? indexes.phone.get(phone) || [] : [];
-    const nameMatches = name ? indexes.name.get(name) || [] : [];
-    const candidates = emailMatches.length ? emailMatches : phoneMatches.length ? phoneMatches : nameMatches;
-
-    if (candidates.length > 1 ||
-        (emailMatches.length === 1 && phoneMatches.length === 1 && emailMatches[0] !== phoneMatches[0])) {
-      ambiguous++;
+    const fields = parseRow(line, separator);
+    if (fields.length !== headers.length) {
+      review.push({ row: index + 2, name: '', status: '', reason: 'invalid_row' });
       continue;
     }
+    const [firstName, lastName, emailField, phoneField, status] = fields;
+    const name = `${firstName} ${lastName}`.trim();
+    const item = { row: index + 2, name, status };
+    if (status.toLowerCase() !== 'betalt') {
+      review.push({ ...item, reason: 'payment_unconfirmed' });
+      continue;
+    }
+
+    const email = emailField.toLowerCase();
+    const phone = normalizePhone(phoneField);
+    const emailMatches = indexes.email.get(email) || [];
+    const phoneMatches = indexes.phone.get(phone) || [];
+    const nameMatches = indexes.name.get(normalizeName(name)) || [];
+    const contactMatches = [...new Set([...emailMatches, ...phoneMatches])];
+    const candidates = contactMatches.length ? contactMatches : nameMatches;
     const member = candidates[0];
-    if (!member || !discountPlans.includes(member.plan)) {
-      unmatched++;
-      continue;
+    const conflictingName = contactMatches.length && nameMatches.length && !nameMatches.includes(member);
+    const conflictingContacts = !contactMatches.length && member &&
+      ((email && emailOf(member) && email !== emailOf(member)) ||
+        (phoneField && phoneOf(member) && phone !== phoneOf(member)));
+
+    if (candidates.length > 1 || conflictingName || conflictingContacts) {
+      review.push({ ...item, reason: 'ambiguous' });
+    } else if (!member) {
+      review.push({ ...item, reason: 'no_match' });
+    } else if (!discountPlans.includes(String(member.plan || '').trim().toLowerCase())) {
+      review.push({ ...item, reason: 'other_plan' });
+    } else {
+      matchedMembers.add(member);
     }
-    matchedMembers.add(member);
-    matched++;
   }
 
-  // An empty or wrong-format export must never clear the existing NIF flags.
-  if (totalRows === 0 || activeRows === 0) {
-    throw new Error('invalid_nif_csv');
-  }
-  if (matchedMembers.size === 0) {
-    throw new Error('no_nif_matches');
-  }
+  if (!totalRows) throw new Error('invalid_nif_csv');
 
   let added = 0;
-  let removed = 0;
-  for (const member of updatedMembers) {
-    if (matchedMembers.has(member)) {
-      if (!member.clubMember || member.clubMemberSource !== 'nif') added++;
-      member.clubMember = true;
-      member.clubMemberSource = 'nif';
-      member.clubMemberSyncedAt = now;
-    } else if (member.clubMemberSource === 'nif') {
-      removed++;
-      member.clubMember = false;
-      delete member.clubMemberSource;
-      delete member.clubMemberSyncedAt;
-    }
+  for (const member of matchedMembers) {
+    if (member.clubMember === true) continue;
+    added++;
+    member.clubMember = true;
+    member.clubMemberSource = 'nif';
+    member.clubMemberSyncedAt = now;
   }
 
   return {
     members: updatedMembers,
-    summary: { totalRows, activeRows, matched, unmatched, ambiguous, added, removed },
-    previewToken: fingerprint(csv, members),
+    summary: { totalRows, matched: matchedMembers.size, added, review },
+    previewToken: crypto.createHash('sha256').update(JSON.stringify({ csv, members })).digest('hex'),
   };
 }
 
