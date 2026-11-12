@@ -172,12 +172,58 @@
     }
     .member-open-button:hover { text-decoration: underline; }
     #membersTableBody td { white-space: normal; }
-    .member-access-button {
-      display: block;
-      margin-top: 4px;
-      padding: 6px 10px;
-      min-height: 36px;
+    #membersListWrapper { max-height: none; overflow: visible; display: block; }
+    #membersListWrapper thead { position: static; }
+    .member-toolbar, .member-quick-filters, .member-pagination {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
     }
+    .member-pagination { justify-content: center; margin-top: 12px; }
+    .member-toolbar > div { flex: 1 1 230px; }
+    .member-filters > summary { cursor: pointer; font-weight: 600; padding: 10px 0; }
+    .member-filter-groups {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr));
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .member-filter-groups fieldset { min-width: 0; margin: 0; border: 1px solid var(--border); border-radius: 12px; }
+    .member-filter-groups legend { font-weight: 600; font-size: 0.85rem; }
+    .member-filter-groups label { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+    .member-filter-groups input { flex: none; width: 18px; height: 18px; margin: 0; }
+    .member-quick-filters button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+    .member-choice { position: relative; width: fit-content; }
+    .member-choice > summary, .member-choice-label {
+      display: inline-flex; align-items: center; gap: 6px; min-height: 40px;
+      border-radius: 8px; padding-inline: 8px; font-weight: 600;
+    }
+    .member-choice > summary { cursor: pointer; list-style: none; }
+    .member-choice > summary::-webkit-details-marker { display: none; }
+    .member-choice[open] { z-index: 3; }
+    .member-choice-options {
+      position: absolute; inset-inline-start: 0; top: 100%; min-width: max-content; padding: 4px;
+      background: #fff; border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.15);
+    }
+    .member-choice-options button {
+      display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 6px 10px;
+      border: 0; border-radius: 6px; background: transparent; color: var(--accent); font: inherit; cursor: pointer;
+    }
+    .member-choice-options button:hover, .member-choice-options button[aria-pressed="true"] { background: #eef2ff; }
+    .member-choice-options button span { width: 1em; }
+    .member-il-dot { width: 12px; height: 12px; border-radius: 50%; background: #64748b; }
+    .member-il-dot.confirmed { background: #15803d; }
+    .member-il-dot.unconfirmed { background: #b91c1c; }
+    #memberAddPanel {
+      position: fixed; inset: 0 0 0 auto; margin: 0; width: min(440px, 100%); max-width: none;
+      height: 100%; max-height: none; border-radius: 16px 0 0 16px;
+      padding: 18px 18px max(18px, env(safe-area-inset-bottom));
+    }
+    #memberAddPanel::backdrop { background: rgba(15, 23, 42, 0.45); }
+    #memberAddPanel .input-grid { grid-template-columns: 1fr; }
+    #memberAddPanel .modal-close-btn { min-width: 44px; min-height: 44px; }
     .member-read-view { padding: 6px 0; }
     .member-read-list { display: grid; grid-template-columns: minmax(100px, 36%) minmax(0, 1fr); gap: 10px 12px; margin: 14px 0; }
     .member-read-list dt { color: var(--muted); font-size: 0.85rem; }
@@ -698,11 +744,12 @@
       #checkoutLogBody td::before { content: none; }
       #logtab-door .table-wrapper { max-height: 65vh !important; overflow-y: auto; }
 
-      #membersTableBody tr { flex-direction: row; align-items: center; justify-content: space-between; margin: 0; padding: 0 8px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
-      #membersTableBody td { display: block; width: auto; padding: 8px 4px !important; border: 0; font-size: 0.88rem; }
-      #membersTableBody td:first-child { min-width: 0; flex: 1; }
-      #membersTableBody td::before { content: none; }
+      #membersTableBody td::before { content: attr(data-label); }
       #membersListWrapper { border: 0; border-radius: 0; background: transparent; }
+      #membersListWrapper thead { position: absolute; }
+      .member-filter-groups label { min-height: 44px; }
+      .member-choice > summary, .member-choice-options button { min-height: 44px; }
+      #memberAddPanel { border-radius: 0; }
       #plansTableBody td:nth-child(1)::before { content: "Nøkkel"; }
       #plansTableBody td:nth-child(2)::before { content: "Navn"; }
       #plansTableBody td:nth-child(3)::before { content: "Type"; }
@@ -760,116 +807,101 @@
   <main>
     <!-- TAB: MEDLEMMER -->
     <section id="tab-members" class="tab-panel active">
-      <div class="panel-grid">
-        <!-- VENSTRE: Medlemsliste -->
-        <section class="card">
-          <div class="card-title-row">
-            <div>
-              <div class="card-title">Medlemmer</div>
-              <div class="card-subtitle">
-                Oversikt over alle medlemmer. Aktive medlemmer med telefon synkroniseres mot TELL.
-              </div>
-            </div>
-            <div style="text-align:right;">
-              <div class="pill-row">
-                <div class="pill active">Aktive: <span id="statsActiveCount">0</span></div>
-                <div class="pill">Totalt: <span id="statsTotalCount">0</span></div>
-              </div>
+      <section class="card">
+        <div class="card-title-row">
+          <div>
+            <h2 class="card-title" id="membersListTitle" tabindex="-1">Medlemmer</h2>
+            <div class="pill-row">
+              <div class="pill active">Aktive: <span id="statsActiveCount">0</span></div>
+              <div class="pill">Totalt: <span id="statsTotalCount">0</span></div>
             </div>
           </div>
-
-          <div class="mt-2">
-            <div class="input-grid">
-              <div>
-                <label for="searchInput">Søk (navn, e-post eller telefon)</label>
-                <input id="searchInput" type="text" placeholder="Søk..." />
-              </div>
-              <div>
-                <label for="filterPlan">Filter: plan</label>
-                <select id="filterPlan">
-                  <option value="">Alle planer</option>
-                  <option value="LALM_IL_BINDING">Lalm IL – binding</option>
-                  <option value="STANDARD_BINDING">Standard – binding</option>
-                  <option value="HYTTE_BINDING">Hytte – binding</option>
-                  <option value="LALM_IL_UBIND">Lalm IL – uten binding</option>
-                  <option value="STANDARD_UBIND">Standard – uten binding</option>
-                  <option value="TEST_1KR">TEST – 1 kr</option>
-                </select>
-              </div>
-              <div>
-                <label for="filterLalmIl">Filter: Lalm IL-rabatt</label>
-                <select id="filterLalmIl">
-                  <option value="">Alle</option>
-                  <option value="unconfirmed">Aktive med rabatt uten bekreftelse</option>
-                </select>
-              </div>
-              <div>
-                <label for="filterMembershipDates">Filter: medlemskapsdatoer</label>
-                <select id="filterMembershipDates">
-                  <option value="">Alle</option>
-                  <option value="missing">Aktive ordinære uten dato</option>
-                  <option value="review">Ufullstendige datoer</option>
-                  <option value="recorded">Registrert startdato</option>
-                </select>
-              </div>
-              <div>
-                <label for="filterTripletexFollowUp">Filter: Tripletex-oppfølging</label>
-                <select id="filterTripletexFollowUp">
-                  <option value="">Alle</option>
-                  <option value="pending">Må følges opp</option>
-                </select>
-              </div>
-            </div>
-            <div class="small text-muted mt-1">Aktive ordinære medlemmer uten startdato: <strong id="missingMembershipDatesCount">0</strong>. Planendringer som må kontrolleres i Tripletex: <strong id="tripletexFollowUpCount">0</strong>.</div>
-            <div class="btn-row" style="justify-content:flex-start;">
-              <button id="btnReloadMembers" class="btn-secondary">⟳ Oppdater liste</button>
-            </div>
+          <button id="openMemberAddPanel" type="button" class="btn-primary" aria-haspopup="dialog">+ Legg til medlem</button>
+        </div>
+        <div class="member-toolbar">
+          <div>
+            <label for="searchInput">Søk (navn, e-post eller telefon)</label>
+            <input id="searchInput" type="search" placeholder="Søk..." />
           </div>
-          <div id="memberAccessMsg" class="mt-1 small" role="status"></div>
-          <div id="membersListWrapper" class="table-wrapper mt-2">
-             <div class="scroll">
-               <table>
-                 <thead>
-                 <tr>
-                   <th>Navn</th>
-                   <th>Status</th>
-                 </tr>
-                 </thead>
-                 <tbody id="membersTableBody">
-                 <tr>
-                   <td colspan="2" class="text-muted">Laster medlemmer...</td>
-                </tr>
-                </tbody>
-              </table>
-            </div>
+          <button id="btnReloadMembers" type="button" class="btn-secondary">Oppdater liste</button>
+        </div>
+        <details class="member-filters" id="memberFilters">
+          <summary>Filtre <span id="memberFilterCount" class="text-muted">· 0 valgt</span></summary>
+          <div class="member-filter-groups">
+            <fieldset><legend>Plan</legend><div id="memberPlanFilters"></div></fieldset>
+            <fieldset>
+              <legend>Medlemsstatus</legend>
+              <label><input type="checkbox" name="status" value="active"> Aktiv</label>
+              <label><input type="checkbox" name="status" value="inactive"> Inaktiv</label>
+            </fieldset>
+            <fieldset>
+              <legend>IL-rabatt</legend>
+              <label><input type="checkbox" name="il" value="discount-review"> Aktive med rabattplan uten bekreftelse</label>
+              <label><input type="checkbox" name="il" value="confirmed"> Bekreftet</label>
+              <label><input type="checkbox" name="il" value="unconfirmed"> Ingen bekreftelse</label>
+              <label><input type="checkbox" name="il" value="unknown"> Ikke avklart</label>
+            </fieldset>
+            <fieldset>
+              <legend>Medlemskapsdatoer</legend>
+              <label><input type="checkbox" name="dates" value="missing" id="memberFilterMissing"> Aktive som mangler startdato</label>
+              <label><input type="checkbox" name="dates" value="review"> Ufullstendige datoer</label>
+              <label><input type="checkbox" name="dates" value="recorded"> Registrert startdato</label>
+            </fieldset>
+            <fieldset>
+              <legend>Tripletex</legend>
+              <label><input type="checkbox" name="tripletex" value="pending" id="memberFilterTripletex"> Må kontrolleres</label>
+            </fieldset>
           </div>
-
-          <div id="membersError" class="mt-2 small tag-danger" style="display:none;"></div>
-        </section>
-
-        <!-- HØYRE: Legg til medlem -->
-        <section class="card">
-          <div class="card-title-row">
-            <div>
-              <div class="card-title">Legg til medlem</div>
-              <div class="card-subtitle">
-                Registrer nytt medlem. Aktive medlemmer med telefon synkroniseres til TELL.
-              </div>
-            </div>
+          <button id="resetMemberFilters" type="button" class="btn-secondary">Nullstill</button>
+        </details>
+        <div class="member-quick-filters mt-1">
+          <button type="button" class="btn-secondary" data-member-filter="memberFilterMissing" aria-pressed="false">Mangler startdato <strong id="missingMembershipDatesCount">0</strong></button>
+          <button type="button" class="btn-secondary" data-member-filter="memberFilterTripletex" aria-pressed="false">Kontroller i Tripletex <strong id="tripletexFollowUpCount">0</strong></button>
+        </div>
+        <div id="memberAccessMsg" class="mt-1 small" role="status"></div>
+        <div id="membersListWrapper" class="table-wrapper mt-2">
+          <table aria-labelledby="membersListTitle">
+            <thead><tr>
+              <th scope="col">Navn</th>
+              <th scope="col">Plan</th>
+              <th scope="col">Medlemsstatus</th>
+              <th scope="col">IL-rabatt</th>
+              <th scope="col">Oppfølging</th>
+            </tr></thead>
+            <tbody id="membersTableBody">
+              <tr><td colspan="5" class="text-muted">Laster medlemmer...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <nav id="memberPagination" aria-label="Sider i medlemslista" hidden>
+          <div class="member-pagination">
+            <button type="button" class="btn-secondary" id="previousMemberPage">Forrige</button>
+            <span id="memberPageSummary" class="small"></span>
+            <button type="button" class="btn-secondary" id="nextMemberPage">Neste</button>
           </div>
+        </nav>
+        <div id="membersError" class="mt-2 small tag-danger" style="display:none;"></div>
+      </section>
 
+      <dialog id="memberAddPanel" class="card" aria-labelledby="memberAddTitle">
+        <div class="card-title-row">
+          <h2 id="memberAddTitle" class="card-title">Legg til medlem</h2>
+          <form method="dialog">
+            <button class="btn-secondary modal-close-btn" aria-label="Lukk sidepanelet">Lukk</button>
+          </form>
+        </div>
           <div class="mt-2">
             <div class="input-grid">
               <div>
                 <label for="newName">Navn</label>
-                <input id="newName" type="text" placeholder="Fornavn Etternavn" />
+                <input id="newName" type="text" autofocus placeholder="Fornavn Etternavn" />
               </div>
               <div>
                 <label for="newEmail">E-post</label>
                 <input id="newEmail" type="email" placeholder="epost@example.com" />
               </div>
               <div>
-                <label for="newPhone">Telefon (for TELL)</label>
+                <label for="newPhone">Telefon</label>
                 <input id="newPhone" type="tel" placeholder="+47xxxxxxxx" />
               </div>
               <div>
@@ -892,10 +924,9 @@
             <div class="btn-row">
               <button id="btnAddMember" class="btn-primary">+ Legg til medlem</button>
             </div>
-            <div id="addMemberMsg" class="mt-1 small"></div>
+            <div id="addMemberMsg" class="mt-1 small" role="status"></div>
           </div>
-        </section>
-      </div>
+      </dialog>
     </section>
 
     <!-- TAB: MEDLEMSKAP & PRISER (plans.json) -->
@@ -1328,7 +1359,7 @@
          <label for="modalMemberPlanSelect" class="mt-2">Medlemsplan</label>
          <select id="modalMemberPlanSelect"></select>
          <label for="modalEditClubMember" class="mt-2">Lalm IL-medlem</label>
-         <select id="modalEditClubMember"><option value="false">Nei</option><option value="true">Ja</option></select>
+         <select id="modalEditClubMember"><option value="" disabled>Ikke avklart</option><option value="false">Nei</option><option value="true">Ja</option></select>
          <label for="modalEditAddress" class="mt-2">Adresse</label>
          <input id="modalEditAddress" type="text" maxlength="200" autocomplete="street-address" />
          <div class="input-grid mt-2">
@@ -1386,10 +1417,16 @@
   const statsActiveCount = document.getElementById('statsActiveCount');
   const statsTotalCount = document.getElementById('statsTotalCount');
   const searchInput = document.getElementById('searchInput');
-  const filterPlan = document.getElementById('filterPlan');
-  const filterLalmIl = document.getElementById('filterLalmIl');
-  const filterMembershipDates = document.getElementById('filterMembershipDates');
-  const filterTripletexFollowUp = document.getElementById('filterTripletexFollowUp');
+  const memberFilters = document.getElementById('memberFilters');
+  const memberPlanFilters = document.getElementById('memberPlanFilters');
+  const memberFilterCount = document.getElementById('memberFilterCount');
+  const memberPagination = document.getElementById('memberPagination');
+  const previousMemberPage = document.getElementById('previousMemberPage');
+  const nextMemberPage = document.getElementById('nextMemberPage');
+  const memberPageSummary = document.getElementById('memberPageSummary');
+  const memberAddPanel = document.getElementById('memberAddPanel');
+  const memberPageSize = 50;
+  let memberPage = 0;
   const missingMembershipDatesCount = document.getElementById('missingMembershipDatesCount');
   const tripletexFollowUpCount = document.getElementById('tripletexFollowUpCount');
   const btnReloadMembers = document.getElementById('btnReloadMembers');
@@ -1605,9 +1642,6 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     buildPlanOptions(newPlan, allPlans, { includePlaceholder: true, placeholder: 'Velg plan…' });
     buildPlanOptions(changePlanSelect, allPlans, { includePlaceholder: true, placeholder: 'Endre plan…' });
 
-    // Filter
-    buildPlanOptions(filterPlan, allPlans, { includeAll: true, includePlaceholder: false });
-
     // SMS: plan-velger
     try { renderSmsPlans(allPlans); } catch (_) {}
 
@@ -1720,70 +1754,134 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
       : `Start: ${formatMembershipDate(member.membershipStartDate)} · Uten binding`;
   }
 
-  function renderMembers() {
-    const q = (searchInput.value || '').toLowerCase();
-    const planFilter = normalizedPlanKey(filterPlan.value);
-    const onlyUnconfirmedDiscount = filterLalmIl.value === 'unconfirmed';
-    const dateFilter = filterMembershipDates.value || '';
-    const followUpFilter = filterTripletexFollowUp.value || '';
-
-    missingMembershipDatesCount.textContent = allMembers.filter(m => m.active && membershipDateState(m) === 'missing').length;
-    tripletexFollowUpCount.textContent = allMembers.filter(m => m.tripletexFollowUp?.status === 'pending').length;
-
-    const filtered = allMembers.filter(m => {
-      if (planFilter && normalizedPlanKey(m.plan) !== planFilter) return false;
-      if (onlyUnconfirmedDiscount && !(m.active && m.hasLalmIlDiscount && m.clubMember !== true)) return false;
-      const dateState = membershipDateState(m);
-      if (dateFilter === 'missing' && !(m.active && dateState === 'missing')) return false;
-      if (dateFilter === 'review' && dateState !== 'review') return false;
-      if (dateFilter === 'recorded' && dateState !== 'recorded') return false;
-      if (followUpFilter === 'pending' && m.tripletexFollowUp?.status !== 'pending') return false;
-      if (!q) return true;
-      const name = (m.name || '').toLowerCase();
-      const email = (m.email || '').toLowerCase();
-      const phone = (m.phone || '').toLowerCase();
-      return name.includes(q) || email.includes(q) || phone.includes(q);
-    });
-
-    // Tellerne skal følge det brukeren ser (planfilter + søk)
-    statsTotalCount.textContent = filtered.length;
-    statsActiveCount.textContent = filtered.filter(m => m.active).length;
-
-    if (!filtered.length) {
-      membersTableBody.innerHTML = '<tr><td colspan="2" class="text-muted">Ingen medlemmer funnet.</td></tr>';
-    } else {
-      membersTableBody.innerHTML = '';
-      filtered.forEach(m => {
-        const tr = document.createElement('tr');
-
-        const statusLabel = m.active ? 'Aktiv' : 'Inaktiv';
-        const statusClass = m.active ? 'status-text-active' : 'status-text-inactive';
-
-        // brukes av modalen
-        tr.dataset.id = m.id || '';
-        tr.dataset.email = m.email || '';
-        tr.dataset.name = m.name || '';
-        tr.dataset.plan = m.plan || '';
-        tr.dataset.active = m.active ? '1' : '0';
-
-        const lalmIlLabel = m.clubMember === true ? 'Lalm IL-rabatt · Bekreftet' : 'Lalm IL-rabatt · Ikke bekreftet';
-        const lalmIlClass = m.clubMember === true ? 'text-muted' : 'status-text-inactive';
-        const accessAction = m.active ? 'Deaktiver' : 'Aktiver';
-        const memberName = escapeHtml(m.name || 'Uten navn');
-        tr.innerHTML = `
-          <td>
-            <button type="button" class="member-open-button">${memberName}</button>
-            ${m.hasLalmIlDiscount ? `<div class="small ${lalmIlClass}">${lalmIlLabel}</div>` : ''}
-          </td>
-          <td class="status">
-            <span class="status-text ${statusClass}">${statusLabel}</span>
-            ${tr.dataset.id ? `<button type="button" class="btn-secondary member-access-button"
-              aria-label="${accessAction} tilgang for ${memberName}" ${pendingMemberAccess.has(tr.dataset.id) ? 'disabled' : ''}>${accessAction}</button>` : ''}
-          </td>
-        `;
-        membersTableBody.appendChild(tr);
-      });
+  function buildMemberPlanFilters() {
+    const checked = new Set(Array.from(memberPlanFilters.querySelectorAll(':checked'), input => input.value));
+    const plans = new Map(allPlans.filter(plan => plan?.active !== false && planKeyOf(plan))
+      .map(plan => [normalizedPlanKey(planKeyOf(plan)), adminPlanLabel(plan)]));
+    for (const member of allMembers) {
+      const key = normalizedPlanKey(member.plan);
+      if (!plans.has(key)) plans.set(key, memberPlanLabel(member));
     }
+    for (const key of checked) {
+      if (!plans.has(key)) plans.set(key, key || 'Ingen plan');
+    }
+    memberPlanFilters.replaceChildren();
+    for (const [key, title] of [...plans].sort((a, b) => a[1].localeCompare(b[1], 'nb'))) {
+      const label = document.createElement('label');
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.name = 'plan';
+      input.value = key;
+      input.checked = checked.has(key);
+      label.append(input, document.createTextNode(title));
+      memberPlanFilters.appendChild(label);
+    }
+  }
+
+  function memberPlanLabel(member) {
+    const plan = allPlans.find(p => normalizedPlanKey(planKeyOf(p)) === normalizedPlanKey(member.plan));
+    return plan ? adminPlanLabel(plan) : (member.plan || 'Ingen plan');
+  }
+
+  function memberIlState(member) {
+    if (member.clubMember === true) return 'confirmed';
+    if (member.clubMember === false) return 'unconfirmed';
+    return 'unknown';
+  }
+
+  const memberIlLabels = {
+    confirmed: 'Lalm IL bekreftet',
+    unconfirmed: 'Ingen Lalm IL-markering',
+    unknown: 'Lalm IL ikke avklart',
+  };
+
+  function memberMatchesFilter(member, group, value) {
+    switch (group) {
+      case 'plan': return normalizedPlanKey(member.plan) === value;
+      case 'status': return (member.active ? 'active' : 'inactive') === value;
+      case 'il': return value === 'discount-review'
+        ? Boolean(member.active && member.hasLalmIlDiscount && member.clubMember !== true)
+        : memberIlState(member) === value;
+      case 'dates': return membershipDateState(member) === value && (value !== 'missing' || member.active);
+      case 'tripletex': return member.tripletexFollowUp?.status === value;
+    }
+    return false;
+  }
+
+  function memberChoice(member, field, label, trigger, current, options) {
+    const accessibleLabel = escapeHtml(label + ' for ' + (member.name || 'Uten navn'));
+    if (!member.id) return `<span class="member-choice-label" title="${accessibleLabel}">${trigger}</span>`;
+    const choices = options.map(([value, text]) => {
+      const checked = value === current;
+      return `<button type="button" data-member-value="${value}" aria-pressed="${checked}" ${pendingMemberAccess.has(String(member.id)) ? 'disabled' : ''}>
+        <span aria-hidden="true">${checked ? '✓' : ''}</span>${text}
+      </button>`;
+    }).join('');
+    return `<details class="member-choice" name="member-row-choice" data-member-field="${field}">
+      <summary aria-label="${accessibleLabel}" title="${accessibleLabel}">${trigger}</summary>
+      <div class="member-choice-options">${choices}</div>
+    </details>`;
+  }
+
+  function renderMembers() {
+    const query = searchInput.value.trim().toLowerCase();
+    const checked = Array.from(memberFilters.querySelectorAll('input:checked'));
+    const groups = new Map();
+    for (const input of checked) {
+      const values = groups.get(input.name) || [];
+      values.push(input.value);
+      groups.set(input.name, values);
+    }
+    const searched = allMembers.filter(member => [
+      member.name, member.email, member.phone, member.phoneFull, member.mobile,
+    ].some(value => String(value || '').toLowerCase().includes(query)));
+    const matches = (member, except) => [...groups].every(([group, values]) =>
+      group === except || values.some(value => memberMatchesFilter(member, group, value)));
+    const filtered = searched.filter(member => matches(member));
+    memberFilterCount.textContent = `· ${checked.length} valgt`;
+
+    for (const [id, counter] of [
+      ['memberFilterMissing', missingMembershipDatesCount],
+      ['memberFilterTripletex', tripletexFollowUpCount],
+    ]) {
+      const input = document.getElementById(id);
+      counter.textContent = searched.filter(member =>
+        matches(member, input.name) && memberMatchesFilter(member, input.name, input.value)).length;
+      counter.closest('button').setAttribute('aria-pressed', String(input.checked));
+    }
+
+    statsTotalCount.textContent = filtered.length;
+    statsActiveCount.textContent = filtered.filter(member => member.active).length;
+    const pageCount = Math.ceil(filtered.length / memberPageSize);
+    memberPage = Math.min(memberPage, Math.max(0, pageCount - 1));
+    memberPagination.hidden = pageCount <= 1;
+    previousMemberPage.disabled = memberPage === 0;
+    nextMemberPage.disabled = memberPage + 1 >= pageCount;
+    memberPageSummary.textContent = `Side ${memberPage + 1} av ${pageCount}`;
+
+    const first = memberPage * memberPageSize;
+    membersTableBody.innerHTML = filtered.slice(first, first + memberPageSize).map(member => {
+      const name = escapeHtml(member.name || 'Uten navn');
+      const status = member.active ? 'Aktiv' : 'Inaktiv';
+      const statusClass = member.active ? 'status-text-active' : 'status-text-inactive';
+      const statusTrigger = `<span class="${statusClass}">${status}</span><span aria-hidden="true">▾</span>`;
+      const il = memberIlState(member);
+      const ilTrigger = `<span class="member-il-dot ${il}" aria-hidden="true"></span><span class="small">${memberIlLabels[il]}</span>`;
+      const followUps = [];
+      if (memberMatchesFilter(member, 'dates', 'missing')) followUps.push('Mangler startdato');
+      if (memberMatchesFilter(member, 'dates', 'review')) followUps.push('Ufullstendige datoer');
+      if (memberMatchesFilter(member, 'tripletex', 'pending')) followUps.push('Kontroller i Tripletex');
+
+      return `<tr data-id="${escapeHtml(member.id || '')}">
+        <td data-label="Navn"><button type="button" class="member-open-button">${name}</button></td>
+        <td data-label="Plan">${escapeHtml(memberPlanLabel(member))}${member.hasLalmIlDiscount ? '<div class="small text-muted">Lalm IL-rabatt</div>' : ''}</td>
+        <td data-label="Medlemsstatus">${memberChoice(member, 'status', status, statusTrigger,
+          member.active ? 'true' : 'false', [['true', 'Aktiv'], ['false', 'Inaktiv']])}</td>
+        <td data-label="IL-rabatt">${memberChoice(member, 'il', memberIlLabels[il], ilTrigger,
+          il, [['confirmed', 'Bekreft Lalm IL'], ['unconfirmed', 'Fjern IL-markering']])}</td>
+        <td data-label="Oppfølging">${followUps.length ? followUps.join('<br>') : '–'}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="5" class="text-muted">Ingen medlemmer funnet.</td></tr>';
 
     renderSmsMembers();
   }
@@ -1832,7 +1930,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     const fields = [
       ['Status', member.active ? 'Aktiv' : 'Inaktiv'],
       ['Medlemskap', plan ? adminPlanLabel(plan) : member.plan || 'Ikke registrert'],
-      ['Lalm IL', member.clubMember ? 'Ja' : 'Nei'],
+      ['Lalm IL', member.clubMember == null ? 'Ikke avklart' : member.clubMember ? 'Ja' : 'Nei'],
       ['E-post', member.email || 'Ikke registrert'],
       ['Telefon', member.phone || member.phoneFull || member.mobile || 'Ikke registrert'],
       ['Adresse', address || 'Ikke registrert'],
@@ -1868,7 +1966,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     modalEditName.value = member.name || '';
     modalEditEmail.value = member.email || '';
     modalEditPhone.value = member.phone || member.phoneFull || member.mobile || '';
-    modalEditClubMember.value = member.clubMember ? 'true' : 'false';
+    modalEditClubMember.value = typeof member.clubMember === 'boolean' ? String(member.clubMember) : '';
     modalEditAddress.value = member.address || '';
     modalEditZip.value = member.zip || '';
     modalEditCity.value = member.city || '';
@@ -1954,46 +2052,69 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
         }
       }
 
+      buildMemberPlanFilters();
       renderMembers();
       setServerStatus(true, 'OK');
     } catch (e) {
       console.error('Feil ved henting av medlemmer:', e);
       membersTableBody.innerHTML =
-        '<tr><td colspan="2" class="text-muted">Kunne ikke laste medlemmer.</td></tr>';
+        '<tr><td colspan="5" class="text-muted">Kunne ikke laste medlemmer.</td></tr>';
       membersErrorEl.textContent = 'Feil ved henting av medlemmer: ' + e.message;
       membersErrorEl.style.display = 'block';
       setServerStatus(false, 'Feil');
     }
   }
 
-  async function toggleMemberActive(member, button) {
+  async function saveMemberChoice(member, field, value, choice) {
     const memberId = String(member.id);
     if (pendingMemberAccess.has(memberId)) return;
 
-    const name = member.name || 'Uten navn';
-    const action = member.active ? 'deaktivere' : 'aktivere';
-    if (!confirm(`Vil du ${action} tilgangen for ${name}? Faktureringen i Tripletex fortsetter uendret.`)) return;
+    const isStatus = field === 'status';
+    const requested = isStatus ? value === 'true' : value === 'confirmed';
+    const current = isStatus ? Boolean(member.active) : member.clubMember;
+    choice.open = false;
+    choice.querySelector('summary').focus();
+    if (requested === current) return;
 
+    const name = member.name || 'Uten navn';
+    if (isStatus && !requested && !confirm(`Vil du deaktivere tilgangen for ${name}? Faktureringen i Tripletex fortsetter uendret.`)) return;
     pendingMemberAccess.add(memberId);
-    button.disabled = true;
+    membersTableBody.querySelectorAll('.member-choice[open]').forEach(menu => { menu.open = false; });
+    choice.closest('tr').querySelectorAll('[data-member-value]').forEach(button => { button.disabled = true; });
     memberAccessMsg.textContent = '';
     try {
-      const res = await fetch('/api/admin/members/toggle', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memberId }),
+      const url = isStatus ? '/api/admin/members/toggle' : `/admin/members/${encodeURIComponent(memberId)}/details`;
+      const res = await fetch(url, {
+        method: isStatus ? 'POST' : 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(isStatus ? { memberId, expectedActive: current } : { clubMember: requested }),
       });
       const data = await res.json();
+      const updated = allMembers.find(item => String(item.id) === memberId);
+      if (res.status === 409 && data.error === 'member_status_changed') {
+        if (updated) updated.active = data.active;
+        throw new Error('Statusen ble endret av noen andre. Kontroller den oppdaterte verdien og prøv igjen.');
+      }
       if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      const updated = allMembers.find(m => String(m.id) === memberId);
-      if (updated) updated.active = data.active;
-      memberAccessMsg.textContent = `Tilgangen for ${name} er ${data.active ? 'aktivert' : 'deaktivert'}.`;
+      if (updated) {
+        if (isStatus) updated.active = data.active;
+        else Object.assign(updated, data.member);
+      }
+      memberAccessMsg.textContent = isStatus
+        ? `Tilgangen for ${name} er ${data.active ? 'aktivert' : 'deaktivert'}.`
+        : `Lalm IL-markeringen for ${name} er oppdatert.`;
       memberAccessMsg.className = 'mt-1 small tag-success';
-    } catch (e) {
-      memberAccessMsg.textContent = `Kunne ikke oppdatere tilgangen for ${name}: ${e.message}`;
+    } catch (error) {
+      memberAccessMsg.textContent = `Kunne ikke lagre endringen for ${name}: ${error.message}`;
       memberAccessMsg.className = 'mt-1 small tag-danger';
     } finally {
       pendingMemberAccess.delete(memberId);
+      const hadFocus = choice.contains(document.activeElement);
       renderMembers();
+      if (hadFocus) {
+        const row = [...membersTableBody.rows].find(item => item.dataset.id === memberId);
+        (row?.querySelector(`[data-member-field="${field}"] summary`) || searchInput).focus();
+      }
     }
   }
 
@@ -3424,25 +3545,57 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
 
   // ------- Event listeners -------
 
-  searchInput.addEventListener('input', () => renderMembers());
-  filterPlan.addEventListener('change', () => renderMembers());
-  filterLalmIl.addEventListener('change', () => renderMembers());
-  filterMembershipDates.addEventListener('change', () => renderMembers());
-  filterTripletexFollowUp.addEventListener('change', () => renderMembers());
+  function refreshMemberFilters() {
+    memberPage = 0;
+    renderMembers();
+  }
 
-  membersTableBody.addEventListener('click', (e) => {
-    const button = e.target.closest('.member-open-button, .member-access-button');
+  searchInput.addEventListener('input', refreshMemberFilters);
+  memberFilters.addEventListener('change', refreshMemberFilters);
+  document.getElementById('resetMemberFilters').addEventListener('click', () => {
+    memberFilters.querySelectorAll('input:checked').forEach(input => { input.checked = false; });
+    refreshMemberFilters();
+  });
+  document.querySelectorAll('[data-member-filter]').forEach(button => {
+    button.addEventListener('click', () => {
+      const input = document.getElementById(button.dataset.memberFilter);
+      input.checked = !input.checked;
+      refreshMemberFilters();
+    });
+  });
+  for (const [button, step] of [[previousMemberPage, -1], [nextMemberPage, 1]]) {
+    button.addEventListener('click', () => {
+      memberPage += step;
+      renderMembers();
+      document.getElementById('membersListTitle').focus();
+    });
+  }
+  document.getElementById('openMemberAddPanel').addEventListener('click', () => memberAddPanel.showModal());
+
+  membersTableBody.addEventListener('click', event => {
+    const button = event.target.closest('.member-open-button, [data-member-value]');
     if (!button) return;
-    const memberId = button.closest('tr')?.dataset.id;
-    if (!memberId) return;
-    const member = allMembers.find(m => String(m.id) === memberId);
+    const member = allMembers.find(item => String(item.id) === button.closest('tr')?.dataset.id);
     if (!member) return;
-
-    if (button.classList.contains('member-access-button')) {
-      toggleMemberActive(member, button);
-    } else {
+    if (button.classList.contains('member-open-button')) {
       openMemberModal(member);
+      return;
     }
+    const choice = button.closest('.member-choice');
+    saveMemberChoice(member, choice.dataset.memberField, button.dataset.memberValue, choice);
+  });
+  membersTableBody.addEventListener('keydown', event => {
+    const choice = event.target.closest('.member-choice[open]');
+    if (choice && event.key === 'Escape') {
+      event.preventDefault();
+      choice.open = false;
+      choice.querySelector('summary').focus();
+    }
+  });
+  document.addEventListener('click', event => {
+    membersTableBody.querySelectorAll('.member-choice[open]').forEach(choice => {
+      if (!choice.contains(event.target)) choice.open = false;
+    });
   });
 
     // Modal events
@@ -3488,10 +3641,11 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
       const datesChanged = !selectedMember.membershipStartOrderId &&
         (start !== (selectedMember.membershipStartDate || '') || months !== (selectedMember.bindingMonthsAtStart ?? null));
       const changes = {
-        name: modalEditName.value, clubMember: modalEditClubMember.value === 'true',
+        name: modalEditName.value,
         address: modalEditAddress.value, zip: modalEditZip.value, city: modalEditCity.value,
         notes: modalEditNotes.value,
       };
+      if (modalEditClubMember.value) changes.clubMember = modalEditClubMember.value === 'true';
       if (modalEditEmail.value || selectedMember.email) changes.email = modalEditEmail.value;
       if (modalEditPhone.value || selectedMember.phone || selectedMember.phoneFull || selectedMember.mobile) changes.phone = modalEditPhone.value;
       if (modalMemberPlanSelect.value || selectedMember.plan) {

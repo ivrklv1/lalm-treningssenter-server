@@ -1822,7 +1822,7 @@ app.post('/api/admin/members', basicAuth, async (req, res) => {
   };
 
   members.push(member);
-  saveMembers(members);
+  if (!saveMembers(members)) return res.status(500).json({ error: 'Kunne ikke lagre medlemmet' });
 
   // TELL-sync fjernet: vi legger ikke lenger brukere automatisk inn i TELL
   res.json({ ok: true, member });
@@ -1831,7 +1831,7 @@ app.post('/api/admin/members', basicAuth, async (req, res) => {
 
 
 app.post('/api/admin/members/toggle', basicAuth, async (req, res) => {
-  const { memberId, email } = req.body || {};
+  const { memberId, email, expectedActive } = req.body || {};
   if (!memberId && !email) return res.status(400).json({ error: 'member_id_required' });
 
   const members = getMembers();
@@ -1842,6 +1842,9 @@ app.post('/api/admin/members/toggle', basicAuth, async (req, res) => {
   if (matches.length > 1) return res.status(409).json({ error: 'ambiguous_member' });
 
   const member = matches[0];
+  if (typeof expectedActive === 'boolean' && Boolean(member.active) !== expectedActive) {
+    return res.status(409).json({ error: 'member_status_changed', active: Boolean(member.active) });
+  }
   member.active = !member.active;
   if (!saveMembers(members)) return res.status(500).json({ error: 'could_not_save' });
 

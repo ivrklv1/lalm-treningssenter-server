@@ -93,6 +93,13 @@ test('admin keeps shared-email members separate and previews NIF changes before 
     assert.equal((await post('/api/admin/members/toggle', { memberId: 'member-b' })).status, 200);
     assert.equal(readMembers().find(m => m.id === 'member-a').active, true);
     assert.equal(readMembers().find(m => m.id === 'member-b').active, false);
+    const staleToggle = await post('/api/admin/members/toggle', { memberId: 'member-b', expectedActive: true });
+    assert.equal(staleToggle.status, 409);
+    assert.deepEqual(await staleToggle.json(), { error: 'member_status_changed', active: false });
+    assert.equal(readMembers().find(m => m.id === 'member-b').active, false);
+    const currentToggle = await post('/api/admin/members/toggle', { memberId: 'member-b', expectedActive: false });
+    assert.equal(currentToggle.status, 200);
+    assert.equal((await currentToggle.json()).active, true);
     assert.equal((await fetch(base + '/admin/members/member-a', { method: 'DELETE', headers })).status, 200);
     assert.equal(readMembers().filter(m => m.email === 'shared@example.invalid').length, 1);
 
