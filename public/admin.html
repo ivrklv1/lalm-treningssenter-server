@@ -1799,9 +1799,11 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     switch (group) {
       case 'plan': return normalizedPlanKey(member.plan) === value;
       case 'status': return (member.active ? 'active' : 'inactive') === value;
-      case 'il': return value === 'discount-review'
-        ? Boolean(member.active && member.hasLalmIlDiscount && member.clubMember !== true)
-        : memberIlState(member) === value;
+      case 'il':
+        if (!member.hasLalmIlDiscount) return false;
+        return value === 'discount-review'
+          ? Boolean(member.active && member.clubMember !== true)
+          : memberIlState(member) === value;
       case 'dates': return membershipDateState(member) === value && (value !== 'missing' || member.active);
       case 'tripletex': return member.tripletexFollowUp?.status === value;
     }
@@ -1874,11 +1876,13 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
 
       return `<tr data-id="${escapeHtml(member.id || '')}">
         <td data-label="Navn"><button type="button" class="member-open-button">${name}</button></td>
-        <td data-label="Plan">${escapeHtml(memberPlanLabel(member))}${member.hasLalmIlDiscount ? '<div class="small text-muted">Lalm IL-rabatt</div>' : ''}</td>
+        <td data-label="Plan">${escapeHtml(memberPlanLabel(member))}</td>
         <td data-label="Medlemsstatus">${memberChoice(member, 'status', status, statusTrigger,
           member.active ? 'true' : 'false', [['true', 'Aktiv'], ['false', 'Inaktiv']])}</td>
-        <td data-label="IL-rabatt">${memberChoice(member, 'il', memberIlLabels[il], ilTrigger,
-          il, [['confirmed', 'Bekreft Lalm IL'], ['unconfirmed', 'Fjern IL-markering']])}</td>
+        <td data-label="IL-rabatt">${member.hasLalmIlDiscount
+          ? memberChoice(member, 'il', memberIlLabels[il], ilTrigger,
+            il, [['confirmed', 'Bekreft Lalm IL'], ['unconfirmed', 'Fjern IL-markering']])
+          : '<span class="text-muted" aria-label="Ikke aktuelt">–</span>'}</td>
         <td data-label="Oppfølging">${followUps.length ? followUps.join('<br>') : '–'}</td>
       </tr>`;
     }).join('') || '<tr><td colspan="5" class="text-muted">Ingen medlemmer funnet.</td></tr>';
