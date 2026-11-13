@@ -171,6 +171,7 @@
       min-height: 40px;
     }
     .member-open-button:hover { text-decoration: underline; }
+    #membersTableBody tr[data-id] { cursor: pointer; }
     #membersTableBody td { white-space: normal; }
     #membersListWrapper { max-height: none; overflow: visible; display: block; }
     #membersListWrapper thead { position: static; }
@@ -744,7 +745,34 @@
       #checkoutLogBody td::before { content: none; }
       #logtab-door .table-wrapper { max-height: 65vh !important; overflow-y: auto; }
 
-      #membersTableBody td::before { content: attr(data-label); }
+      #membersTableBody tr[data-id] {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        padding: 0 8px;
+        border: 0;
+        border-bottom: 1px solid var(--border);
+        border-radius: 0;
+      }
+      #membersTableBody td[data-label] { display: none; }
+      #membersTableBody td[data-label="Navn"], #membersTableBody td[data-label="Medlemsstatus"] {
+        display: block;
+        width: auto;
+        padding: 0 !important;
+        border: 0;
+      }
+      #membersTableBody td[data-label="Navn"] { flex: 1; min-width: 0; }
+      #membersTableBody .member-open-button {
+        display: block;
+        width: 100%;
+        min-height: 44px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #membersTableBody .member-choice > summary { white-space: nowrap; }
+      #membersTableBody .member-choice-options { inset-inline: auto 0; }
       #membersListWrapper { border: 0; border-radius: 0; background: transparent; }
       #membersListWrapper thead { position: absolute; }
       .member-filter-groups label { min-height: 44px; }
@@ -1875,7 +1903,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
       if (memberMatchesFilter(member, 'tripletex', 'pending')) followUps.push('Kontroller i Tripletex');
 
       return `<tr data-id="${escapeHtml(member.id || '')}">
-        <td data-label="Navn"><button type="button" class="member-open-button">${name}</button></td>
+        <td data-label="Navn"><button type="button" class="member-open-button" title="${name}">${name}</button></td>
         <td data-label="Plan">${escapeHtml(memberPlanLabel(member))}</td>
         <td data-label="Medlemsstatus">${memberChoice(member, 'status', status, statusTrigger,
           member.active ? 'true' : 'false', [['true', 'Aktiv'], ['false', 'Inaktiv']])}</td>
@@ -3577,16 +3605,21 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
   document.getElementById('openMemberAddPanel').addEventListener('click', () => memberAddPanel.showModal());
 
   membersTableBody.addEventListener('click', event => {
-    const button = event.target.closest('.member-open-button, [data-member-value]');
-    if (!button) return;
-    const member = allMembers.find(item => String(item.id) === button.closest('tr')?.dataset.id);
+    const row = event.target.closest('tr[data-id]');
+    if (!row) return;
+    const member = allMembers.find(item => String(item.id) === row.dataset.id);
     if (!member) return;
-    if (button.classList.contains('member-open-button')) {
+
+    const choice = event.target.closest('.member-choice');
+    if (!choice) {
       openMemberModal(member);
       return;
     }
-    const choice = button.closest('.member-choice');
-    saveMemberChoice(member, choice.dataset.memberField, button.dataset.memberValue, choice);
+
+    const button = event.target.closest('[data-member-value]');
+    if (button && !button.disabled) {
+      saveMemberChoice(member, choice.dataset.memberField, button.dataset.memberValue, choice);
+    }
   });
   membersTableBody.addEventListener('keydown', event => {
     const choice = event.target.closest('.member-choice[open]');
