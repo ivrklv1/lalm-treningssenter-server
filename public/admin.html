@@ -14,6 +14,8 @@
       --bg: #f3f4f6;
       --bg-alt: #ffffff;
       --card: #ffffff;
+      --navy: #091C30;
+      --orange: #FF7A00;
       --accent: #0E3A5D; /* blå */
       --accent-soft: #e4edf7;
       --accent-strong: #2563eb;
@@ -48,28 +50,23 @@
     /* HEADER */
 
     header {
-      background: linear-gradient(135deg, #0E3A5D, #020617);
-      color: #ffffff;
-      border-radius: 24px;
-      padding: 18px 22px;
+      background: var(--navy);
+      color: #fff;
+      border-radius: 12px;
+      padding: 10px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 16px;
-      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.3);
+      gap: 8px;
     }
 
     header h1 {
-      font-size: 1.5rem;
-      font-weight: 600;
-      letter-spacing: 0.02em;
+      font-size: clamp(0.88rem, 2vw, 1.15rem);
+      font-weight: 700;
+      line-height: 1.3;
     }
 
-    header p {
-      font-size: 0.9rem;
-      color: #dbeafe;
-      margin-top: 4px;
-    }
+    header h1 span { font-weight: 500; }
 
     .badge {
       display: inline-flex;
@@ -99,60 +96,34 @@
     /* TABS */
 
     .tabs-row {
-      margin-top: 18px;
-      margin-bottom: 14px;
-      background: rgba(255, 255, 255, 0.9);
-      border-radius: 999px;
-      padding: 2px 4px;
-      border: 1px solid rgba(148, 163, 184, 0.3);
       display: flex;
       gap: 4px;
-      overflow-x: auto;
-      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      margin: 4px 0 14px;
     }
 
     .tab-button {
-      border: none;
-      background: transparent;
-      border-radius: 999px;
-      justify-content: center;
-      padding: 9px 18px;
-      font-size: 0.9rem;
-      cursor: pointer;
-      color: var(--muted);
-      white-space: nowrap;
       position: relative;
+      border: 0;
+      border-radius: 6px 6px 0 0;
+      background: transparent;
+      color: #475569;
+      padding: 10px 16px;
+      min-height: 44px;
+      font: inherit;
+      font-size: 0.9rem;
       font-weight: 500;
-      transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+      cursor: pointer;
     }
 
-    .tab-button::after {
+    .tab-button:hover { background: #e2e8f0; }
+    .tab-button.active { color: var(--navy); font-weight: 700; }
+    .tab-button.active::after {
       content: "";
       position: absolute;
-      left: 16px;
-      right: 16px;
-      bottom: 4px;
+      inset: auto 4px 0;
       height: 2px;
-      border-radius: 999px;
-      background: transparent;
-      transition: background 0.15s ease, transform 0.15s ease;
-      transform-origin: center;
-    }
-
-    .tab-button:hover {
-      background: rgba(226, 232, 240, 0.7);
-      transform: translateY(-1px);
-    }
-
-    .tab-button.active {
-      color: var(--accent-strong);
-      background: linear-gradient(to bottom, #eef2ff, #e0f2fe);
-    }
-
-    .tab-button.active::after {
-      background: linear-gradient(90deg, #38bdf8, #6366f1);
-      transform: scaleX(1);
+      background: var(--orange);
     }
 
     .tab-button:focus-visible, .member-open-button:focus-visible {
@@ -168,22 +139,40 @@
       font-weight: 600;
       text-align: left;
       cursor: pointer;
-      min-height: 40px;
+      min-height: 32px;
     }
     .member-open-button:hover { text-decoration: underline; }
     #membersTableBody tr[data-id] { cursor: pointer; }
-    #membersTableBody td { white-space: normal; }
+    #membersTableBody td { white-space: normal; padding-block: 4px; overflow-wrap: anywhere; }
     #membersListWrapper { max-height: none; overflow: visible; display: block; }
-    #membersListWrapper thead { position: static; }
-    .member-toolbar, .member-quick-filters, .member-pagination {
+    #membersListWrapper thead { position: static; background: #f1f5f9; }
+    @media (min-width: 901px) {
+      #membersListWrapper table { table-layout: fixed; }
+      #membersListWrapper th:nth-child(1) { width: 23%; }
+      #membersListWrapper th:nth-child(2) { width: 21%; }
+      #membersListWrapper th:nth-child(3) { width: 17%; }
+      #membersListWrapper th:nth-child(4) { width: 21%; }
+    }
+    #membersListWrapper tbody tr:nth-child(even) { background: #fff; }
+    #membersListWrapper tbody tr:hover { background: #f8fafc; }
+    #membersListWrapper tbody tr:last-child td { border-bottom: 0; }
+    #membersListTitle { font-size: clamp(1.5rem, 3vw, 2rem); color: var(--navy); font-weight: 700; }
+    #openMemberAddPanel { background: var(--orange); color: var(--navy); box-shadow: none; font-weight: 700; min-height: 44px; }
+    #tab-members > .card > .card-title-row { align-items: center; }
+    .member-toolbar, .member-quick-filters {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
     }
-    .member-pagination { justify-content: center; margin-top: 12px; }
-    .member-toolbar > div { flex: 1 1 230px; }
-    .member-filters > summary { cursor: pointer; font-weight: 600; padding: 10px 0; }
+    .member-toolbar input { flex: 1 1 200px; width: auto; min-height: 44px; }
+    .member-toolbar button, .member-quick-filters button { min-height: 44px; }
+    .member-quick-filters { padding: 8px 12px; border-radius: var(--radius-md); background: #f1f5f9; margin: 0 0 12px; }
+    .member-quick-filters h3 { margin-right: 4px; font-size: 0.9rem; }
+    .member-quick-filters button, .member-toolbar button { background: #fff; border: 1px solid #cbd5e1; }
+    .member-toolbar button[aria-expanded="true"] { background: #e4edf7; }
+    .member-toolbar button[aria-expanded="true"] .member-filter-arrow { transform: rotate(180deg); }
+    .member-filters { margin-top: 10px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); }
     .member-filter-groups {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr));
@@ -197,7 +186,7 @@
     .member-quick-filters button[aria-pressed="true"] { background: var(--accent); color: #fff; }
     .member-choice { position: relative; width: fit-content; }
     .member-choice > summary, .member-choice-label {
-      display: inline-flex; align-items: center; gap: 6px; min-height: 40px;
+      display: inline-flex; align-items: center; gap: 6px; min-height: 30px;
       border-radius: 8px; padding-inline: 8px; font-weight: 600;
     }
     .member-choice > summary { cursor: pointer; list-style: none; }
@@ -214,9 +203,11 @@
     }
     .member-choice-options button:hover, .member-choice-options button[aria-pressed="true"] { background: #eef2ff; }
     .member-choice-options button span { width: 1em; }
-    .member-il-dot { width: 12px; height: 12px; border-radius: 50%; background: #64748b; }
-    .member-il-dot.confirmed { background: #15803d; }
-    .member-il-dot.unconfirmed { background: #b91c1c; }
+    .member-choice[data-member-field="status"] > summary:has(.status-text-active),
+    .member-choice[data-member-field="il"] > summary:has(.member-il-confirmed) { background: #dcfce7; color: #166534; }
+    .member-choice[data-member-field="status"] > summary:has(.status-text-inactive),
+    .member-choice[data-member-field="il"] > summary:has(.member-il-unknown) { background: #f1f5f9; color: #475569; }
+    .member-choice[data-member-field="il"] > summary:has(.member-il-unconfirmed) { background: #fef3c7; color: #713f12; }
     #memberAddPanel {
       position: fixed; inset: 0 0 0 auto; margin: 0; width: min(440px, 100%); max-width: none;
       height: 100%; max-height: none; border-radius: 16px 0 0 16px;
@@ -698,14 +689,11 @@
     @media (max-width: 640px) {
       body { padding: 8px; }
       .page, main, .panel-grid, .card { min-width: 0; max-width: 100%; }
-      header { flex-direction: column; align-items: flex-start; padding: 16px; gap: 10px; border-radius: 18px; }
-      header h1 { font-size: 1.2rem; }
-      header p { font-size: 0.8rem; }
-      .badge { white-space: normal; }
-      .tabs-row { display: flex; flex-wrap: nowrap; overflow-x: auto; border-radius: 14px; margin-top: 12px; padding: 4px; gap: 2px; box-shadow: none; }
-      .tab-button { flex: 1 0 auto; min-width: 0; min-height: 44px; padding: 8px 5px; white-space: nowrap; font-size: 0.92rem; text-align: center; }
-      .tab-button.active { color: #fff; background: var(--accent); }
-      .tab-button.active::after { content: none; }
+      header { padding: 8px 10px; }
+      .badge { padding: 4px 5px; font-size: 0.7rem; white-space: nowrap; }
+      .tabs-row { gap: 0; }
+      .tab-button { flex: 1 1 auto; min-width: 0; padding: 8px 3px; font-size: 0.82rem; }
+      .member-toolbar input { flex-basis: 100%; width: 100%; }
       .card { padding: 14px; }
       .card-title-row { flex-wrap: wrap; align-items: flex-start; }
       .card-title-row > * { min-width: 0; }
@@ -804,21 +792,18 @@
     }
 
     @media (max-width: 359px) {
-      .tab-button { font-size: 0.875rem; }
+      .tab-button { font-size: 0.75rem; }
     }
   </style>
 </head>
 <body>
 <div class="page">
   <header>
-    <div>
-      <h1>Lalm Treningssenter – Admin</h1>
-      <p>Enkel administrasjon av medlemmer, SMS og Vipps.</p>
-    </div>
+    <h1>Lalm Treningssenter <span>| Admin</span></h1>
     <div>
       <div id="serverStatus" class="badge">
         <span class="badge-dot"></span>
-        <span>Server: Ukjent</span>
+        <span>Server ukjent</span>
       </div>
     </div>
   </header>
@@ -838,23 +823,24 @@
       <section class="card">
         <div class="card-title-row">
           <div>
-            <h2 class="card-title" id="membersListTitle" tabindex="-1">Medlemmer</h2>
-            <div class="pill-row">
-              <div class="pill active">Aktive: <span id="statsActiveCount">0</span></div>
-              <div class="pill">Totalt: <span id="statsTotalCount">0</span></div>
-            </div>
+            <h2 class="card-title" id="membersListTitle">Medlemmer</h2>
+            <p id="memberTotals" class="card-subtitle">Laster medlemmer …</p>
           </div>
           <button id="openMemberAddPanel" type="button" class="btn-primary" aria-haspopup="dialog">+ Legg til medlem</button>
         </div>
+        <div class="member-quick-filters" role="group" aria-labelledby="memberFollowUpTitle">
+          <h3 id="memberFollowUpTitle">Oppfølging</h3>
+          <button type="button" class="btn-secondary" data-member-filter="memberFilterMissing" aria-pressed="false">Mangler startdato <strong id="missingMembershipDatesCount">0</strong></button>
+          <button type="button" class="btn-secondary" data-member-filter="memberFilterTripletex" aria-pressed="false">Kontroller i Tripletex <strong id="tripletexFollowUpCount">0</strong></button>
+        </div>
         <div class="member-toolbar">
-          <div>
-            <label for="searchInput">Søk (navn, e-post eller telefon)</label>
-            <input id="searchInput" type="search" placeholder="Søk..." />
-          </div>
+          <input id="searchInput" type="search" aria-label="Søk etter navn, e-post eller telefon" placeholder="Søk etter navn, e-post eller telefon" />
+          <button id="toggleMemberFilters" type="button" class="btn-secondary" aria-expanded="false" aria-controls="memberFilters">
+            Filtre<span id="memberFilterCount" hidden></span><span class="member-filter-arrow" aria-hidden="true">▾</span>
+          </button>
           <button id="btnReloadMembers" type="button" class="btn-secondary">Oppdater liste</button>
         </div>
-        <details class="member-filters" id="memberFilters">
-          <summary>Filtre <span id="memberFilterCount" class="text-muted">· 0 valgt</span></summary>
+        <div class="member-filters" id="memberFilters" hidden>
           <div class="member-filter-groups">
             <fieldset><legend>Plan</legend><div id="memberPlanFilters"></div></fieldset>
             <fieldset>
@@ -881,11 +867,8 @@
             </fieldset>
           </div>
           <button id="resetMemberFilters" type="button" class="btn-secondary">Nullstill</button>
-        </details>
-        <div class="member-quick-filters mt-1">
-          <button type="button" class="btn-secondary" data-member-filter="memberFilterMissing" aria-pressed="false">Mangler startdato <strong id="missingMembershipDatesCount">0</strong></button>
-          <button type="button" class="btn-secondary" data-member-filter="memberFilterTripletex" aria-pressed="false">Kontroller i Tripletex <strong id="tripletexFollowUpCount">0</strong></button>
         </div>
+        <p id="memberResultCount" class="card-subtitle mt-1" role="status" hidden></p>
         <div id="memberAccessMsg" class="mt-1 small" role="status"></div>
         <div id="membersListWrapper" class="table-wrapper mt-2">
           <table aria-labelledby="membersListTitle">
@@ -901,13 +884,6 @@
             </tbody>
           </table>
         </div>
-        <nav id="memberPagination" aria-label="Sider i medlemslista" hidden>
-          <div class="member-pagination">
-            <button type="button" class="btn-secondary" id="previousMemberPage">Forrige</button>
-            <span id="memberPageSummary" class="small"></span>
-            <button type="button" class="btn-secondary" id="nextMemberPage">Neste</button>
-          </div>
-        </nav>
         <div id="membersError" class="mt-2 small tag-danger" style="display:none;"></div>
       </section>
 
@@ -1442,19 +1418,13 @@
   const membersErrorEl = document.getElementById('membersError');
   const memberAccessMsg = document.getElementById('memberAccessMsg');
   const pendingMemberAccess = new Set();
-  const statsActiveCount = document.getElementById('statsActiveCount');
-  const statsTotalCount = document.getElementById('statsTotalCount');
+  const memberTotals = document.getElementById('memberTotals');
+  const memberResultCount = document.getElementById('memberResultCount');
   const searchInput = document.getElementById('searchInput');
   const memberFilters = document.getElementById('memberFilters');
   const memberPlanFilters = document.getElementById('memberPlanFilters');
   const memberFilterCount = document.getElementById('memberFilterCount');
-  const memberPagination = document.getElementById('memberPagination');
-  const previousMemberPage = document.getElementById('previousMemberPage');
-  const nextMemberPage = document.getElementById('nextMemberPage');
-  const memberPageSummary = document.getElementById('memberPageSummary');
   const memberAddPanel = document.getElementById('memberAddPanel');
-  const memberPageSize = 50;
-  let memberPage = 0;
   const missingMembershipDatesCount = document.getElementById('missingMembershipDatesCount');
   const tripletexFollowUpCount = document.getElementById('tripletexFollowUpCount');
   const btnReloadMembers = document.getElementById('btnReloadMembers');
@@ -1719,7 +1689,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     if (dot) {
       dot.style.background = ok ? '#6ee7b7' : '#fecaca';
     }
-    serverStatusEl.querySelector('span:last-child').textContent = 'Server: ' + text;
+    serverStatusEl.querySelector('span:last-child').textContent = 'Server ' + text;
   }
 
   function fmtDate(iso) {
@@ -1818,9 +1788,9 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
   }
 
   const memberIlLabels = {
-    confirmed: 'Lalm IL bekreftet',
-    unconfirmed: 'Ingen Lalm IL-markering',
-    unknown: 'Lalm IL ikke avklart',
+    confirmed: 'Bekreftet',
+    unconfirmed: 'Mangler IL-markering',
+    unknown: 'Ikke avklart',
   };
 
   function memberMatchesFilter(member, group, value) {
@@ -1868,7 +1838,8 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
     const matches = (member, except) => [...groups].every(([group, values]) =>
       group === except || values.some(value => memberMatchesFilter(member, group, value)));
     const filtered = searched.filter(member => matches(member));
-    memberFilterCount.textContent = `· ${checked.length} valgt`;
+    memberFilterCount.hidden = checked.length === 0;
+    memberFilterCount.textContent = `(${checked.length} valgt)`;
 
     for (const [id, counter] of [
       ['memberFilterMissing', missingMembershipDatesCount],
@@ -1880,27 +1851,26 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
       counter.closest('button').setAttribute('aria-pressed', String(input.checked));
     }
 
-    statsTotalCount.textContent = filtered.length;
-    statsActiveCount.textContent = filtered.filter(member => member.active).length;
-    const pageCount = Math.ceil(filtered.length / memberPageSize);
-    memberPage = Math.min(memberPage, Math.max(0, pageCount - 1));
-    memberPagination.hidden = pageCount <= 1;
-    previousMemberPage.disabled = memberPage === 0;
-    nextMemberPage.disabled = memberPage + 1 >= pageCount;
-    memberPageSummary.textContent = `Side ${memberPage + 1} av ${pageCount}`;
-
-    const first = memberPage * memberPageSize;
-    membersTableBody.innerHTML = filtered.slice(first, first + memberPageSize).map(member => {
+    memberTotals.textContent = `${allMembers.filter(member => member.active).length} aktive av ${allMembers.length} medlemmer`;
+    memberResultCount.hidden = !query && checked.length === 0;
+    memberResultCount.textContent = `${filtered.length} treff`;
+    membersTableBody.innerHTML = filtered.map(member => {
       const name = escapeHtml(member.name || 'Uten navn');
       const status = member.active ? 'Aktiv' : 'Inaktiv';
       const statusClass = member.active ? 'status-text-active' : 'status-text-inactive';
       const statusTrigger = `<span class="${statusClass}">${status}</span><span aria-hidden="true">▾</span>`;
       const il = memberIlState(member);
-      const ilTrigger = `<span class="member-il-dot ${il}" aria-hidden="true"></span><span class="small">${memberIlLabels[il]}</span>`;
+      const ilTrigger = `<span class="member-il-${il}">${memberIlLabels[il]}</span>`;
       const followUps = [];
       if (memberMatchesFilter(member, 'dates', 'missing')) followUps.push('Mangler startdato');
       if (memberMatchesFilter(member, 'dates', 'review')) followUps.push('Ufullstendige datoer');
-      if (memberMatchesFilter(member, 'tripletex', 'pending')) followUps.push('Kontroller i Tripletex');
+      if (memberMatchesFilter(member, 'tripletex', 'pending')) {
+        const { fromPlan, toPlan } = member.tripletexFollowUp;
+        const change = fromPlan && toPlan
+          ? `<div class="small text-muted">${escapeHtml(memberPlanLabel({ plan: fromPlan }))} → ${escapeHtml(memberPlanLabel({ plan: toPlan }))}</div>`
+          : '';
+        followUps.push('Kontroller i Tripletex' + change);
+      }
 
       return `<tr data-id="${escapeHtml(member.id || '')}">
         <td data-label="Navn"><button type="button" class="member-open-button" title="${name}">${name}</button></td>
@@ -1908,7 +1878,7 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
         <td data-label="Medlemsstatus">${memberChoice(member, 'status', status, statusTrigger,
           member.active ? 'true' : 'false', [['true', 'Aktiv'], ['false', 'Inaktiv']])}</td>
         <td data-label="IL-rabatt">${member.hasLalmIlDiscount
-          ? memberChoice(member, 'il', memberIlLabels[il], ilTrigger,
+          ? memberChoice(member, 'il', 'IL-rabatt: ' + memberIlLabels[il], ilTrigger,
             il, [['confirmed', 'Bekreft Lalm IL'], ['unconfirmed', 'Fjern IL-markering']])
           : '<span class="text-muted" aria-label="Ikke aktuelt">–</span>'}</td>
         <td data-label="Oppfølging">${followUps.length ? followUps.join('<br>') : '–'}</td>
@@ -3577,31 +3547,24 @@ if (defaultFilterBtn) { defaultFilterBtn.classList.add('active'); defaultFilterB
 
   // ------- Event listeners -------
 
-  function refreshMemberFilters() {
-    memberPage = 0;
-    renderMembers();
-  }
-
-  searchInput.addEventListener('input', refreshMemberFilters);
-  memberFilters.addEventListener('change', refreshMemberFilters);
+  searchInput.addEventListener('input', renderMembers);
+  const toggleMemberFilters = document.getElementById('toggleMemberFilters');
+  toggleMemberFilters.addEventListener('click', () => {
+    memberFilters.hidden = !memberFilters.hidden;
+    toggleMemberFilters.setAttribute('aria-expanded', String(!memberFilters.hidden));
+  });
+  memberFilters.addEventListener('change', renderMembers);
   document.getElementById('resetMemberFilters').addEventListener('click', () => {
     memberFilters.querySelectorAll('input:checked').forEach(input => { input.checked = false; });
-    refreshMemberFilters();
+    renderMembers();
   });
   document.querySelectorAll('[data-member-filter]').forEach(button => {
     button.addEventListener('click', () => {
       const input = document.getElementById(button.dataset.memberFilter);
       input.checked = !input.checked;
-      refreshMemberFilters();
+      renderMembers();
     });
   });
-  for (const [button, step] of [[previousMemberPage, -1], [nextMemberPage, 1]]) {
-    button.addEventListener('click', () => {
-      memberPage += step;
-      renderMembers();
-      document.getElementById('membersListTitle').focus();
-    });
-  }
   document.getElementById('openMemberAddPanel').addEventListener('click', () => memberAddPanel.showModal());
 
   membersTableBody.addEventListener('click', event => {
